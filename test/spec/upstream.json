@@ -1,0 +1,379 @@
+{
+  "repository": "https://github.com/WebAssembly/spec",
+  "revision": "977f97014c962f7bd1291fcc6d28b41a924882bf",
+  "files": [
+    {
+      "file": "address.wast",
+      "path": "test/core/address.wast",
+      "sha256": "5ed8150e71b51e12a7d4fa7378ac857e3ae9f85e99a3fdc7db84d0e730bacef0"
+    },
+    {
+      "file": "align.wast",
+      "path": "test/core/align.wast",
+      "sha256": "d38fe221eec7df11c3867fc4e54f41e751ef4c913446f4249a56aa885ed50812"
+    },
+    {
+      "file": "binary-leb128.wast",
+      "path": "test/core/binary-leb128.wast",
+      "sha256": "6b50c9e04ddd029f4538a4d2a8ed929a1774a215398f353086a08c8b9cf7159a"
+    },
+    {
+      "file": "binary.wast",
+      "path": "test/core/binary.wast",
+      "sha256": "ac1071bbc99e1885db61fdc4fe5dc85b9c9173fc57d06b065124fb42b399560a"
+    },
+    {
+      "file": "block.wast",
+      "path": "test/core/block.wast",
+      "sha256": "fb9fd8373cc0f30f97187728cffae4fc7ecef94b3f23d8aefdde1a7d90f9627e"
+    },
+    {
+      "file": "br.wast",
+      "path": "test/core/br.wast",
+      "sha256": "3dbcba922f2445f933de6d3df7c7f2480d4e09c1217f1fe63c03d43d664e1277"
+    },
+    {
+      "file": "br_if.wast",
+      "path": "test/core/br_if.wast",
+      "sha256": "2522acbb63a62767e98d1dbbe324c205e78865f7fca80be5cbbf6d6b6a2a0ef2"
+    },
+    {
+      "file": "br_table.wast",
+      "path": "test/core/br_table.wast",
+      "sha256": "4f3620de81ea0984202180b13270467df6390117007ce614ab9940d1f25d05a3"
+    },
+    {
+      "file": "break-drop.wast",
+      "path": "test/core/break-drop.wast",
+      "sha256": "d46ff2090659edfdbcb0b18a387e6f2a18573994aa0d3b16fe9d701525ac44e4"
+    },
+    {
+      "file": "call.wast",
+      "path": "test/core/call.wast",
+      "sha256": "6e593cb2486515090378547d396d10d29fc0cb8ba02d4add9628ed00261af482"
+    },
+    {
+      "file": "call_indirect.wast",
+      "path": "test/core/call_indirect.wast",
+      "sha256": "222d2a891d7ca91bf6bc2b9c6f79f3ecb64ffef28592703c9dd69f39a1f6fd92"
+    },
+    {
+      "file": "comments.wast",
+      "path": "test/core/comments.wast",
+      "sha256": "c59014f3d2d3bfc6ab4251791bdcfb2f2f1e7ffed067f3684de7c8bf84561581"
+    },
+    {
+      "file": "const.wast",
+      "path": "test/core/const.wast",
+      "sha256": "1acf2a70a18b7178883b3a044645512eff4ece694f1a58f76d88eec800e6a3e4"
+    },
+    {
+      "file": "conversions.wast",
+      "path": "test/core/conversions.wast",
+      "sha256": "e9a86a52a69b080a63b54e2510624f8151030e57253da454146ffa02d511d4ed"
+    },
+    {
+      "file": "custom.wast",
+      "path": "test/core/custom.wast",
+      "sha256": "ecdc53776aab832fa02d2a1fd747787f3f0a0fca4b4ef93c633a812270727ab1"
+    },
+    {
+      "file": "data.wast",
+      "path": "test/core/data.wast",
+      "sha256": "67b2437663ff58511c16ddc720a260266dba00c7b015c301e438db36e64d258d"
+    },
+    {
+      "file": "elem.wast",
+      "path": "test/core/elem.wast",
+      "sha256": "3ea6284065f7b904519a0a316f09bb9a7e797f9109e5c9394925d1e88f306b24"
+    },
+    {
+      "file": "endianness.wast",
+      "path": "test/core/endianness.wast",
+      "sha256": "5d13436c8b6fe6099b89c5a16452e7d38fa170b2553b2983cf91b1fe4e5190ad"
+    },
+    {
+      "file": "exports.wast",
+      "path": "test/core/exports.wast",
+      "sha256": "261fc253b7de11a1faf3951585d2d6b33451ba144e6f32df811f2f25fde509a9"
+    },
+    {
+      "file": "f32.wast",
+      "path": "test/core/f32.wast",
+      "sha256": "b91c8c8c517281b30f7f16fc79bc5b2441ab1a81a73fa25732e52bbe1cfa65c0"
+    },
+    {
+      "file": "f32_bitwise.wast",
+      "path": "test/core/f32_bitwise.wast",
+      "sha256": "8a514cd0c6c34cccbcd4deda8b3f1898cab2985a360d0ec10a4b1725027f0b64"
+    },
+    {
+      "file": "f32_cmp.wast",
+      "path": "test/core/f32_cmp.wast",
+      "sha256": "dc16e4361250dbf9ef2b91481e25964d6c31f9f593f2e31f08d5b4f5028a376f"
+    },
+    {
+      "file": "f64.wast",
+      "path": "test/core/f64.wast",
+      "sha256": "40b322884856884f829fd2f2d1cd7be6963543d0e8fca8d69f91a65b743b6f2b"
+    },
+    {
+      "file": "f64_bitwise.wast",
+      "path": "test/core/f64_bitwise.wast",
+      "sha256": "efd4e70d58ee853b4509352292058841b775ccea4cfd3060ddd350b8ccd4db32"
+    },
+    {
+      "file": "f64_cmp.wast",
+      "path": "test/core/f64_cmp.wast",
+      "sha256": "aabcd2c5af0670a9f7ce2cfd19befd3142c300fa5091575fad21a3726dcfb8c0"
+    },
+    {
+      "file": "fac.wast",
+      "path": "test/core/fac.wast",
+      "sha256": "7bf27b090f6533865acc79a37e0331b27fa11d7a3ab27b02e32e2efddfb405e7"
+    },
+    {
+      "file": "float_exprs.wast",
+      "path": "test/core/float_exprs.wast",
+      "sha256": "b3bdb85552f23cea1f77e3e69dfc99179e844ceba534a4bf17b9060258bb136d"
+    },
+    {
+      "file": "float_literals.wast",
+      "path": "test/core/float_literals.wast",
+      "sha256": "1d885c95de6986c4583642fab86a5468d187e910ce196f87b5a27ddf20c7844a"
+    },
+    {
+      "file": "float_memory.wast",
+      "path": "test/core/float_memory.wast",
+      "sha256": "90c221916244bbf3bb9b8008b8a68174d9db7ecb7b65fa75d116650cfb237750"
+    },
+    {
+      "file": "float_misc.wast",
+      "path": "test/core/float_misc.wast",
+      "sha256": "e59cfc820954330f100d1d0f13efb9f1490cd5aade02c975219a150d8b9e3254"
+    },
+    {
+      "file": "forward.wast",
+      "path": "test/core/forward.wast",
+      "sha256": "a387e07010b2846f37491ea2cfb9efaa6a334dc84377c4788754a5c6d8abdb6b"
+    },
+    {
+      "file": "func.wast",
+      "path": "test/core/func.wast",
+      "sha256": "38d34b5d805458d488060c41559a9e163c40532faacbff90716427540e4d689a"
+    },
+    {
+      "file": "func_ptrs.wast",
+      "path": "test/core/func_ptrs.wast",
+      "sha256": "a322e40d162db20e117f677b1a4501691e797e484d01ccd2b7fd655ba07275d2"
+    },
+    {
+      "file": "globals.wast",
+      "path": "test/core/globals.wast",
+      "sha256": "bc7a8071dd23d83bb2360b3fe938c0fa1743ecba4e730cf83d5403a990288bc5"
+    },
+    {
+      "file": "i32.wast",
+      "path": "test/core/i32.wast",
+      "sha256": "eebf882f7fc507fd10d1a9e0bc818a7890b48c41db233664485bb6217866158c"
+    },
+    {
+      "file": "i64.wast",
+      "path": "test/core/i64.wast",
+      "sha256": "36f1d5b1f27495db6ce12dfecc9ed9e5f4a1bbae300357a655901ee866604de5"
+    },
+    {
+      "file": "if.wast",
+      "path": "test/core/if.wast",
+      "sha256": "deef2a86a0c12f7470d20ec66eaf6a454693d20ed3d1d49e04fa6a661805bea7"
+    },
+    {
+      "file": "imports.wast",
+      "path": "test/core/imports.wast",
+      "sha256": "ea67380b0171f9489df5433f25315b4fc543cb2e2d8f6b04577d789b247d998f"
+    },
+    {
+      "file": "inline-module.wast",
+      "path": "test/core/inline-module.wast",
+      "sha256": "fcaab83e53f188536b952c7d66e663f8c1e7e7bd52e3272a32c5c921654ec44a"
+    },
+    {
+      "file": "int_exprs.wast",
+      "path": "test/core/int_exprs.wast",
+      "sha256": "e8b884e16bdbed0270e9b912eaa60a0e8688831e7574be98c00a60dcc667ed2b"
+    },
+    {
+      "file": "int_literals.wast",
+      "path": "test/core/int_literals.wast",
+      "sha256": "1087900dd58f95f6c5db0c1ec7bbad1fb67b45accda5b079df2f3647cbb13038"
+    },
+    {
+      "file": "labels.wast",
+      "path": "test/core/labels.wast",
+      "sha256": "c4f00b0b980f9b33487a002b495dc186d35232bf726fa60982a4c1b226275a26"
+    },
+    {
+      "file": "left-to-right.wast",
+      "path": "test/core/left-to-right.wast",
+      "sha256": "1a7376ac279bcf95b2493d6c2413721e14c35dfcd47fbfdffcb203aad8cb5a16"
+    },
+    {
+      "file": "linking.wast",
+      "path": "test/core/linking.wast",
+      "sha256": "4428e0ebb12381a510162708397e8cd8a5cfb98991503c27b8e8ff1e150ec264"
+    },
+    {
+      "file": "load.wast",
+      "path": "test/core/load.wast",
+      "sha256": "2f69ef5634207e065d022d7c26c92016ff1d14a94c5c755927d37fe14e63e256"
+    },
+    {
+      "file": "local_get.wast",
+      "path": "test/core/local_get.wast",
+      "sha256": "ac16930d51a0d9cb4d73ab99a9e1c2e7e2baadf51f9fd44485b4fc958dbbef4a"
+    },
+    {
+      "file": "local_set.wast",
+      "path": "test/core/local_set.wast",
+      "sha256": "93df4f2089fce0a8f453635d4fcc750d676edb24af3826ba221a347a8da2df45"
+    },
+    {
+      "file": "local_tee.wast",
+      "path": "test/core/local_tee.wast",
+      "sha256": "e14027330dde3d326abbc9c3c238c0e74221db411d93db152442b6baa855feb3"
+    },
+    {
+      "file": "loop.wast",
+      "path": "test/core/loop.wast",
+      "sha256": "43b801fad2087bc6bae76985df92991ceb512aceac1e76564da76a1e59077d47"
+    },
+    {
+      "file": "memory.wast",
+      "path": "test/core/memory.wast",
+      "sha256": "7382bcf3870934e55f933bfd51718ccd1a01f0a329fd8ed6ac25e5c827214eab"
+    },
+    {
+      "file": "memory_grow.wast",
+      "path": "test/core/memory_grow.wast",
+      "sha256": "9215c5f4ac5c2b5c22381826ffb90fed3f784d4e3169b69246da1d7260bc5668"
+    },
+    {
+      "file": "memory_redundancy.wast",
+      "path": "test/core/memory_redundancy.wast",
+      "sha256": "5c7e66c660367c5b163148b5d4d7173611ab825d2614d77392c2883c308888d1"
+    },
+    {
+      "file": "memory_size.wast",
+      "path": "test/core/memory_size.wast",
+      "sha256": "71570412caf937a389127b7ffd104efe24b89d0ccd1202d48bcf04f50bd62f76"
+    },
+    {
+      "file": "memory_trap.wast",
+      "path": "test/core/memory_trap.wast",
+      "sha256": "5034a1cde8a913a981d191b8d69ec2c840d625a2fa2ddf5a7035fb0797dc12a0"
+    },
+    {
+      "file": "names.wast",
+      "path": "test/core/names.wast",
+      "sha256": "53c11ace90c439c61aa1e2dd649bed90df583c3cec2fe633a8d57fee6811ad57"
+    },
+    {
+      "file": "nop.wast",
+      "path": "test/core/nop.wast",
+      "sha256": "af9221ba075f91795c4e19ce6dc66aae5b0bdf0fce657a066755533d3fe0c113"
+    },
+    {
+      "file": "return.wast",
+      "path": "test/core/return.wast",
+      "sha256": "987f665cbf9be3d240325fcc14bfa449e8fb8ad9e8193afa3aff03ddb33bd7ce"
+    },
+    {
+      "file": "select.wast",
+      "path": "test/core/select.wast",
+      "sha256": "4efe113f5751ccd3438ef87202bffc1f19087739a3076e35131c00af031978f8"
+    },
+    {
+      "file": "skip-stack-guard-page.wast",
+      "path": "test/core/skip-stack-guard-page.wast",
+      "sha256": "6392fe50486ae71c758f6f15f756cf6336fcab3b53155488f3be21fbe7bc98c4"
+    },
+    {
+      "file": "stack.wast",
+      "path": "test/core/stack.wast",
+      "sha256": "4bf012ac080b979f35e5507b5e914f8288b7d71876d23b42291fdd4d7392be01"
+    },
+    {
+      "file": "start.wast",
+      "path": "test/core/start.wast",
+      "sha256": "cf2d9a9ed9411f5f44b9fbdd4a9f863eb118479e53a9563fe65523a3c41848ce"
+    },
+    {
+      "file": "store.wast",
+      "path": "test/core/store.wast",
+      "sha256": "d35ff73bab2729d3747605072cf437d863104bca375d743cbe9a7ab4b2269ab9"
+    },
+    {
+      "file": "switch.wast",
+      "path": "test/core/switch.wast",
+      "sha256": "56addb6d426e9f8128ec7666dc8b0656f5625eb41b0657d219495afeeddfa8b1"
+    },
+    {
+      "file": "token.wast",
+      "path": "test/core/token.wast",
+      "sha256": "5d31018f3a9faccce031e3e6c13658fb6c9a799d9d9b764d2dffbb6320d4e258"
+    },
+    {
+      "file": "traps.wast",
+      "path": "test/core/traps.wast",
+      "sha256": "3c0615dd26ee186c9a8138e933ff068fd6679e4fc34756b4ab1605d1fc7f1ede"
+    },
+    {
+      "file": "type.wast",
+      "path": "test/core/type.wast",
+      "sha256": "a2b90bdd85fba297a1827a35c03515c770e04769af6a78e07edbbc6602df5593"
+    },
+    {
+      "file": "unreachable.wast",
+      "path": "test/core/unreachable.wast",
+      "sha256": "be426837af2e1be909d0a1f9cc29e60a5acb1bd8dfcbd2ed68b5d3f68e68ffd5"
+    },
+    {
+      "file": "unreached-invalid.wast",
+      "path": "test/core/unreached-invalid.wast",
+      "sha256": "572b32f9ed9b29385b9150a68115946049d79c85d4b5ac494237d23cba0fac3f"
+    },
+    {
+      "file": "unwind.wast",
+      "path": "test/core/unwind.wast",
+      "sha256": "55da9a7d4d2dc19feb04fca3ab47eb842aa10202f2f9136fb3ca756c0b2bb931"
+    },
+    {
+      "file": "utf8-custom-section-id.wast",
+      "path": "test/core/utf8-custom-section-id.wast",
+      "sha256": "9998b56da5a9cf5c5a39da655c68c43464b92acca94b48a84f9df72ad85c9d82"
+    },
+    {
+      "file": "utf8-import-field.wast",
+      "path": "test/core/utf8-import-field.wast",
+      "sha256": "87b3fd43aeaa30a7a6a83aaf8a5d8d0044c87488078e00f06498bad73e662961"
+    },
+    {
+      "file": "utf8-import-module.wast",
+      "path": "test/core/utf8-import-module.wast",
+      "sha256": "12fce17e06c8838e8f3a3f404ffb516885a40461cdb61fc7c444f8bcb6182e9c"
+    },
+    {
+      "file": "utf8-invalid-encoding.wast",
+      "path": "test/core/utf8-invalid-encoding.wast",
+      "sha256": "969b39edd7de280755a448035b7e2b10180f3d5f8bdcd6696efcdb4b17dbdbbf"
+    }
+  ],
+  "baseline": "WebAssembly specification (wg-1.0)",
+  "license": {
+    "file": "LICENSE",
+    "path": "test/LICENSE",
+    "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08"
+  },
+  "checkout": "upstream/",
+  "tag": "wg-1.0"
+}
