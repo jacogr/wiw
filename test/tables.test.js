@@ -4,7 +4,7 @@ import {readFile, writeFile, mkdtemp, rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {createInterpreter} from '../wiw.mjs';
+import {createInterpreter} from '../wiw.js';
 
 const source = `(module
   (type $wide (func (param i32 i64) (result i64)))

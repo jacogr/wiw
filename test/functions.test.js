@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createInterpreter } from '../wiw.mjs';
+import { createInterpreter } from '../wiw.js';
 
 async function native(source, dir) {
   await writeFile(join(dir, 'guest.wat'), source);
@@ -224,7 +224,7 @@ test('CLI passes i32 arguments to an exported function', async () => {
   try {
     const path = join(dir, 'guest.wat');
     await writeFile(path, fixture);
-    const runner = new URL('../wiw.mjs', import.meta.url);
+    const runner = new URL('../wiw.js', import.meta.url);
     assert.equal(execFileSync(process.execPath, [runner.pathname, path, 'subtract', '100', '58'], { encoding: 'utf8' }).trim(), '42');
     assert.throws(() => execFileSync(process.execPath, [runner.pathname, path, 'subtract', '100'], { stdio: 'pipe' }), e => e.status === 1 && e.stderr.toString().includes('argument mismatch'));
   } finally { await rm(dir, { recursive: true, force: true }); }

@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {mkdtemp, readFile, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createInterpreter} from '../wiw.mjs';
+import {createInterpreter} from '../wiw.js';
 
 const source = await readFile(new URL('./references.wat', import.meta.url), 'utf8');
 async function compile(text, run) {

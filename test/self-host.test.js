@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { createInterpreter } from '../wiw.mjs';
+import { createInterpreter } from '../wiw.js';
 const encode = text => new TextEncoder().encode(text);
 // Hand-encoded MVP module exporting answer() -> 42; no guest compilation is involved.
 const constantBinary = Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0,

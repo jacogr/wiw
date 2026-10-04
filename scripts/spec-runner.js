@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { floatValue, floatBits } from './scalar-values.mjs';
-import { specSource } from './spec-source.mjs';
+import { floatValue, floatBits } from './scalar-values.js';
+import { specSource } from './spec-source.js';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { createInterpreter } from '../wiw.mjs';
+import { createInterpreter } from '../wiw.js';
 
 // Read script structure only; guest modules retain their original text and comments.
 export function parseScript(source) {

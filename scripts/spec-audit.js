@@ -1,5 +1,5 @@
 import {writeFile} from 'node:fs/promises';
-import {runSuite} from './spec-runner.mjs';
+import {runSuite} from './spec-runner.js';
 
 // Audit the entire pin, independently of the verified subset used for CI regressions.
 let incomplete = false;

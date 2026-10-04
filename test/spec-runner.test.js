@@ -5,8 +5,8 @@ import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { parseScript, runSuite, unsupported } from '../scripts/spec-runner.mjs';
-import { specSource } from '../scripts/spec-source.mjs';
+import { parseScript, runSuite, unsupported } from '../scripts/spec-runner.js';
+import { specSource } from '../scripts/spec-source.js';
 const binary = new URL('../build/wiw.wasm', import.meta.url);
 
 // Small scripts check harness behavior independently of the submodule fixtures.

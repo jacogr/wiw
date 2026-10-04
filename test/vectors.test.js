@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {mkdtemp, readFile, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createInterpreter} from '../wiw.mjs';
+import {createInterpreter} from '../wiw.js';
 for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: vector storage preserves both halves across locals, control, globals and calls`, async () => {

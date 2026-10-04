@@ -65,7 +65,7 @@ To advance the pin:
 ```sh
 git -C test/spec/upstream fetch --depth 1 origin tag <tag>
 git -C test/spec/upstream checkout --detach <tag>
-node scripts/spec-pin.mjs <tag>
+node scripts/spec-pin.js <tag>
 make audit-spec
 make check-spec
 ```

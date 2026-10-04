@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createInterpreter} from '../wiw.mjs';
+import {createInterpreter} from '../wiw.js';
 
 for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);

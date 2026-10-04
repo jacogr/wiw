@@ -26,13 +26,13 @@ build/wiw-opt.wasm: build/wiw.wasm
 	$(WASM_OPT) -O2 --enable-sign-ext --enable-nontrapping-float-to-int $< -o $@
 
 check: build/wiw.wasm build/wiw-opt.wasm
-	$(NODE) --test test/*.test.mjs
+	$(NODE) --test test/*.test.js
 
 check-spec: build/wiw.wasm build/wiw-opt.wasm
-	$(NODE) --test test/spec*.test.mjs
+	$(NODE) --test test/spec*.test.js
 
 audit-spec: build/wiw.wasm build/wiw-opt.wasm
-	$(NODE) scripts/spec-audit.mjs
+	$(NODE) scripts/spec-audit.js
 
 clean:
 	rm -rf build

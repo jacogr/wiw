@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 // Refresh pin metadata from an already checked-out tag; coverage changes still require review.
 const tag = process.argv[2];
-if (!tag || !/^[a-zA-Z0-9][a-zA-Z0-9._/-]*$/.test(tag)) throw new Error('Usage: node scripts/spec-pin.mjs <checked-out-tag>');
+if (!tag || !/^[a-zA-Z0-9][a-zA-Z0-9._/-]*$/.test(tag)) throw new Error('Usage: node scripts/spec-pin.js <checked-out-tag>');
 const manifest = new URL('../test/spec/upstream.json', import.meta.url);
 const provenance = JSON.parse(await readFile(manifest, 'utf8'));
 const checkout = new URL(provenance.checkout, manifest);

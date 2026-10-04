@@ -555,7 +555,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const file = process.argv[2];
     const name = process.argv[3];
-    if (!file || name === undefined) throw new Error('Usage: node wiw.mjs <file.wat> <export> [scalar arguments...]');
+    if (!file || name === undefined) throw new Error('Usage: node wiw.js <file.wat> <export> [scalar arguments...]');
     const interpreter = await createInterpreter();
     interpreter.load(await readFile(file, 'utf8'));
     const signature = interpreter.signature(name);

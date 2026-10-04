@@ -8,9 +8,9 @@ Requires Git, Node, make, m4, wat2wasm (WABT), and wasm-opt (Binaryen).
 ```sh
 git submodule update --init test/spec/upstream
 make check
-node wiw.mjs test/constant.wat answer
-node wiw.mjs test/control.wat factorial 5
-node wiw.mjs test/float.wat double 1.25
+node wiw.js test/constant.wat answer
+node wiw.js test/control.wat factorial 5
+node wiw.js test/float.wat double 1.25
 ```
 
 These examples print `42`, `120`, and `2.5`. `make` produces expanded WAT and
@@ -55,7 +55,7 @@ Imported resources share mutations, growth and table function references across
 instances. Reload invalidates previous bindings.
 
 ```js
-import {createInterpreter} from './wiw.mjs';
+import {createInterpreter} from './wiw.js';
 const provider = await createInterpreter();
 provider.load('(module (memory (export "memory") 1 2))');
 const consumer = await createInterpreter();

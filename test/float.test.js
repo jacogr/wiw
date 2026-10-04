@@ -4,8 +4,8 @@ import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createInterpreter } from '../wiw.mjs';
-import { floatValue } from '../scripts/scalar-values.mjs';
+import { createInterpreter } from '../wiw.js';
+import { floatValue } from '../scripts/scalar-values.js';
 const names = [null, 'i32', 'i64', 'f32', 'f64'];
 const sourceFor = (body, type) => `(module (func (export "run") (result ${type}) ${body}))`;
 for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
@@ -178,7 +178,7 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
 
 
 test('CLI accepts and prints floating-point values', () => {
-  const run = (...args) => execFileSync(process.execPath, ['wiw.mjs', 'test/float.wat', ...args], {cwd: new URL('..', import.meta.url), encoding: 'utf8'}).trim();
+  const run = (...args) => execFileSync(process.execPath, ['wiw.js', 'test/float.wat', ...args], {cwd: new URL('..', import.meta.url), encoding: 'utf8'}).trim();
   assert.equal(run('double', '1.25'), '2.5');
   assert.equal(run('double', '-inf'), '-Infinity');
   assert.equal(run('rounded'), String(Math.fround(1.00000006)));

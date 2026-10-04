@@ -4,7 +4,7 @@ import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createInterpreter } from '../wiw.mjs';
+import { createInterpreter } from '../wiw.js';
 const guest = (body, result = 'i64') => `(module (func (export "run") (result ${result}) ${body}))`;
 const wide = [0n, 1n, -1n, -(1n << 63n), (1n << 63n) - 1n, 0x123456789abcdef0n];
 for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
@@ -142,5 +142,5 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
 }
 
 test('CLI prints full-width i64 results without rounding', () => {
-  assert.equal(execFileSync(process.execPath, ['wiw.mjs', 'test/i64.wat', 'increment', '1311768467463790320'], {cwd: new URL('..', import.meta.url), encoding: 'utf8'}).trim(), '1311768467463790321');
+  assert.equal(execFileSync(process.execPath, ['wiw.js', 'test/i64.wat', 'increment', '1311768467463790320'], {cwd: new URL('..', import.meta.url), encoding: 'utf8'}).trim(), '1311768467463790321');
 });

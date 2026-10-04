@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createInterpreter } from '../wiw.mjs';
+import { createInterpreter } from '../wiw.js';
 
 const moduleFor = (literal, folded = true, name = 'answer') =>
   `(module (func (export "${name}") (result i32) ${folded ? `(i32.const ${literal})` : `i32.const ${literal}`}))`;
@@ -98,6 +98,6 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
 
 test('CLI prints results and fails for invalid input', () => {
   const cwd = new URL('../', import.meta.url);
-  assert.equal(execFileSync(process.execPath, ['wiw.mjs', 'test/constant.wat', 'answer'], { cwd, encoding: 'utf8' }).trim(), '42');
-  assert.throws(() => execFileSync(process.execPath, ['wiw.mjs', 'test/constant.wat', 'missing'], { cwd, stdio: 'pipe' }), e => e.status === 1 && e.stderr.toString().includes('unknown export'));
+  assert.equal(execFileSync(process.execPath, ['wiw.js', 'test/constant.wat', 'answer'], { cwd, encoding: 'utf8' }).trim(), '42');
+  assert.throws(() => execFileSync(process.execPath, ['wiw.js', 'test/constant.wat', 'missing'], { cwd, stdio: 'pipe' }), e => e.status === 1 && e.stderr.toString().includes('unknown export'));
 });
