@@ -63,6 +63,22 @@ const cases = {
     (loop $again (local.set 0 (i64.sub (local.get 0) (i64.const 1)))
       (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`
 };
+
+// Exercise extended signature lookups during vector execution, checking the complete raw value.
+const vectorWorkloads = {
+  vectorArithmetic: ['v128.const i64x2 1 2 v128.const i64x2 3 4 i64x2.extmul_low_i32x4_u', '3 0'],
+  vectorMixed: ['v128.const i64x2 1 2 i64.const 9 i64x2.replace_lane 1', '1 9'],
+  vectorSelect: ['v128.const i64x2 1 2 v128.const i64x2 3 4 v128.const i64x2 -1 0 v128.bitselect', '1 4']
+};
+for (const [name,[operation,expected]] of Object.entries(vectorWorkloads)) {
+  cases[name] = `(module (func (export "run") (param i64) (result i64)
+    (loop $again
+      ${operation} v128.const i64x2 ${expected} i8x16.eq i8x16.all_true
+      (if (i32.eqz) (then unreachable))
+      (local.set 0 (i64.sub (local.get 0) (i64.const 1)))
+      (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`;
+}
+
 const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
 const report = {node: process.version, binaryen: execFileSync('wasm-opt', ['--version'], {encoding:'utf8'}).trim(),
   engineSourceSha256: createHash('sha256').update(await readFile(new URL('../build/wiw.wat', import.meta.url))).digest('hex'),

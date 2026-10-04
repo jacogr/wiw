@@ -79,6 +79,46 @@ function runtime_route(i) {
   return 0
 }
 
+# Group extended opcodes by their complete effect and select a group with one branch.
+# Scalar opcodes keep their existing packed table; unknown opcodes reach the caller's fallback.
+function effect_dispatch(field, i, key, g, groups, tabs, expr, effect_group, effect_key, effect_id, effect_pair) {
+  groups = 0
+  for (i = 203; i <= count; i++) {
+    key = field == "inputs" ? inputs[i] : (field == "outputs" ? outputs[i] : (field == "output-type" ? outputtype[i] : inputtype[i] ":" secondtype[i]))
+    if (!((field SUBSEP key) in effect_group)) {
+      effect_group[field, key] = groups
+      effect_key[field, groups++] = key
+    }
+    effect_id[i] = effect_group[field, key]
+  }
+  tabs = "\t\t"
+  print tabs ";; Unknown extended opcodes retain the existing fallback below."
+  print tabs "(block $effect-default"
+  tabs = tabs "\t"
+  for (g = 0; g < groups; g++) {
+    print tabs ";; Exit this label to return the " field " group " effect_key[field, g] "."
+    print tabs "(block $effect-" g
+    tabs = tabs "\t"
+  }
+  print tabs ";; Each validated extended opcode selects its complete declared effect."
+  print tabs "(br_table"
+  for (i = 203; i <= count; i++) print tabs "\t$effect-" effect_id[i] " ;; " name[i]
+  print tabs "\t$effect-default"
+  print tabs "\t(i32.sub (local.get $op) (i32.const 203))"
+  print tabs ")"
+  for (g = groups - 1; g >= 0; g--) {
+    tabs = substr(tabs, 1, length(tabs) - 1)
+    print tabs ")"
+    key = effect_key[field, g]
+    if (field == "operand-type") {
+      split(key, effect_pair, ":")
+      expr = effect_pair[1] == effect_pair[2] ? "(i32.const " effect_pair[1] ")" : "(select (i32.const " effect_pair[2] ") (i32.const " effect_pair[1] ") (local.get $position))"
+    } else expr = "(i32.const " key ")"
+    print tabs "(return " expr ")"
+  }
+  print "\t\t)"
+}
+
 END {
   if (invalid) exit 1
   print "\t;; Opcode keyword bytes occupy reserved memory below the host source buffers."
@@ -174,19 +214,13 @@ END {
   print "\t(func $inputs\n\t\t(param $op i32)\n\t\t(result i32)\n"
   print "\t\t;; Scalar instructions use the compact effect table directly."
   print "\t\t(if (i32.le_u (local.get $op) (i32.const 202)) (then (return (i32.shr_u (i32.load8_u (i32.add (i32.const 3072) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 4)))))"
-  for (i = 203; i <= count; i++) {
-    printf "\t\t;; inputs for %s.\n", name[i]
-    printf "\t\t(if (i32.eq (local.get $op) (i32.const %d)) (then (return (i32.const %d))))\n", id[i], inputs[i]
-  }
+  effect_dispatch("inputs")
   print "\t\t(i32.shr_u (i32.load8_u (i32.add (i32.const 3072) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 4))\n\t)"
   print "\n\t;; Return the number of results produced by a known opcode."
   print "\t(func $outputs\n\t\t(param $op i32)\n\t\t(result i32)\n"
   print "\t\t;; Scalar instructions use the compact effect table directly."
   print "\t\t(if (i32.le_u (local.get $op) (i32.const 202)) (then (return (i32.and (i32.load8_u (i32.add (i32.const 3072) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 15)))))"
-  for (i = 203; i <= count; i++) {
-    printf "\t\t;; outputs for %s.\n", name[i]
-    printf "\t\t(if (i32.eq (local.get $op) (i32.const %d)) (then (return (i32.const %d))))\n", id[i], outputs[i]
-  }
+  effect_dispatch("outputs")
   print "\t\t(i32.and (i32.load8_u (i32.add (i32.const 3072) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 15))\n\t)"
   print "\n\t;; Apply a unary or binary integer operation after the runtime checks trap conditions."
   print "\t(func $apply\n\t\t(param $op i32)\n\t\t(param $a i32)\n\t\t(param $b i32)\n\t\t(result i32)\n"
@@ -229,15 +263,7 @@ END {
   print "\t\t(if (i32.and (call $store-op (local.get $op)) (local.get $position))\n\t\t\t(then (return (i32.const 1)))\n\t\t)"
   print "\t\t;; Scalar instructions use the compact effect table directly."
   print "\t\t(if (i32.le_u (local.get $op) (i32.const 202)) (then (return (i32.shr_u (i32.load8_u (i32.add (i32.const 3073) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 4)))))"
-  for (i = 203; i <= count; i++) {
-    printf "\t\t;; operand-type for %s.\n", name[i]
-    if (inputtype[i] != secondtype[i]) {
-      printf "\t\t;; Mixed signatures pop the scalar right operand before the vector.\n"
-      printf "\t\t(if (i32.eq (local.get $op) (i32.const %d)) (then (return (select (i32.const %d) (i32.const %d) (local.get $position)))))\n", id[i], secondtype[i], inputtype[i]
-      continue
-    }
-    printf "\t\t(if (i32.eq (local.get $op) (i32.const %d)) (then (return (i32.const %d))))\n", id[i], inputtype[i]
-  }
+  effect_dispatch("operand-type")
   print "\t\t(i32.shr_u (i32.load8_u (i32.add (i32.const 3073) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 4))\n\t)"
   print "\n\t;; Return an opcode's declared scalar result type for typed validation."
   print "\t(func $output-type\n\t\t(param $op i32)\n\t\t(result i32)"
@@ -249,10 +275,7 @@ END {
   print "\t\t(if (i32.eq (local.get $op) (i32.const 198)) (then (return (global.get $guest-table-type))))"
   print "\t\t;; Scalar instructions use the compact effect table directly."
   print "\t\t(if (i32.le_u (local.get $op) (i32.const 202)) (then (return (i32.and (i32.load8_u (i32.add (i32.const 3073) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 15)))))"
-  for (i = 203; i <= count; i++) {
-    printf "\t\t;; output-type for %s.\n", name[i]
-    printf "\t\t(if (i32.eq (local.get $op) (i32.const %d)) (then (return (i32.const %d))))\n", id[i], outputtype[i]
-  }
+  effect_dispatch("output-type")
   print "\t\t(i32.and (i32.load8_u (i32.add (i32.const 3073) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 15))\n\t)"
   print "\n\t;; Apply an i64 numeric operation or width conversion after runtime trap checks."
   print "\t(func $apply64\n\t\t(param $op i32)\n\t\t(param $a i64)\n\t\t(param $b i64)\n\t\t(result i64)"

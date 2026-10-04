@@ -922,3 +922,44 @@ files fall from 37.41 and 42.01 seconds to 33.10 and 37.10 seconds. The full
 comparison uses the preceding recorded run, without a same-session unchanged
 full control; local timings vary. Paired isolated benchmarks, instruction
 profiles, source and binary hashes are retained in `test/performance.json`.
+
+
+Extended opcode effects use generated branch tables grouped by complete return
+values. Operand counts, result counts and result types branch to one shared
+constant per distinct effect. Operand types group by the full first/second type
+pair, preserving scalar/vector pop order for lane operations, shifts and memory
+accesses. Each table covers all 295 extended opcodes with a mnemonic comment for
+every target. Each label has a descriptive comment, and unknown opcodes retain
+the original fallback. Scalar effects keep their packed table; memory and table
+address widths and reference-type overrides still run before declared effects.
+
+Previously these four helpers each scanned up to 295 opcode comparisons. The
+new tables enter only the small set of effect labels and select the matching
+return group directly. They change interpreter metadata lookup; parsed guest
+records, opcode IDs, reserved-memory layout, source-buffer origin, capacities
+and guest execution semantics remain unchanged. Expanded engine WAT shrinks
+from 1,574,501 to 1,485,598 bytes.
+
+Exhaustive probes check all extended opcode signatures in the optimized engine
+and one interpreted WAT copy. Forward and reverse sweeps alternate 32-bit and
+64-bit memory addressing, check every operand position and result type, and
+exercise the unknown-opcode fallback. Existing all-SIMD native comparisons cover
+text and binary loading; the full spec covers validation failures and traps.
+
+`make bench` now includes vector arithmetic, mixed scalar/vector operands and
+three-vector selection. Each iteration compares all sixteen result bytes and
+traps on a mismatch before continuing. Paired isolated hosted timings improve
+by about 22–24% across these three workloads, while the nine scalar workloads
+retain similar timings. Hosted SIMD loading improves by about 24%; the scalar
+loader workloads remain similar. Diagnostic hosted-load profiles fall from
+5,463,637 to 3,656,533 bootstrap instructions for vectors, a 33.1% reduction,
+while the other three loader instruction counts remain identical.
+
+All 164 tests pass, including nested self-hosting, and both runtimes pass all
+65,199 frozen commands across 258 files with zero skips and failures. The hosted
+audit takes 273,763 ms (4.56 minutes), down from the preceding recorded 282,196 ms
+(4.70 minutes), a measured 3.0% reduction. This full comparison uses the preceding
+recorded run, without a same-session unchanged full control; local timings vary.
+Paired isolated SIMD execution/load benchmarks and diagnostic instruction counts
+support the focused gain. Measurements, profiles, source and binary hashes are
+retained in `test/performance.json`.
