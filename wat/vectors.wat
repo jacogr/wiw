@@ -340,8 +340,481 @@
 		(global.get $vector-low)
 	)
 
-	;; Dispatch SIMD arithmetic to scalar lane operations and return its lower half.
+	;; Route SIMD arithmetic to one lane family and return its lower half.
 	(func $vector-apply
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+
+		;; Normalize relaxed aliases before selecting a strict lane family.
+		(if (i32.ge_u (local.get $op) (i32.const 440))
+			(then
+				;; i8x16.relaxed_swizzle uses the permitted strict operation as its deterministic result.
+				(if (i32.eq (local.get $op) (i32.const 440))
+					(then
+						(local.set $op (i32.const 336))
+					)
+				)
+				;; i32x4.relaxed_trunc_f32x4_s uses the permitted strict operation as its deterministic result.
+				(if (i32.eq (local.get $op) (i32.const 441))
+					(then
+						(local.set $op (i32.const 408))
+					)
+				)
+				;; i32x4.relaxed_trunc_f32x4_u uses the permitted strict operation as its deterministic result.
+				(if (i32.eq (local.get $op) (i32.const 442))
+					(then
+						(local.set $op (i32.const 409))
+					)
+				)
+				;; i32x4.relaxed_trunc_f64x2_s_zero uses the permitted strict operation as its deterministic result.
+				(if (i32.eq (local.get $op) (i32.const 443))
+					(then
+						(local.set $op (i32.const 412))
+					)
+				)
+				;; i32x4.relaxed_trunc_f64x2_u_zero uses the permitted strict operation as its deterministic result.
+				(if (i32.eq (local.get $op) (i32.const 444))
+					(then
+						(local.set $op (i32.const 413))
+					)
+				)
+				;; i8x16.relaxed_laneselect uses the permitted strict operation as its deterministic result.
+				(if (i32.eq (local.get $op) (i32.const 449))
+					(then
+						(local.set $op (i32.const 362))
+					)
+				)
+				;; i16x8.relaxed_laneselect uses the permitted strict operation as its deterministic result.
+				(if (i32.eq (local.get $op) (i32.const 450))
+					(then
+						(local.set $op (i32.const 362))
+					)
+				)
+				;; i32x4.relaxed_laneselect uses the permitted strict operation as its deterministic result.
+				(if (i32.eq (local.get $op) (i32.const 451))
+					(then
+						(local.set $op (i32.const 362))
+					)
+				)
+				;; i64x2.relaxed_laneselect uses the permitted strict operation as its deterministic result.
+				(if (i32.eq (local.get $op) (i32.const 452))
+					(then
+						(local.set $op (i32.const 362))
+					)
+				)
+				;; f32x4.relaxed_min uses the permitted strict operation as its deterministic result.
+				(if (i32.eq (local.get $op) (i32.const 453))
+					(then
+						(local.set $op (i32.const 320))
+					)
+				)
+				;; f32x4.relaxed_max uses the permitted strict operation as its deterministic result.
+				(if (i32.eq (local.get $op) (i32.const 454))
+					(then
+						(local.set $op (i32.const 321))
+					)
+				)
+				;; f64x2.relaxed_min uses the permitted strict operation as its deterministic result.
+				(if (i32.eq (local.get $op) (i32.const 455))
+					(then
+						(local.set $op (i32.const 331))
+					)
+				)
+				;; f64x2.relaxed_max uses the permitted strict operation as its deterministic result.
+				(if (i32.eq (local.get $op) (i32.const 456))
+					(then
+						(local.set $op (i32.const 332))
+					)
+				)
+				;; i16x8.relaxed_q15mulr_s uses the permitted strict operation as its deterministic result.
+				(if (i32.eq (local.get $op) (i32.const 457))
+					(then
+						(local.set $op (i32.const 374))
+					)
+				)
+				;; Relaxed multiply-add and dot products evaluate scalar lanes without native guest execution.
+				(if
+					(i32.or
+						(i32.and
+							(i32.ge_u (local.get $op) (i32.const 445))
+							(i32.le_u (local.get $op) (i32.const 448))
+						)
+						(i32.ge_u (local.get $op) (i32.const 458))
+					)
+					(then
+						(return
+							(call $vector-relaxed
+								(local.get $op)
+								(local.get $a)
+								(local.get $ah)
+								(local.get $b)
+								(local.get $bh)
+								(local.get $c)
+								(local.get $ch)
+							)
+						)
+					)
+				)
+			)
+		)
+		(global.set $vector-low (i64.const 0))
+		(global.set $vector-high (i64.const 0))
+		;; Opcode 203 predates its corresponding integer lane family.
+		(if (i32.eq (local.get $op) (i32.const 203))
+			(then
+				(return
+					(call $vector-words
+						(local.get $op)
+						(local.get $a)
+						(local.get $ah)
+						(local.get $b)
+						(local.get $bh)
+						(local.get $c)
+						(local.get $ch)
+						(local.get $imm)
+						(local.get $imm2)
+					)
+				)
+			)
+		)
+		;; Opcode 204 predates its corresponding integer lane family.
+		(if (i32.eq (local.get $op) (i32.const 204))
+			(then
+				(return
+					(call $vector-wide
+						(local.get $op)
+						(local.get $a)
+						(local.get $ah)
+						(local.get $b)
+						(local.get $bh)
+						(local.get $c)
+						(local.get $ch)
+						(local.get $imm)
+						(local.get $imm2)
+					)
+				)
+			)
+		)
+		;; Opcodes through 299 belong to the earlier lane families.
+		(if (i32.le_u (local.get $op) (i32.const 299))
+			(then
+				;; Opcodes through 234 belong to the earlier lane families.
+				(if (i32.le_u (local.get $op) (i32.const 234))
+					(then
+						;; Opcodes through 214 belong to the earlier lane families.
+						(if (i32.le_u (local.get $op) (i32.const 214))
+							(then
+								(return
+									(call $vector-compare8
+										(local.get $op)
+										(local.get $a)
+										(local.get $ah)
+										(local.get $b)
+										(local.get $bh)
+										(local.get $c)
+										(local.get $ch)
+										(local.get $imm)
+										(local.get $imm2)
+									)
+								)
+							)
+							;; Later opcode families bypass the earlier handlers.
+							(else
+								;; Opcodes through 224 belong to the earlier lane families.
+								(if (i32.le_u (local.get $op) (i32.const 224))
+									(then
+										(return
+											(call $vector-compare16
+												(local.get $op)
+												(local.get $a)
+												(local.get $ah)
+												(local.get $b)
+												(local.get $bh)
+												(local.get $c)
+												(local.get $ch)
+												(local.get $imm)
+												(local.get $imm2)
+											)
+										)
+									)
+									;; Later opcode families bypass the earlier handlers.
+									(else
+										(return
+											(call $vector-compare32
+												(local.get $op)
+												(local.get $a)
+												(local.get $ah)
+												(local.get $b)
+												(local.get $bh)
+												(local.get $c)
+												(local.get $ch)
+												(local.get $imm)
+												(local.get $imm2)
+											)
+										)
+									)
+								)
+							)
+						)
+					)
+					;; Later opcode families bypass the earlier handlers.
+					(else
+						;; Opcodes through 270 belong to the earlier lane families.
+						(if (i32.le_u (local.get $op) (i32.const 270))
+							(then
+								;; Opcodes through 246 belong to the earlier lane families.
+								(if (i32.le_u (local.get $op) (i32.const 246))
+									(then
+										(return
+											(call $vector-compare-float
+												(local.get $op)
+												(local.get $a)
+												(local.get $ah)
+												(local.get $b)
+												(local.get $bh)
+												(local.get $c)
+												(local.get $ch)
+												(local.get $imm)
+												(local.get $imm2)
+											)
+										)
+									)
+									;; Later opcode families bypass the earlier handlers.
+									(else
+										(return
+											(call $vector-bytes
+												(local.get $op)
+												(local.get $a)
+												(local.get $ah)
+												(local.get $b)
+												(local.get $bh)
+												(local.get $c)
+												(local.get $ch)
+												(local.get $imm)
+												(local.get $imm2)
+											)
+										)
+									)
+								)
+							)
+							;; Later opcode families bypass the earlier handlers.
+							(else
+								;; Opcodes through 288 belong to the earlier lane families.
+								(if (i32.le_u (local.get $op) (i32.const 288))
+									(then
+										(return
+											(call $vector-shorts
+												(local.get $op)
+												(local.get $a)
+												(local.get $ah)
+												(local.get $b)
+												(local.get $bh)
+												(local.get $c)
+												(local.get $ch)
+												(local.get $imm)
+												(local.get $imm2)
+											)
+										)
+									)
+									;; Later opcode families bypass the earlier handlers.
+									(else
+										(return
+											(call $vector-words
+												(local.get $op)
+												(local.get $a)
+												(local.get $ah)
+												(local.get $b)
+												(local.get $bh)
+												(local.get $c)
+												(local.get $ch)
+												(local.get $imm)
+												(local.get $imm2)
+											)
+										)
+									)
+								)
+							)
+						)
+					)
+				)
+			)
+			;; Later opcode families bypass the earlier handlers.
+			(else
+				;; Opcodes through 356 belong to the earlier lane families.
+				(if (i32.le_u (local.get $op) (i32.const 356))
+					(then
+						;; Opcodes through 323 belong to the earlier lane families.
+						(if (i32.le_u (local.get $op) (i32.const 323))
+							(then
+								;; Opcodes through 312 belong to the earlier lane families.
+								(if (i32.le_u (local.get $op) (i32.const 312))
+									(then
+										(return
+											(call $vector-wide
+												(local.get $op)
+												(local.get $a)
+												(local.get $ah)
+												(local.get $b)
+												(local.get $bh)
+												(local.get $c)
+												(local.get $ch)
+												(local.get $imm)
+												(local.get $imm2)
+											)
+										)
+									)
+									;; Later opcode families bypass the earlier handlers.
+									(else
+										(return
+											(call $vector-float32
+												(local.get $op)
+												(local.get $a)
+												(local.get $ah)
+												(local.get $b)
+												(local.get $bh)
+												(local.get $c)
+												(local.get $ch)
+												(local.get $imm)
+												(local.get $imm2)
+											)
+										)
+									)
+								)
+							)
+							;; Later opcode families bypass the earlier handlers.
+							(else
+								;; Opcodes through 334 belong to the earlier lane families.
+								(if (i32.le_u (local.get $op) (i32.const 334))
+									(then
+										(return
+											(call $vector-float64
+												(local.get $op)
+												(local.get $a)
+												(local.get $ah)
+												(local.get $b)
+												(local.get $bh)
+												(local.get $c)
+												(local.get $ch)
+												(local.get $imm)
+												(local.get $imm2)
+											)
+										)
+									)
+									;; Later opcode families bypass the earlier handlers.
+									(else
+										(return
+											(call $vector-lanes
+												(local.get $op)
+												(local.get $a)
+												(local.get $ah)
+												(local.get $b)
+												(local.get $bh)
+												(local.get $c)
+												(local.get $ch)
+												(local.get $imm)
+												(local.get $imm2)
+											)
+										)
+									)
+								)
+							)
+						)
+					)
+					;; Later opcode families bypass the earlier handlers.
+					(else
+						;; Opcodes through 407 belong to the earlier lane families.
+						(if (i32.le_u (local.get $op) (i32.const 407))
+							(then
+								;; Opcodes through 365 belong to the earlier lane families.
+								(if (i32.le_u (local.get $op) (i32.const 365))
+									(then
+										(return
+											(call $vector-bits
+												(local.get $op)
+												(local.get $a)
+												(local.get $ah)
+												(local.get $b)
+												(local.get $bh)
+												(local.get $c)
+												(local.get $ch)
+												(local.get $imm)
+												(local.get $imm2)
+											)
+										)
+									)
+									;; Later opcode families bypass the earlier handlers.
+									(else
+										(return
+											(call $vector-extended
+												(local.get $op)
+												(local.get $a)
+												(local.get $ah)
+												(local.get $b)
+												(local.get $bh)
+												(local.get $c)
+												(local.get $ch)
+												(local.get $imm)
+												(local.get $imm2)
+											)
+										)
+									)
+								)
+							)
+							;; Later opcode families bypass the earlier handlers.
+							(else
+								;; Opcodes through 415 belong to the earlier lane families.
+								(if (i32.le_u (local.get $op) (i32.const 415))
+									(then
+										(return
+											(call $vector-conversions
+												(local.get $op)
+												(local.get $a)
+												(local.get $ah)
+												(local.get $b)
+												(local.get $bh)
+												(local.get $c)
+												(local.get $ch)
+												(local.get $imm)
+												(local.get $imm2)
+											)
+										)
+									)
+									;; Later opcode families bypass the earlier handlers.
+									(else
+										(return
+											(call $vector-memory
+												(local.get $op)
+												(local.get $a)
+												(local.get $ah)
+												(local.get $b)
+												(local.get $bh)
+												(local.get $c)
+												(local.get $ch)
+												(local.get $imm)
+												(local.get $imm2)
+											)
+										)
+									)
+								)
+							)
+						)
+					)
+				)
+			)
+		)
+		(i64.const 0)
+	)
+
+	;; Compare the sixteen eight-bit lanes.
+	(func $vector-compare8
 		(param $op i32)
 		(param $a i64)
 		(param $ah i64)
@@ -357,115 +830,6 @@
 		(local $x i64)
 		(local $y i64)
 
-		;; i8x16.relaxed_swizzle uses the permitted strict operation as its deterministic result.
-		(if (i32.eq (local.get $op) (i32.const 440))
-			(then
-				(local.set $op (i32.const 336))
-			)
-		)
-		;; i32x4.relaxed_trunc_f32x4_s uses the permitted strict operation as its deterministic result.
-		(if (i32.eq (local.get $op) (i32.const 441))
-			(then
-				(local.set $op (i32.const 408))
-			)
-		)
-		;; i32x4.relaxed_trunc_f32x4_u uses the permitted strict operation as its deterministic result.
-		(if (i32.eq (local.get $op) (i32.const 442))
-			(then
-				(local.set $op (i32.const 409))
-			)
-		)
-		;; i32x4.relaxed_trunc_f64x2_s_zero uses the permitted strict operation as its deterministic result.
-		(if (i32.eq (local.get $op) (i32.const 443))
-			(then
-				(local.set $op (i32.const 412))
-			)
-		)
-		;; i32x4.relaxed_trunc_f64x2_u_zero uses the permitted strict operation as its deterministic result.
-		(if (i32.eq (local.get $op) (i32.const 444))
-			(then
-				(local.set $op (i32.const 413))
-			)
-		)
-		;; i8x16.relaxed_laneselect uses the permitted strict operation as its deterministic result.
-		(if (i32.eq (local.get $op) (i32.const 449))
-			(then
-				(local.set $op (i32.const 362))
-			)
-		)
-		;; i16x8.relaxed_laneselect uses the permitted strict operation as its deterministic result.
-		(if (i32.eq (local.get $op) (i32.const 450))
-			(then
-				(local.set $op (i32.const 362))
-			)
-		)
-		;; i32x4.relaxed_laneselect uses the permitted strict operation as its deterministic result.
-		(if (i32.eq (local.get $op) (i32.const 451))
-			(then
-				(local.set $op (i32.const 362))
-			)
-		)
-		;; i64x2.relaxed_laneselect uses the permitted strict operation as its deterministic result.
-		(if (i32.eq (local.get $op) (i32.const 452))
-			(then
-				(local.set $op (i32.const 362))
-			)
-		)
-		;; f32x4.relaxed_min uses the permitted strict operation as its deterministic result.
-		(if (i32.eq (local.get $op) (i32.const 453))
-			(then
-				(local.set $op (i32.const 320))
-			)
-		)
-		;; f32x4.relaxed_max uses the permitted strict operation as its deterministic result.
-		(if (i32.eq (local.get $op) (i32.const 454))
-			(then
-				(local.set $op (i32.const 321))
-			)
-		)
-		;; f64x2.relaxed_min uses the permitted strict operation as its deterministic result.
-		(if (i32.eq (local.get $op) (i32.const 455))
-			(then
-				(local.set $op (i32.const 331))
-			)
-		)
-		;; f64x2.relaxed_max uses the permitted strict operation as its deterministic result.
-		(if (i32.eq (local.get $op) (i32.const 456))
-			(then
-				(local.set $op (i32.const 332))
-			)
-		)
-		;; i16x8.relaxed_q15mulr_s uses the permitted strict operation as its deterministic result.
-		(if (i32.eq (local.get $op) (i32.const 457))
-			(then
-				(local.set $op (i32.const 374))
-			)
-		)
-		;; Relaxed multiply-add and dot products evaluate scalar lanes without native guest execution.
-		(if
-			(i32.or
-				(i32.and
-					(i32.ge_u (local.get $op) (i32.const 445))
-					(i32.le_u (local.get $op) (i32.const 448))
-				)
-				(i32.ge_u (local.get $op) (i32.const 458))
-			)
-			(then
-				(return
-					(call $vector-relaxed
-						(local.get $op)
-						(local.get $a)
-						(local.get $ah)
-						(local.get $b)
-						(local.get $bh)
-						(local.get $c)
-						(local.get $ch)
-					)
-				)
-			)
-		)
-		(global.set $vector-low (i64.const 0))
-		(global.set $vector-high (i64.const 0))
 		;; Execute i8x16.eq independently in each 8-bit lane.
 		(if (i32.eq (local.get $op) (i32.const 205))
 			(then
@@ -718,6 +1082,27 @@
 				(return (global.get $vector-low))
 			)
 		)
+		(call $fail (i32.const 2))
+		(i64.const 0)
+	)
+
+	;; Compare the eight sixteen-bit lanes.
+	(func $vector-compare16
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+		(local $p i32)
+		(local $i i32)
+		(local $x i64)
+		(local $y i64)
+
 		;; Execute i16x8.eq independently in each 16-bit lane.
 		(if (i32.eq (local.get $op) (i32.const 215))
 			(then
@@ -970,6 +1355,27 @@
 				(return (global.get $vector-low))
 			)
 		)
+		(call $fail (i32.const 2))
+		(i64.const 0)
+	)
+
+	;; Compare the four thirty-two-bit lanes.
+	(func $vector-compare32
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+		(local $p i32)
+		(local $i i32)
+		(local $x i64)
+		(local $y i64)
+
 		;; Execute i32x4.eq independently in each 32-bit lane.
 		(if (i32.eq (local.get $op) (i32.const 225))
 			(then
@@ -1222,6 +1628,27 @@
 				(return (global.get $vector-low))
 			)
 		)
+		(call $fail (i32.const 2))
+		(i64.const 0)
+	)
+
+	;; Compare floating-point lanes at both widths.
+	(func $vector-compare-float
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+		(local $p i32)
+		(local $i i32)
+		(local $x i64)
+		(local $y i64)
+
 		;; Execute f32x4.eq independently in each 32-bit lane.
 		(if (i32.eq (local.get $op) (i32.const 235))
 			(then
@@ -1486,6 +1913,27 @@
 				(return (global.get $vector-low))
 			)
 		)
+		(call $fail (i32.const 2))
+		(i64.const 0)
+	)
+
+	;; Execute byte arithmetic and interleaved floating-point rounding.
+	(func $vector-bytes
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+		(local $p i32)
+		(local $i i32)
+		(local $x i64)
+		(local $y i64)
+
 		;; Execute i8x16.abs independently in each 8-bit lane.
 		(if (i32.eq (local.get $op) (i32.const 247))
 			(then
@@ -2033,6 +2481,27 @@
 				(return (global.get $vector-low))
 			)
 		)
+		(call $fail (i32.const 2))
+		(i64.const 0)
+	)
+
+	;; Execute sixteen-bit arithmetic and interleaved double rounding.
+	(func $vector-shorts
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+		(local $p i32)
+		(local $i i32)
+		(local $x i64)
+		(local $y i64)
+
 		;; Execute i16x8.abs independently in each 16-bit lane.
 		(if (i32.eq (local.get $op) (i32.const 271))
 			(then
@@ -2468,6 +2937,49 @@
 				(return (global.get $vector-low))
 			)
 		)
+		(call $fail (i32.const 2))
+		(i64.const 0)
+	)
+
+	;; Execute thirty-two-bit integer lane arithmetic.
+	(func $vector-words
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+		(local $p i32)
+		(local $i i32)
+		(local $x i64)
+		(local $y i64)
+
+		;; Execute i32x4.add independently in each 32-bit lane.
+		(if (i32.eq (local.get $op) (i32.const 203))
+			(then
+				;; Pack each result after extracting operands in stack order.
+				(loop $lanes
+					(local.set $x
+						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+					)
+					(local.set $y
+						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+					)
+					(call $vector-insert
+						(i64.add (local.get $x) (local.get $y))
+						(i32.const 32)
+						(local.get $i)
+					)
+					(local.set $i (i32.add (local.get $i) (i32.const 1)))
+					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
+				)
+				(return (global.get $vector-low))
+			)
+		)
 		;; Execute i32x4.abs independently in each 32-bit lane.
 		(if (i32.eq (local.get $op) (i32.const 289))
 			(then
@@ -2572,28 +3084,6 @@
 					)
 					(call $vector-insert
 						(i64.shr_u (local.get $x) (i64.and (local.get $b) (i64.const 31)))
-						(i32.const 32)
-						(local.get $i)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
-				(return (global.get $vector-low))
-			)
-		)
-		;; Execute i32x4.add independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 203))
-			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
-					)
-					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
-					)
-					(call $vector-insert
-						(i64.add (local.get $x) (local.get $y))
 						(i32.const 32)
 						(local.get $i)
 					)
@@ -2749,6 +3239,49 @@
 				(return (global.get $vector-low))
 			)
 		)
+		(call $fail (i32.const 2))
+		(i64.const 0)
+	)
+
+	;; Execute sixty-four-bit integer lane arithmetic and comparisons.
+	(func $vector-wide
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+		(local $p i32)
+		(local $i i32)
+		(local $x i64)
+		(local $y i64)
+
+		;; Execute i64x2.add independently in each 64-bit lane.
+		(if (i32.eq (local.get $op) (i32.const 204))
+			(then
+				;; Pack each result after extracting operands in stack order.
+				(loop $lanes
+					(local.set $x
+						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+					)
+					(local.set $y
+						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+					)
+					(call $vector-insert
+						(i64.add (local.get $x) (local.get $y))
+						(i32.const 64)
+						(local.get $i)
+					)
+					(local.set $i (i32.add (local.get $i) (i32.const 1)))
+					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
+				)
+				(return (global.get $vector-low))
+			)
+		)
 		;; Execute i64x2.abs independently in each 64-bit lane.
 		(if (i32.eq (local.get $op) (i32.const 300))
 			(then
@@ -2853,28 +3386,6 @@
 					)
 					(call $vector-insert
 						(i64.shr_u (local.get $x) (i64.and (local.get $b) (i64.const 63)))
-						(i32.const 64)
-						(local.get $i)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
-				(return (global.get $vector-low))
-			)
-		)
-		;; Execute i64x2.add independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 204))
-			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
-					)
-					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
-					)
-					(call $vector-insert
-						(i64.add (local.get $x) (local.get $y))
 						(i32.const 64)
 						(local.get $i)
 					)
@@ -3092,6 +3603,27 @@
 				(return (global.get $vector-low))
 			)
 		)
+		(call $fail (i32.const 2))
+		(i64.const 0)
+	)
+
+	;; Execute thirty-two-bit floating-point lane arithmetic.
+	(func $vector-float32
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+		(local $p i32)
+		(local $i i32)
+		(local $x i64)
+		(local $y i64)
+
 		;; Execute f32x4.abs independently in each 32-bit lane.
 		(if (i32.eq (local.get $op) (i32.const 313))
 			(then
@@ -3348,6 +3880,27 @@
 				(return (global.get $vector-low))
 			)
 		)
+		(call $fail (i32.const 2))
+		(i64.const 0)
+	)
+
+	;; Execute sixty-four-bit floating-point lane arithmetic.
+	(func $vector-float64
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+		(local $p i32)
+		(local $i i32)
+		(local $x i64)
+		(local $y i64)
+
 		;; Execute f64x2.abs independently in each 64-bit lane.
 		(if (i32.eq (local.get $op) (i32.const 324))
 			(then
@@ -3598,6 +4151,27 @@
 				(return (global.get $vector-low))
 			)
 		)
+		(call $fail (i32.const 2))
+		(i64.const 0)
+	)
+
+	;; Execute shuffles, splats, extractions and lane replacement.
+	(func $vector-lanes
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+		(local $p i32)
+		(local $i i32)
+		(local $x i64)
+		(local $y i64)
+
 		;; Interpret i8x16.shuffle using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const 335))
 			(then
@@ -3949,6 +4523,27 @@
 				(return (global.get $vector-low))
 			)
 		)
+		(call $fail (i32.const 2))
+		(i64.const 0)
+	)
+
+	;; Execute vector bit operations, selection and floating lane width conversion.
+	(func $vector-bits
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+		(local $p i32)
+		(local $i i32)
+		(local $x i64)
+		(local $y i64)
+
 		;; Interpret v128.not using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const 357))
 			(then
@@ -4058,6 +4653,27 @@
 				(return (global.get $vector-low))
 			)
 		)
+		(call $fail (i32.const 2))
+		(i64.const 0)
+	)
+
+	;; Execute lane reductions, narrowing, widening and extended integer arithmetic.
+	(func $vector-extended
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+		(local $p i32)
+		(local $i i32)
+		(local $x i64)
+		(local $y i64)
+
 		;; Interpret i8x16.all_true using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const 366))
 			(then
@@ -5276,6 +5892,27 @@
 				(return (global.get $vector-low))
 			)
 		)
+		(call $fail (i32.const 2))
+		(i64.const 0)
+	)
+
+	;; Convert lane values between integer and floating-point representations.
+	(func $vector-conversions
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+		(local $p i32)
+		(local $i i32)
+		(local $x i64)
+		(local $y i64)
+
 		;; Interpret i32x4.trunc_sat_f32x4_s using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const 408))
 			(then
@@ -5436,6 +6073,27 @@
 				(return (global.get $vector-low))
 			)
 		)
+		(call $fail (i32.const 2))
+		(i64.const 0)
+	)
+
+	;; Execute vector memory accesses with atomic bounds checks.
+	(func $vector-memory
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(param $imm i32)
+		(param $imm2 i32)
+		(result i64)
+		(local $p i32)
+		(local $i i32)
+		(local $x i64)
+		(local $y i64)
+
 		;; Interpret v128.load with an atomic unsigned memory bound check.
 		(if (i32.eq (local.get $op) (i32.const 416))
 			(then

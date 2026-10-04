@@ -963,3 +963,49 @@ recorded run, without a same-session unchanged full control; local timings vary.
 Paired isolated SIMD execution/load benchmarks and diagnostic instruction counts
 support the focused gain. Measurements, profiles, source and binary hashes are
 retained in `test/performance.json`.
+
+
+SIMD execution selects one of fifteen smaller handler functions through a
+balanced opcode-range decision tree. Comparisons, arithmetic, shuffles and lane
+operations, bit operations, extended integers, conversions and memory accesses
+keep their scalar implementations. Interleaved rounding instructions stay with
+their original opcode ranges. The two early addition opcodes select their
+integer families explicitly. Only relaxed opcodes enter alias normalization;
+strict instructions bypass those repeated comparisons. Relaxed multiply-adds
+and dot products retain their existing scalar evaluator and deterministic choices.
+
+The family helpers retain the complete operand halves and immediate arguments.
+Vector result globals reset once before strict family selection, while each
+helper initializes its own lane cursor. Existing lane arithmetic, overflow,
+rounding, memory bounds, source positions and fuel rules remain in the handlers.
+Every function and control construct has a descriptive comment. The tree takes
+at most four range decisions before a family, avoiding scans of unrelated SIMD
+operations while keeping each handler readable.
+
+New regressions alternate integer widths, population counts, vector bit
+operations, relaxed swizzles, lane reductions, memory lanes and relaxed floating
+aliases within repeated calls and reloads. Independent JavaScript lane arithmetic
+checks both raw halves and stored bytes. A memory-lane bounds trap checks the
+exact source position, followed by successful reuse of the same instance.
+Existing native-oracle comparisons still cover every strict SIMD opcode through
+text and binary decoding; the full pinned spec covers relaxed SIMD and traps.
+
+`make bench` also checks vector stores and loads, comparing all sixteen bytes
+each iteration. Paired isolated hosted vector timings improve by 14–15% for
+arithmetic, mixed operands and selection, and by 22.4% for memory. Scalar workload
+timings remain close, varying by up to 2.4%; loader timings remain similar.
+Diagnostic profiles for 100 checked iterations reduce bootstrap instruction
+counts from 888,838 to 713,138 for arithmetic, 819,638 to 659,438 for mixed
+operands, 899,838 to 728,638 for selection, and 1,042,438 to 731,138 for memory.
+All four loader profile counts and the scalar dispatch profile counts remain
+identical. Profiles include invocation overhead and exclude engine construction
+and guest loading.
+
+All 166 tests pass, including nested self-hosting, and both runtimes pass all
+65,199 frozen commands across 258 files with zero skips and failures. The hosted
+audit takes 270,789 ms (4.51 minutes), versus the preceding recorded 273,763 ms
+(4.56 minutes). This 1.1% full-run difference is small and may be within local
+timing variation; it compares preceding runs without a same-session unchanged
+full control. The retained gain is supported by the paired isolated SIMD
+benchmarks and matching instruction-count reductions. Measurements, profiles,
+source and binary hashes are retained in `test/performance.json`.

@@ -79,6 +79,16 @@ for (const [name,[operation,expected]] of Object.entries(vectorWorkloads)) {
       (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`;
 }
 
+
+// Vector memory dispatch must preserve and compare both halves after each write/read pair.
+cases.vectorMemory = `(module (memory 1) (func (export "run") (param i64) (result i64)
+  (loop $again
+    i32.const 64 v128.const i64x2 1 2 v128.store
+    i32.const 64 v128.load v128.const i64x2 1 2 i8x16.eq i8x16.all_true
+    (if (i32.eqz) (then unreachable))
+    (local.set 0 (i64.sub (local.get 0) (i64.const 1)))
+    (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`;
+
 const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
 const report = {node: process.version, binaryen: execFileSync('wasm-opt', ['--version'], {encoding:'utf8'}).trim(),
   engineSourceSha256: createHash('sha256').update(await readFile(new URL('../build/wiw.wat', import.meta.url))).digest('hex'),

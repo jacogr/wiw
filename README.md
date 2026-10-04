@@ -177,7 +177,8 @@ Node frontend continues to handle synchronous callbacks and resource bindings.
 calls with many declared types and alternating table entries, reference calls
 through a mutable global, a call with multiple parameters and locals, a scalar
 loop, alternating conditional arms, memory reads/writes, and SIMD arithmetic,
-mixed scalar/vector operands and three-vector selection on both the bootstrap
+mixed scalar/vector operands, three-vector selection and vector loads/stores
+on both the bootstrap
 and hosted runtime. SIMD workloads check every byte of the result each iteration.
 It writes sample timings, medians and source/binary hashes to `build/bench.json`.
 `BENCH_ITERATIONS=10000 BENCH_SAMPLES=7 make bench` adjusts the bounded workload.
