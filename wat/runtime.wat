@@ -460,6 +460,42 @@
 					(br $dispatch)
 				)
 			)
+			;; Globals and function references publish raw values before general resource dispatch.
+			(if
+				(i32.or (i32.eq (local.get $op) (i32.const 49)) (i32.eq (local.get $op) (i32.const 195)))
+				(then
+					(local.set $value-high (i64.const 0))
+					;; Global aliases resolve to live canonical storage on every read, including vector high halves.
+					(if (i32.eq (local.get $op) (i32.const 49))
+						(then
+							(local.set $meta (call $canonical-global-record (i32.load offset=4 (local.get $record))))
+							(local.set $value (i64.load offset=24 (local.get $meta)))
+							(local.set $value-high (i64.load offset=72 (local.get $meta)))
+						)
+						;; Function indices use index plus one, with zero reserved for null.
+						(else
+							(local.set $value
+								(i64.extend_i32_u (i32.add (i32.load offset=4 (local.get $record)) (i32.const 1)))
+							)
+						)
+					)
+					(call $runtime-value (local.get $value))
+					;; Operand exhaustion exits before writing a high half beyond the result slot.
+					(if (global.get $error)
+						(then
+							(return (i64.const 0))
+						)
+					)
+					(i64.store
+						(i32.add
+							(global.get $stack-high-base)
+							(i32.mul (i32.sub (global.get $sp) (i32.const 1)) (i32.const 8))
+						)
+						(local.get $value-high)
+					)
+					(br $dispatch)
+				)
+			)
 			(local.set $tail
 				(i32.or
 					(i32.or (i32.eq (local.get $op) (i32.const 438)) (i32.eq (local.get $op) (i32.const 439)))
@@ -1169,7 +1205,7 @@
 			(if
 				(i32.or
 					(i32.and
-						(i32.ge_u (local.get $op) (i32.const 49))
+						(i32.ge_u (local.get $op) (i32.const 50))
 						(i32.le_u (local.get $op) (i32.const 60))
 					)
 					(i32.and (i32.le_u (local.get $op) (i32.const 202)) (call $memory-op (local.get $op)))
@@ -1181,16 +1217,6 @@
 							(local.get $a)
 							(local.get $b)
 							(i32.load offset=4 (local.get $record))
-						)
-					)
-				)
-			)
-			;; Global vector slots carry a parallel persistent high half.
-			(if (i32.eq (local.get $op) (i32.const 49))
-				(then
-					(local.set $value-high
-						(i64.load offset=72
-							(call $canonical-global-record (i32.load offset=4 (local.get $record)))
 						)
 					)
 				)
@@ -1388,14 +1414,6 @@
 						)
 					)
 					(local.set $value (local.get $a))
-				)
-			)
-			;; Function values use index plus one, keeping null distinct from function zero.
-			(if (i32.eq (local.get $op) (i32.const 195))
-				(then
-					(local.set $value
-						(i64.extend_i32_u (i32.add (i32.load offset=4 (local.get $record)) (i32.const 1)))
-					)
 				)
 			)
 			;; Dropping a segment is idempotent and independent of the table's existence.

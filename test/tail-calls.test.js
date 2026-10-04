@@ -42,6 +42,32 @@ for (const [runtime, create] of [['bootstrap', createBootstrapInterpreter], ['in
     assert.deepEqual(engine.invokeRaw('run', vector), zero);
   });
 
+  test(`${runtime}: reference dispatch keeps null traps and exact fuel boundaries`, async () => {
+    const engine = await create(binary);
+    const source = `(module
+      (type $t (func (result i32)))
+      (func $zero (type $t) (i32.const 11))
+      (func $one (type $t) (i32.const 22))
+      (elem declare func $zero $one)
+      (global $target (mut (ref null $t)) (ref.func $zero))
+      (func (export "run") (result i32) (return_call_ref $t (global.get $target)))
+      (func (export "zero") (global.set $target (ref.func $zero)))
+      (func (export "one") (global.set $target (ref.func $one)))
+      (func (export "null") (global.set $target (ref.null $t))))`;
+    engine.load(source);
+    assert.equal(engine.invoke('run'), 11); // Function index zero is a non-null reference.
+    engine.invoke('one'); assert.equal(engine.invoke('run'), 22);
+    engine.invoke('null'); assert.throws(() => engine.invoke('run'), /null reference/);
+    engine.invoke('zero');
+    // The global read consumes one unit before reaching the reference call.
+    engine.setFuel(1);
+    assert.throws(() => engine.invoke('run'), new RegExp(`exhausted fuel at byte ${source.indexOf('return_call_ref')}$`));
+    // Creating the reference also consumes one unit; its global write must not execute.
+    assert.throws(() => engine.invoke('one'), new RegExp(`exhausted fuel at byte ${source.indexOf('global.set', source.indexOf('(export "one")'))}$`));
+    engine.setFuel(100000);
+    assert.equal(engine.invoke('run'), 11);
+  });
+
   test(`${runtime}: imported tail calls suspend with arguments and retain caller operands`, async () => {
     const engine = await create(binary);
     const reference = {name: 'tail argument'};

@@ -103,13 +103,17 @@ END {
   print "\t\t(i32.and (i32.load8_u (i32.add (i32.const 3072) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 15))\n\t)"
   print "\n\t;; Apply a unary or binary integer operation after the runtime checks trap conditions."
   print "\t(func $apply\n\t\t(param $op i32)\n\t\t(param $a i32)\n\t\t(param $b i32)\n\t\t(result i32)\n"
-  for (i = 1; i <= count; i++) {
-    if (i > 60 || operation[i] == "const" || operation[i] == "drop" || operation[i] == "nop" || operation[i] == "local" || operation[i] == "call" || operation[i] == "control" || operation[i] == "resource") continue
-    printf "\t\t;; Execute %s using operands in source stack order.\n", name[i]
-    printf "\t\t(if (i32.eq (local.get $op) (i32.const %d))\n", id[i]
-    printf "\t\t\t(then\n\t\t\t\t(return (%s (local.get $a)", operation[i]
-    if (inputs[i] == 2) printf " (local.get $b)"
-    print "))\n\t\t\t)\n\t\t)"
+  # Zero tests are frequent control predicates; emit them before the general numeric scan.
+  for (priority = 1; priority <= 2; priority++) {
+    for (i = 1; i <= count; i++) {
+      if ((name[i] == "i32.eqz") != (priority == 1)) continue
+      if (i > 60 || operation[i] == "const" || operation[i] == "drop" || operation[i] == "nop" || operation[i] == "local" || operation[i] == "call" || operation[i] == "control" || operation[i] == "resource") continue
+      printf "\t\t;; Execute %s using operands in source stack order.\n", name[i]
+      printf "\t\t(if (i32.eq (local.get $op) (i32.const %d))\n", id[i]
+      printf "\t\t\t(then\n\t\t\t\t(return (%s (local.get $a)", operation[i]
+      if (inputs[i] == 2) printf " (local.get $b)"
+      print "))\n\t\t\t)\n\t\t)"
+    }
   }
   print "\t\t(i32.const 0)\n\t)"
 
@@ -165,21 +169,25 @@ END {
   print "\t\t(i32.and (i32.load8_u (i32.add (i32.const 3073) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 15))\n\t)"
   print "\n\t;; Apply an i64 numeric operation or width conversion after runtime trap checks."
   print "\t(func $apply64\n\t\t(param $op i32)\n\t\t(param $a i64)\n\t\t(param $b i64)\n\t\t(result i64)"
-  for (i = 62; i <= count; i++) {
-    if (i > 93 && operation[i] != "integerextend") continue
-    printf "\t\t;; Execute %s with full-width integer operands.\n", name[i]
-    printf "\t\t(if (i32.eq (local.get $op) (i32.const %d))\n\t\t\t(then\n\t\t\t\t(return ", i
-    if (i >= 77 && i <= 87) printf "(i64.extend_i32_u "
-    if (i == 91) printf "(i64.extend_i32_s (i32.wrap_i64 (local.get $a)))"
-    else if (operation[i] == "integerextend" && inputtype[i] == 1) printf "(i64.extend_i32_s (%s (i32.wrap_i64 (local.get $a))))", name[i]
-    else if (i == 92 || i == 93) printf "(%s (i32.wrap_i64 (local.get $a)))", name[i]
-    else {
-      printf "(%s (local.get $a)", name[i]
-      if (inputs[i] == 2) printf " (local.get $b)"
-      printf ")"
+  # Zero tests are frequent control predicates; emit them before the general numeric scan.
+  for (priority = 1; priority <= 2; priority++) {
+    for (i = 62; i <= count; i++) {
+      if ((name[i] == "i64.eqz") != (priority == 1)) continue
+      if (i > 93 && operation[i] != "integerextend") continue
+      printf "\t\t;; Execute %s with full-width integer operands.\n", name[i]
+      printf "\t\t(if (i32.eq (local.get $op) (i32.const %d))\n\t\t\t(then\n\t\t\t\t(return ", i
+      if (i >= 77 && i <= 87) printf "(i64.extend_i32_u "
+      if (i == 91) printf "(i64.extend_i32_s (i32.wrap_i64 (local.get $a)))"
+      else if (operation[i] == "integerextend" && inputtype[i] == 1) printf "(i64.extend_i32_s (%s (i32.wrap_i64 (local.get $a))))", name[i]
+      else if (i == 92 || i == 93) printf "(%s (i32.wrap_i64 (local.get $a)))", name[i]
+      else {
+        printf "(%s (local.get $a)", name[i]
+        if (inputs[i] == 2) printf " (local.get $b)"
+        printf ")"
+      }
+      if (i >= 77 && i <= 87) printf ")"
+      print ")\n\t\t\t)\n\t\t)"
     }
-    if (i >= 77 && i <= 87) printf ")"
-    print ")\n\t\t\t)\n\t\t)"
   }
   print "\t\t(i64.const 0)\n\t)"
   print "\n\t;; Recognize stores whose address is popped after their typed value."

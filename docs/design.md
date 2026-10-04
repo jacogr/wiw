@@ -591,4 +591,31 @@ hosted call benchmarks, but showed no clear full-suite advantage over direct
 argument transfer alone. It was discarded in favor of the simpler frame entry.
 A same-session full audit measured unchanged code at 534,556 ms and direct
 argument transfer at 522,360 ms (2.3% less time). The earlier 501,052 ms result
-remains the best historical measurement; timings are subject to run variation.
+was the best historical measurement at that stage; timings are subject to run variation.
+
+
+Profiling the pinned tail-call stress functions counts bootstrap instructions
+between guest dispatch markers. These diagnostic counts include fixed marker and
+resume overhead; they are not elapsed-time measurements. The original reference
+stress loop spends 749 such instructions on each global read and 302 on its i64
+zero test. Early global dispatch reduces the read to 178; prioritizing zero tests
+in the generated integer helpers reduces the zero test to 177. The actual direct
+and indirect stress functions are profiled too, using bounded inputs while the
+conformance suite retains its original stress inputs.
+
+Global reads and `ref.func` finish before the general resource dispatcher. Reads
+resolve canonical storage on every execution and copy both raw halves, preserving
+live imported aliases, vector bits and reference handles. Function references keep
+the index-plus-one encoding and a zero high half. Both paths use the ordinary
+operand-capacity check after normal PC and fuel advancement. Global writes and
+call resolution retain their existing paths. Generated i32/i64 arithmetic helpers
+emit zero tests first and preserve the implementations and trap checks for all
+other operations. Exact fuel-boundary regressions cover global reads, reference
+creation, reference calls, null traps and recovery without an unintended write.
+
+
+The complete hosted audit after these changes takes 431,787 ms (7.20 minutes),
+versus the preceding 522,360 ms measurement (17.3% less time), with all 65,199
+commands across 258 files and zero skips/failures. The original 34.12-minute
+baseline, intermediate timings, paired microbenchmarks and diagnostic profiles
+remain in `test/performance.json`. Both paired benchmark builds use Binaryen 133.

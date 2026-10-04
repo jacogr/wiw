@@ -23,6 +23,11 @@ const cases = {
     (func $run (export "run") (type $t)
       (if (result i64) (i64.eqz (local.get 0)) (then (i64.const 0))
         (else (return_call_ref $t (i64.sub (local.get 0) (i64.const 1)) (ref.func $run))))))`,
+  globalReference: `(module ${common} (elem declare func $run)
+    (global $target (mut (ref null $t)) (ref.func $run))
+    (func $run (export "run") (type $t)
+      (if (result i64) (i64.eqz (local.get 0)) (then (i64.const 0))
+        (else (return_call_ref $t (i64.sub (local.get 0) (i64.const 1)) (global.get $target))))))`,
   parameters: `(module
     (func $step (param i64 i64 i64 i64) (result i64) (local i64 i64 i64 i64)
       (if (i64.ne (local.get 4) (i64.const 0)) (then unreachable))
