@@ -13,27 +13,27 @@
     {
       "binary": "wiw-opt.wasm",
       "optimization": "-O4 --converge",
-      "elapsedMs": 391291.907083,
+      "elapsedMs": 387227.750625,
       "slowestFiles": [
         {
           "file": "return_call_ref.wast",
-          "elapsedMs": 58857.15062499998
+          "elapsedMs": 59695.77941699998
         },
         {
           "file": "return_call.wast",
-          "elapsedMs": 52574.502458
+          "elapsedMs": 52602.00075000001
         },
         {
           "file": "simd/simd_const.wast",
-          "elapsedMs": 14702.98516599997
+          "elapsedMs": 14803.855540999968
         },
         {
           "file": "const.wast",
-          "elapsedMs": 13874.519124999999
+          "elapsedMs": 13366.196499999998
         },
         {
           "file": "memory_grow.wast",
-          "elapsedMs": 12052.641917
+          "elapsedMs": 12110.744917000004
         }
       ]
     }

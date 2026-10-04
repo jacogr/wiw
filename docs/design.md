@@ -708,3 +708,21 @@ Direct and reference tail-call files take 52.57 and 58.86 seconds, compared with
 all 65,199 frozen commands across 258 files with zero skips and failures.
 The historical baseline and all preceding measurements remain in
 `test/performance.json`; local timings remain subject to run variation.
+
+
+A frame-entry experiment read counts and parallel bases once, split parameter
+copying from local clearing, and added loop-free zero/single-slot paths. Paired
+hosted microbenchmarks improved direct calls by about 3% and the parameter/local
+case by about 7%, with 24 fewer diagnostic bootstrap instructions per tail call.
+The full audit did not improve: candidate code took 393,323 ms (6.56 minutes),
+while a same-session unchanged audit took 387,228 ms (6.45 minutes), about 1.6%
+less time. The original frame-entry implementation was restored. The new local
+measurement also illustrates variation against the preceding 391,292 ms result;
+it is not attributed to a source change.
+
+The experiment and both full timings remain in `test/performance.json` with an
+explicit discarded status. Boundary regressions are retained: 128 vector
+parameters and 1,088 total slots, cleared locals at both ends of the remaining
+range, repeated invocations, ordinary calls and tail replacement, and a live
+caller operand. Both candidate and unchanged audits pass all 65,199 commands
+across 258 files with zero skips and failures.
