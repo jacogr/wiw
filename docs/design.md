@@ -834,3 +834,48 @@ The full timing uses the preceding recorded run as its comparison, without a
 same-session unchanged-code full control; local timings vary. Paired isolated
 benchmarks and instruction profiles support the gain. Measurements, source and
 binary hashes are retained in `test/performance.json`.
+
+
+Mnemonic lookup groups the opcode definitions by their first four ASCII bytes,
+then by exact length. The generator emits one shared prefix test per family and
+examines only matching-length suffixes, using complete little-endian words,
+halfwords and a final byte as needed. Keywords shorter than four bytes use a
+separate path; every read stays within the token's known length. A matched prefix
+with an unknown length or suffix returns unsupported immediately. Keyword IDs,
+case sensitivity, exact-byte matching, source offsets and the static keyword
+buffer used by binary decoding remain unchanged.
+
+Previously, scalar lookup evaluated the byte-comparison helper for every
+candidate even when its length differed, while extended mnemonics repeated
+individual byte comparisons. Grouping removes these repeated scans during each
+hosted load. It changes the engine's lookup implementation; guest WAT remains
+parsed, validated and interpreted through the same instruction records.
+
+Boundary regressions probe all 497 defined keywords in the optimized engine and
+one interpreted WAT copy. They reject appended bytes, uppercase forms and every
+single-byte mutation, then recheck the original keyword after rejected inputs.
+All tokens end at the linear-memory boundary, covering both short keywords and
+word/halfword/byte tails without relying on readable bytes past the token.
+
+`make bench-load` keeps loader timings separate from invocation. Its bounded
+integer, float, SIMD and many-function modules return checked values before and
+after measured reloads. Paired isolated loader benchmarks reduce hosted load
+time by roughly 22–58%, while the existing nine invocation workloads retain
+similar timings. Neither benchmark defines a conformance threshold.
+
+
+Diagnostic profiles for complete hosted loads fall from 9.65 million to 4.76
+million bootstrap instructions for integers, 21.57 to 14.09 million for floats,
+11.73 to 5.46 million for SIMD, and 12.27 to 9.82 million for many functions.
+These counts exclude engine construction and guest invocation. The dispatch
+profiles retain identical guest opcode counts and instruction counts.
+
+All 158 tests pass, including nested self-hosting, and both runtimes pass all
+65,199 frozen commands across 258 files with zero skips and failures. The hosted
+audit takes 294,967 ms (4.92 minutes), down from the preceding recorded 339,476 ms
+(5.66 minutes), a measured 13.1% reduction. The direct and reference tail-call
+stress timings remain similar; scalar and SIMD constant files fall from 13.91
+and 14.30 seconds to 11.21 and 11.58 seconds. The full comparison uses the
+preceding recorded run, without a same-session unchanged-code full control;
+local timings vary. Paired isolated load and invocation benchmarks, profiles,
+source and binary hashes are retained in `test/performance.json`.

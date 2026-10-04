@@ -5,6 +5,7 @@
   count++
   id[count] = $1
   name[count] = $2
+  if (length($2) > longest) longest = length($2)
   inputs[count] = $3
   outputs[count] = $4
   operation[count] = $5
@@ -19,6 +20,31 @@ function decoded(type, arg) {
   if (type == 3) return "(f32.reinterpret_i32 (i32.wrap_i64 (local.get $" arg ")))"
   if (type == 4) return "(f64.reinterpret_i64 (local.get $" arg "))"
   return "(local.get $" arg ")"
+}
+# Mnemonics contain only these ASCII bytes; pack words in Wasm's little-endian order.
+function mnemonic_byte(c, n) {
+  n = index("abcdefghijklmnopqrstuvwxyz0123456789._", c)
+  return n <= 26 ? n + 96 : (n <= 36 ? n + 21 : (n == 37 ? 46 : 95))
+}
+function mnemonic_word(text, start, width, n, j, scale) {
+  n = 0
+  scale = 1
+  for (j = 0; j < width; j++) {
+    n += mnemonic_byte(substr(text, start + j, 1)) * scale
+    scale *= 256
+  }
+  return n
+}
+# Compare complete suffix words, then a halfword/byte tail, after its length is known.
+function mnemonic_suffix(text, start, expr, term, width, j) {
+  expr = ""
+  for (j = start; j <= length(text); j += width) {
+    width = length(text) - j + 1
+    width = width >= 4 ? 4 : (width >= 2 ? 2 : 1)
+    term = "(i32.eq (i32.load" (width == 4 ? "" : (width == 2 ? "16_u" : "8_u")) " offset=" (j - 1) " (global.get $tok)) (i32.const " mnemonic_word(text, j, width) "))"
+    expr = expr == "" ? term : "(i32.and " expr " " term ")"
+  }
+  return expr
 }
 # Runtime families are exclusive; zero retains general numeric/resource execution.
 # The packed route table fits between the scalar effects and reserved keywords.
@@ -80,26 +106,45 @@ END {
     printf "\t\t\"\\%02x\" ;; %d/%d: %s / %s\n", low + high * 16, i, i + 1, (i ? name[i] : "unsupported"), (i + 1 <= count ? name[i + 1] : "padding")
   }
   print "\t)"
-  print "\n\t;; Resolve the current atom to an opcode; zero means unsupported."
-  print "\t(func $opcode\n\t\t(result i32)\n"
-  for (i = 1; i <= count; i++) {
-    if (i > 202) {
-      printf "\t\t;; Recognize %s without extending the reserved keyword buffer.\n", name[i]
-      printf "\t\t(if (i32.eq (global.get $len) (i32.const %d))\n\t\t\t(then\n", length(name[i])
-      expr = ""
-      for (j = 1; j <= length(name[i]); j++) {
-        c = index("abcdefghijklmnopqrstuvwxyz0123456789._", substr(name[i], j, 1))
-        ascii = c <= 26 ? c + 96 : (c <= 36 ? c + 21 : (c == 37 ? 46 : 95))
-        term = "(i32.eq (i32.load8_u offset=" (j-1) " (global.get $tok)) (i32.const " ascii "))"
-        expr = expr == "" ? term : "(i32.and " expr " " term ")"
-      }
-      printf "\t\t\t\t;; Compare every byte after the length check.\n\t\t\t\t(if %s (then (return (i32.const %d))))\n\t\t\t)\n\t\t)\n", expr, id[i]
-      continue
+  print "\n\t;; Resolve an atom by a shared four-byte prefix, then length and exact suffix words."
+  print "\t(func $opcode\n\t\t(result i32)\n\t\t(local $prefix i32)\n"
+  print "\t\t;; Short control keywords are matched without reading past their token."
+  print "\t\t(if (i32.lt_u (global.get $len) (i32.const 4))\n\t\t\t(then"
+  for (n = 1; n < 4; n++) {
+    present = 0
+    for (i = 1; i <= count; i++) if (length(name[i]) == n) present = 1
+    if (!present) continue
+    printf "\t\t\t\t;; Only %d-byte control/stack keywords can match this length.\n", n
+    printf "\t\t\t\t(if (i32.eq (global.get $len) (i32.const %d))\n\t\t\t\t\t(then\n", n
+    for (i = 1; i <= count; i++) if (length(name[i]) == n) {
+      printf "\t\t\t\t\t\t;; Recognize %s exactly.\n", name[i]
+      printf "\t\t\t\t\t\t(if %s\n\t\t\t\t\t\t\t(then (return (i32.const %d)))\n\t\t\t\t\t\t)\n", mnemonic_suffix(name[i], 1), i
     }
-    printf "\t\t;; Recognize %s by its length and keyword bytes.\n", name[i]
-    printf "\t\t(if (i32.and (i32.eq (global.get $len) (i32.const %d))\n", length(name[i])
-    printf "\t\t\t(call $equal (global.get $tok) (i32.const %d) (i32.const %d)))\n", address[i], length(name[i])
-    printf "\t\t\t(then\n\t\t\t\t(return (i32.const %d))\n\t\t\t)\n\t\t)\n", id[i]
+    print "\t\t\t\t\t)\n\t\t\t\t)"
+  }
+  print "\t\t\t\t(return (i32.const 0))\n\t\t\t)\n\t\t)"
+  print "\t\t(local.set $prefix (i32.load (global.get $tok)))"
+  for (first = 1; first <= count; first++) {
+    if (length(name[first]) < 4) continue
+    prefix = substr(name[first], 1, 4)
+    if (seen_prefix[prefix]) continue
+    seen_prefix[prefix] = 1
+    printf "\t\t;; Match only the %s mnemonic family.\n", prefix
+    printf "\t\t(if (i32.eq (local.get $prefix) (i32.const %d))\n\t\t\t(then\n", mnemonic_word(prefix, 1, 4)
+    for (n = 4; n <= longest; n++) {
+      present = 0
+      for (i = first; i <= count; i++) if (substr(name[i], 1, 4) == prefix && length(name[i]) == n) present = 1
+      if (!present) continue
+      printf "\t\t\t\t;; A suffix is examined only after its complete length matches.\n"
+      printf "\t\t\t\t(if (i32.eq (global.get $len) (i32.const %d))\n\t\t\t\t\t(then\n", n
+      for (i = first; i <= count; i++) if (substr(name[i], 1, 4) == prefix && length(name[i]) == n) {
+        printf "\t\t\t\t\t\t;; Recognize %s from its remaining bytes.\n", name[i]
+        if (n == 4) printf "\t\t\t\t\t\t(return (i32.const %d))\n", i
+        else printf "\t\t\t\t\t\t(if %s\n\t\t\t\t\t\t\t(then (return (i32.const %d)))\n\t\t\t\t\t\t)\n", mnemonic_suffix(name[i], 5), i
+      }
+      print "\t\t\t\t\t\t(return (i32.const 0))\n\t\t\t\t\t)\n\t\t\t\t)"
+    }
+    print "\t\t\t\t(return (i32.const 0))\n\t\t\t)\n\t\t)"
   }
   print "\t\t(i32.const 0)\n\t)"
   print "\n\t;; Decode a wire opcode to its WAT mnemonic without compiling guest instructions."

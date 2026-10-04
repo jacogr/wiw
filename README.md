@@ -184,3 +184,9 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
+
+
+`make bench-load` measures parsing and validation separately from invocation,
+using integer, float, SIMD and many-function modules in both runtimes. It records
+per-load sample timings, medians and source/binary hashes in `build/bench-load.json`.
+`BENCH_LOAD_REPEATS=10 BENCH_SAMPLES=7 make bench-load` adjusts the bounded workload.
