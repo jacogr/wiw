@@ -1,0 +1,327 @@
+{
+  "policy": "Historical measurements on one local machine; no CI performance thresholds. Spec stress inputs and frozen coverage are unchanged.",
+  "baseline": {
+    "label": "Initial wg-3.0 hosted audit",
+    "node": "v24.11.1",
+    "binaryen": "wasm-opt version 125",
+    "tag": "wg-3.0",
+    "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
+    "runtime": "interpreted",
+    "interpreterDepth": 1,
+    "engineSourceSha256": "3d6e7c84d139284310e285f214c5c32fcf9e0a02287a386725ca499c8eddb2b9",
+    "passed": 65199,
+    "skipped": 0,
+    "failed": 0,
+    "fileCount": 258,
+    "coverage": "capabilities.json expectedCoverage",
+    "builds": [
+      {
+        "binary": "wiw-opt.wasm",
+        "optimization": "-O4 --converge",
+        "elapsedMs": 2047228.8558329998,
+        "slowestFiles": [
+          {
+            "file": "return_call_ref.wast",
+            "elapsedMs": 632156.432125
+          },
+          {
+            "file": "return_call.wast",
+            "elapsedMs": 537976.4388749999
+          },
+          {
+            "file": "return_call_indirect.wast",
+            "elapsedMs": 132324.03725000005
+          },
+          {
+            "file": "memory_grow.wast",
+            "elapsedMs": 122389.29516700003
+          },
+          {
+            "file": "memory64/memory_grow64.wast",
+            "elapsedMs": 121621.55162499996
+          }
+        ]
+      }
+    ]
+  },
+  "benchmarkBaseline": {
+    "node": "v24.11.1",
+    "binaryen": "wasm-opt version 133",
+    "engineSourceSha256": "3d6e7c84d139284310e285f214c5c32fcf9e0a02287a386725ca499c8eddb2b9",
+    "binarySha256": "d08bce6230fc620c48f117ae20651376155aa2827dcc1d4bbd5340fa9a4ce367",
+    "iterations": 5000,
+    "samples": 5,
+    "cases": [
+      {
+        "runtime": "bootstrap",
+        "name": "direct",
+        "medianMs": 1.4945409999999981,
+        "elapsedMs": [
+          1.6622920000000079,
+          1.5665410000000008,
+          1.4945409999999981,
+          1.462457999999998,
+          1.3299160000000256
+        ]
+      },
+      {
+        "runtime": "bootstrap",
+        "name": "indirect",
+        "medianMs": 1.6565000000000225,
+        "elapsedMs": [
+          1.7717910000000074,
+          2.593041999999997,
+          1.6565000000000225,
+          1.5836659999999938,
+          1.5661249999999995
+        ]
+      },
+      {
+        "runtime": "bootstrap",
+        "name": "reference",
+        "medianMs": 1.4202919999999892,
+        "elapsedMs": [
+          1.4219580000000178,
+          1.398333000000008,
+          1.4202919999999892,
+          1.4076670000000036,
+          1.4303329999999903
+        ]
+      },
+      {
+        "runtime": "bootstrap",
+        "name": "loop",
+        "medianMs": 1.4476250000000164,
+        "elapsedMs": [
+          1.621124999999978,
+          1.4813749999999857,
+          1.4476250000000164,
+          1.4457089999999937,
+          1.445541999999989
+        ]
+      },
+      {
+        "runtime": "interpreted",
+        "name": "direct",
+        "medianMs": 504.7651669999998,
+        "elapsedMs": [
+          505.565334,
+          507.73020900000006,
+          504.51700000000005,
+          504.7651669999998,
+          502.7523749999996
+        ]
+      },
+      {
+        "runtime": "interpreted",
+        "name": "indirect",
+        "medianMs": 648.6556660000006,
+        "elapsedMs": [
+          636.9130829999999,
+          643.6063750000003,
+          653.3718749999998,
+          687.734625,
+          648.6556660000006
+        ]
+      },
+      {
+        "runtime": "interpreted",
+        "name": "reference",
+        "medianMs": 598.5019170000005,
+        "elapsedMs": [
+          607.4606249999997,
+          600.876542,
+          596.2928750000001,
+          598.5019170000005,
+          594.2686659999999
+        ]
+      },
+      {
+        "runtime": "interpreted",
+        "name": "loop",
+        "medianMs": 626.0188330000001,
+        "elapsedMs": [
+          626.0188330000001,
+          623.3227500000012,
+          623.4402090000003,
+          630.2216250000001,
+          705.0292499999996
+        ]
+      }
+    ]
+  },
+  "measurements": [
+    {
+      "label": "Early dispatch for constants, locals and non-trapping integers",
+      "node": "v24.11.1",
+      "binaryen": "wasm-opt version 133",
+      "tag": "wg-3.0",
+      "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
+      "runtime": "interpreted",
+      "interpreterDepth": 1,
+      "engineSourceSha256": "6239367b3fc96089e3002f2f6d0c32eec2995b8ca8aa595826ab517b6faa9ca0",
+      "binarySha256": "24ee13ba81bf27a99959a2c5b3aa7db5fe6da86f6fcd7625c40e8316563e708c",
+      "fullSpec": {
+        "elapsedMs": 501051.849667,
+        "passed": 65199,
+        "skipped": 0,
+        "failed": 0,
+        "fileCount": 258,
+        "speedup": 4.085862285896344,
+        "reductionPercent": 75.52536208937293,
+        "slowestFiles": [
+          {
+            "file": "return_call_ref.wast",
+            "elapsedMs": 104927.801958
+          },
+          {
+            "file": "return_call.wast",
+            "elapsedMs": 77811.91241700001
+          },
+          {
+            "file": "return_call_indirect.wast",
+            "elapsedMs": 27205.71858399996
+          },
+          {
+            "file": "memory_grow.wast",
+            "elapsedMs": 15350.794792
+          },
+          {
+            "file": "memory64/memory_grow64.wast",
+            "elapsedMs": 14981.562082999997
+          }
+        ]
+      },
+      "benchmark": {
+        "node": "v24.11.1",
+        "binaryen": "wasm-opt version 133",
+        "engineSourceSha256": "6239367b3fc96089e3002f2f6d0c32eec2995b8ca8aa595826ab517b6faa9ca0",
+        "binarySha256": "24ee13ba81bf27a99959a2c5b3aa7db5fe6da86f6fcd7625c40e8316563e708c",
+        "iterations": 5000,
+        "samples": 5,
+        "cases": [
+          {
+            "runtime": "bootstrap",
+            "name": "direct",
+            "medianMs": 0.4554159999999996,
+            "elapsedMs": [
+              0.565374999999996,
+              0.5437909999999988,
+              0.4554159999999996,
+              0.4392920000000018,
+              0.4098339999999965
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "indirect",
+            "medianMs": 0.695332999999998,
+            "elapsedMs": [
+              0.7904579999999939,
+              1.5885000000000034,
+              0.695332999999998,
+              0.6580000000000013,
+              0.6301249999999996
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "reference",
+            "medianMs": 0.5969169999999906,
+            "elapsedMs": [
+              0.6145840000000078,
+              0.5996250000000032,
+              0.5911669999999987,
+              0.5899579999999958,
+              0.5969169999999906
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "memory",
+            "medianMs": 1.1867909999999995,
+            "elapsedMs": [
+              1.6609160000000003,
+              1.3396250000000123,
+              1.1867909999999995,
+              1.128583000000006,
+              1.1354589999999973
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "loop",
+            "medianMs": 0.35037499999999966,
+            "elapsedMs": [
+              0.36162500000000364,
+              0.36804200000000264,
+              0.35037499999999966,
+              0.3378749999999968,
+              0.3382919999999956
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "direct",
+            "medianMs": 90.76366700000001,
+            "elapsedMs": [
+              90.76366700000001,
+              91.69191700000002,
+              90.13854099999998,
+              90.10508300000004,
+              92.53937500000006
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "indirect",
+            "medianMs": 124.95433300000002,
+            "elapsedMs": [
+              126.84224999999992,
+              124.89808300000004,
+              123.976584,
+              124.95433300000002,
+              125.65479199999982
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "reference",
+            "medianMs": 117.440875,
+            "elapsedMs": [
+              117.90333399999986,
+              117.14683300000002,
+              132.5395000000001,
+              117.17049999999995,
+              117.440875
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "memory",
+            "medianMs": 192.1056669999998,
+            "elapsedMs": [
+              192.1056669999998,
+              191.6126250000002,
+              191.6255000000001,
+              193.44925000000012,
+              194.1656670000002
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "loop",
+            "medianMs": 76.44412499999999,
+            "elapsedMs": [
+              76.44412499999999,
+              76.67549999999983,
+              76.60124999999971,
+              76.23291599999993,
+              76.41575000000012
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -552,3 +552,21 @@ the common parser/validator checks the resulting expressions. Guest binary loadi
 does not compile or instantiate guest code natively. Binary fixtures cover recursive
 types, packed fields, array bulk operations, casts, extended constants and exceptions;
 Node is an independent oracle confined to tests.
+
+
+## Runtime dispatch performance
+
+Fuel accounting and the saved instruction cursor advance before either dispatch
+path. Constants, local reads/writes, drop and nop finish in a short path. It
+preserves both raw local halves, including vector values and reference handles.
+Non-trapping i32/i64 integer operations use their existing arithmetic helpers and
+publish scalar results with a zero high half. Division and remainder remain in
+the general path with explicit trap checks. All paths share the same operand
+capacity and instruction fuel limits; no guest instructions are fused or omitted.
+
+This matters twice during hosted execution: the guest uses the shorter path, and
+the bootstrap uses it while interpreting the WAT implementation of that path.
+The benchmark records bootstrap and hosted results separately. The initial full
+`wg-3.0` hosted audit took 2,047,229 ms (34.12 minutes) on Node v24.11.1 with
+Binaryen 125. Before/after microbenchmarks for the dispatch change both use
+Binaryen 133, keeping the optimizer version consistent in that comparison.

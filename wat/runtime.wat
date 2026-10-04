@@ -282,6 +282,184 @@
 			)
 			(local.set $fuel (i64.sub (local.get $fuel) (i64.const 1)))
 			(i32.store (local.get $frame) (i32.add (local.get $pc) (i32.const 1)))
+			;; Constants and local operations finish here without scanning unrelated numeric/resource dispatch.
+			(if
+				(i32.or
+					(i32.or (i32.eq (local.get $op) (i32.const 1)) (i32.eq (local.get $op) (i32.const 61)))
+					(i32.or
+						(i32.or (i32.eq (local.get $op) (i32.const 106)) (i32.eq (local.get $op) (i32.const 127)))
+						(i32.and
+							(i32.ge_u (local.get $op) (i32.const 31))
+							(i32.le_u (local.get $op) (i32.const 35))
+						)
+					)
+				)
+				(then
+					;; Nop preserves the operand stack and still consumes its normal instruction fuel.
+					(if (i32.eq (local.get $op) (i32.const 32))
+						(then
+							(br $dispatch)
+						)
+					)
+					;; Drop consumes one complete slot without reading or publishing a value.
+					(if (i32.eq (local.get $op) (i32.const 31))
+						(then
+							(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
+							(br $dispatch)
+						)
+					)
+					(local.set $value-high (i64.const 0))
+					;; Local operations use the current frame's raw low and parallel high slots.
+					(if
+						(i32.and
+							(i32.ge_u (local.get $op) (i32.const 33))
+							(i32.le_u (local.get $op) (i32.const 35))
+						)
+						(then
+							(local.set $meta (i32.load offset=4 (local.get $record)))
+							(local.set $target
+								(i32.add
+									(local.get $frame)
+									(i32.add (i32.const 16) (i32.mul (local.get $meta) (i32.const 8)))
+								)
+							)
+							;; Local reads preserve vector high halves as well as scalar and reference bits.
+							(if (i32.eq (local.get $op) (i32.const 33))
+								(then
+									(local.set $value (i64.load (local.get $target)))
+									(local.set $value-high
+										(i64.load (call $local-high-address (local.get $frame) (local.get $meta)))
+									)
+								)
+								;; Set and tee move the complete top operand into this local slot.
+								(else
+									(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
+									(local.set $value
+										(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
+									)
+									(local.set $value-high
+										(i64.load
+											(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
+										)
+									)
+									(i64.store (local.get $target) (local.get $value))
+									(i64.store
+										(call $local-high-address (local.get $frame) (local.get $meta))
+										(local.get $value-high)
+									)
+									;; Set produces no result; tee republishes the same value below.
+									(if (i32.eq (local.get $op) (i32.const 34))
+										(then
+											(br $dispatch)
+										)
+									)
+								)
+							)
+						)
+						;; Constants reconstruct exactly the same immediate bits as the general path.
+						(else
+							;; I32 immediates retain their canonical signed extension.
+							(if (i32.eq (local.get $op) (i32.const 1))
+								(then
+									(local.set $value (i64.extend_i32_s (i32.load offset=4 (local.get $record))))
+								)
+								;; Wide integer and floating constants preserve both stored immediate halves.
+								(else
+									(local.set $value
+										(i64.or
+											(i64.extend_i32_u (i32.load offset=4 (local.get $record)))
+											(i64.shl (i64.extend_i32_u (i32.load offset=12 (local.get $record))) (i64.const 32))
+										)
+									)
+								)
+							)
+						)
+					)
+					(call $runtime-value (local.get $value))
+					;; Stack exhaustion exits before writing a high half beyond the valid result slot.
+					(if (global.get $error)
+						(then
+							(return (i64.const 0))
+						)
+					)
+					(i64.store
+						(i32.add
+							(global.get $stack-high-base)
+							(i32.mul (i32.sub (global.get $sp) (i32.const 1)) (i32.const 8))
+						)
+						(local.get $value-high)
+					)
+					(br $dispatch)
+				)
+			)
+			;; Non-trapping integer operations consume scalar slots and finish before resource/SIMD dispatch.
+			(if
+				(i32.or
+					(i32.or
+						(i32.and
+							(i32.ge_u (local.get $op) (i32.const 2))
+							(i32.le_u (local.get $op) (i32.const 4))
+						)
+						(i32.and
+							(i32.ge_u (local.get $op) (i32.const 9))
+							(i32.le_u (local.get $op) (i32.const 30))
+						)
+					)
+					(i32.or
+						(i32.and
+							(i32.ge_u (local.get $op) (i32.const 62))
+							(i32.le_u (local.get $op) (i32.const 64))
+						)
+						(i32.and
+							(i32.ge_u (local.get $op) (i32.const 69))
+							(i32.le_u (local.get $op) (i32.const 93))
+						)
+					)
+				)
+				(then
+					(local.set $inputs (call $inputs (local.get $op)))
+					(global.set $sp (i32.sub (global.get $sp) (local.get $inputs)))
+					(local.set $a
+						(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
+					)
+					(local.set $b (i64.const 0))
+					;; Binary operators read their right operand from the adjacent consumed slot.
+					(if (i32.eq (local.get $inputs) (i32.const 2))
+						(then
+							(local.set $b
+								(i64.load
+									(i32.add
+										(global.get $stack-base)
+										(i32.mul (i32.add (global.get $sp) (i32.const 1)) (i32.const 8))
+									)
+								)
+							)
+						)
+					)
+					;; I32 operations retain canonical signed extension of their low word.
+					(if (i32.le_u (local.get $op) (i32.const 30))
+						(then
+							(local.set $value
+								(i64.extend_i32_s
+									(call $apply (local.get $op) (i32.wrap_i64 (local.get $a)) (i32.wrap_i64 (local.get $b)))
+								)
+							)
+						)
+						;; Wide operations and width conversions use the existing bit-exact integer implementation.
+						(else
+							(local.set $value (call $apply64 (local.get $op) (local.get $a) (local.get $b)))
+						)
+					)
+					(call $runtime-value (local.get $value))
+					;; A result cannot exceed the same operand capacity used by general dispatch.
+					(if (global.get $error)
+						(then
+							(return (i64.const 0))
+						)
+					)
+					(br $dispatch)
+				)
+			)
 			(local.set $tail
 				(i32.or
 					(i32.or (i32.eq (local.get $op) (i32.const 438)) (i32.eq (local.get $op) (i32.const 439)))
@@ -870,27 +1048,6 @@
 					(local.set $value-high (i64.load offset=8 (i32.load offset=4 (local.get $record))))
 				)
 			)
-			;; Constants retrieve their stored immediate rather than computing from operands.
-			(if (i32.eq (local.get $op) (i32.const 1))
-				(then
-					(local.set $value (i64.extend_i32_s (i32.load offset=4 (local.get $record))))
-				)
-			)
-			;; Wide constants reassemble the two immediate halves without sign-extending either half.
-			(if
-				(i32.or
-					(i32.eq (local.get $op) (i32.const 61))
-					(i32.or (i32.eq (local.get $op) (i32.const 106)) (i32.eq (local.get $op) (i32.const 127)))
-				)
-				(then
-					(local.set $value
-						(i64.or
-							(i64.extend_i32_u (i32.load offset=4 (local.get $record)))
-							(i64.shl (i64.extend_i32_u (i32.load offset=12 (local.get $record))) (i64.const 32))
-						)
-					)
-				)
-			)
 			;; Wide division and remainder reject zero before native execution.
 			(if
 				(i32.and
@@ -997,48 +1154,6 @@
 						)
 					)
 					(local.set $value-high (global.get $vector-high))
-				)
-			)
-			;; Local reads fetch the current frame's parameter/local slot.
-			(if (i32.eq (local.get $op) (i32.const 33))
-				(then
-					(local.set $value
-						(i64.load
-							(i32.add
-								(local.get $frame)
-								(i32.add (i32.const 16) (i32.mul (i32.load offset=4 (local.get $record)) (i32.const 8)))
-							)
-						)
-					)
-				)
-			)
-			;; Local reads carry both halves while scalar locals retain a zero high half.
-			(if (i32.eq (local.get $op) (i32.const 33))
-				(then
-					(local.set $value-high
-						(i64.load
-							(call $local-high-address (local.get $frame) (i32.load offset=4 (local.get $record)))
-						)
-					)
-				)
-			)
-			;; Local writes update only this frame; tee also preserves the written value as a result.
-			(if
-				(i32.or (i32.eq (local.get $op) (i32.const 34)) (i32.eq (local.get $op) (i32.const 35)))
-				(then
-					(i64.store
-						(i32.add
-							(local.get $frame)
-							(i32.add (i32.const 16) (i32.mul (i32.load offset=4 (local.get $record)) (i32.const 8)))
-						)
-						(local.get $a)
-					)
-					(i64.store
-						(call $local-high-address (local.get $frame) (i32.load offset=4 (local.get $record)))
-						(local.get $a-high)
-					)
-					(local.set $value-high (local.get $a-high))
-					(local.set $value (local.get $a))
 				)
 			)
 			;; Numeric operations compute from popped operands; drop and nop discard the placeholder.

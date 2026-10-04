@@ -171,3 +171,13 @@ It loads expanded `build/wiw.wat` into a bootstrap interpreter, then executes th
 copy's exported ABI through that parent. Text/binary guest loading, validation,
 execution and trap handling run inside the interpreted WAT copy; the shared
 Node frontend continues to handle synchronous callbacks and resource bindings.
+
+
+`make bench` measures direct, indirect and typed-reference tail calls, a scalar
+loop, and memory reads/writes on both the bootstrap and hosted runtime. It writes
+sample timings, medians and source/binary hashes to `build/bench.json`.
+`BENCH_ITERATIONS=10000 BENCH_SAMPLES=7 make bench` adjusts the bounded workload.
+These timings are diagnostic measurements, not CI thresholds. The full pinned
+spec keeps its original million-call stress inputs; its timings are recorded in
+`test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
+baseline and subsequent measurements.

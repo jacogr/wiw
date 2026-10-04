@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import {readFile, writeFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {createBootstrapInterpreter, createInterpreter} from '../wiw.js';
+
+// Benchmarks use bounded inputs while preserving the full spec's stress inputs.
+const iterations = Number(process.env.BENCH_ITERATIONS ?? 5000);
+const samples = Number(process.env.BENCH_SAMPLES ?? 5);
+assert.ok(Number.isSafeInteger(iterations) && iterations > 0 && iterations <= 100000);
+assert.ok(Number.isSafeInteger(samples) && samples > 0 && samples <= 20);
+const common = `(type $t (func (param i64) (result i64)))`;
+const cases = {
+  direct: `(module ${common}
+    (func $run (export "run") (type $t)
+      (if (result i64) (i64.eqz (local.get 0)) (then (i64.const 0))
+        (else (return_call $run (i64.sub (local.get 0) (i64.const 1)))))))`,
+  indirect: `(module ${common} (table funcref (elem $run))
+    (func $run (export "run") (type $t)
+      (if (result i64) (i64.eqz (local.get 0)) (then (i64.const 0))
+        (else (return_call_indirect (type $t) (i64.sub (local.get 0) (i64.const 1)) (i32.const 0))))))`,
+  reference: `(module ${common} (elem declare func $run)
+    (func $run (export "run") (type $t)
+      (if (result i64) (i64.eqz (local.get 0)) (then (i64.const 0))
+        (else (return_call_ref $t (i64.sub (local.get 0) (i64.const 1)) (ref.func $run))))))`,
+  memory: `(module (memory 1) (func (export "run") (param i64) (result i64)
+    (loop $again
+      (i32.store (i32.const 0) (i32.add (i32.load (i32.const 0)) (i32.const 1)))
+      (local.set 0 (i64.sub (local.get 0) (i64.const 1)))
+      (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`,
+  loop: `(module (func (export "run") (param i64) (result i64)
+    (loop $again (local.set 0 (i64.sub (local.get 0) (i64.const 1)))
+      (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`
+};
+const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
+const report = {node: process.version, binaryen: execFileSync('wasm-opt', ['--version'], {encoding:'utf8'}).trim(),
+  engineSourceSha256: createHash('sha256').update(await readFile(new URL('../build/wiw.wat', import.meta.url))).digest('hex'),
+  binarySha256: createHash('sha256').update(await readFile(binary)).digest('hex'), iterations, samples, cases: []};
+for (const [runtime, create] of [['bootstrap', createBootstrapInterpreter], ['interpreted', createInterpreter]]) {
+  for (const [name, source] of Object.entries(cases)) {
+    const engine = await create(binary); engine.load(source); engine.setFuel(10000000);
+    assert.equal(engine.invoke('run', 100n), 0n); // Warm dispatch before measuring.
+    const elapsedMs = [];
+    for (let sample = 0; sample < samples; sample++) {
+      const start = performance.now();
+      assert.equal(engine.invoke('run', BigInt(iterations)), 0n);
+      elapsedMs.push(performance.now() - start);
+      if (name === 'memory') assert.equal(new DataView(engine.readMemory(0, 4).buffer).getUint32(0, true), 100 + iterations * (sample + 1));
+    }
+    const medianMs = [...elapsedMs].sort((a,b)=>a-b)[Math.floor(samples / 2)];
+    report.cases.push({runtime, name, medianMs, elapsedMs});
+    console.log(`${runtime}/${name}: ${medianMs.toFixed(2)} ms (${iterations} iterations, median of ${samples})`);
+  }
+}
+const output = process.argv[2] ?? new URL('../build/bench.json', import.meta.url);
+await writeFile(output, JSON.stringify(report,null,2)+'\n');
