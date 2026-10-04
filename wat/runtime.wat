@@ -375,20 +375,22 @@
 							)
 						)
 					)
-					(call $runtime-value (local.get $value))
-					;; Stack exhaustion exits before writing a high half beyond the valid result slot.
-					(if (global.get $error)
+					;; Check capacity before publishing either raw half in this operand slot.
+					(if (i32.ge_u (global.get $sp) (i32.const CAP_OPERANDS))
 						(then
+							(call $fail (i32.const 6))
 							(return (i64.const 0))
 						)
 					)
 					(i64.store
-						(i32.add
-							(global.get $stack-high-base)
-							(i32.mul (i32.sub (global.get $sp) (i32.const 1)) (i32.const 8))
-						)
+						(i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8)))
+						(local.get $value)
+					)
+					(i64.store
+						(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
 						(local.get $value-high)
 					)
+					(global.set $sp (i32.add (global.get $sp) (i32.const 1)))
 					(br $dispatch)
 				)
 			)
@@ -552,20 +554,22 @@
 							)
 						)
 					)
-					(call $runtime-value (local.get $value))
-					;; Operand exhaustion exits before writing a high half beyond the result slot.
-					(if (global.get $error)
+					;; Check capacity before publishing either raw half in this operand slot.
+					(if (i32.ge_u (global.get $sp) (i32.const CAP_OPERANDS))
 						(then
+							(call $fail (i32.const 6))
 							(return (i64.const 0))
 						)
 					)
 					(i64.store
-						(i32.add
-							(global.get $stack-high-base)
-							(i32.mul (i32.sub (global.get $sp) (i32.const 1)) (i32.const 8))
-						)
+						(i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8)))
+						(local.get $value)
+					)
+					(i64.store
+						(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
 						(local.get $value-high)
 					)
+					(global.set $sp (i32.add (global.get $sp) (i32.const 1)))
 					(br $dispatch)
 				)
 			)

@@ -678,3 +678,33 @@ and 66.60 seconds previously. All 138 tests pass; both runtimes pass the frozen
 65,199 commands across 258 files with zero skips and failures. The history records
 the audit context, paired benchmarks, source/binary hashes and diagnostic profiles.
 These local timings remain subject to run variation and are not CI thresholds.
+
+
+The early constant/local and global/reference paths publish their low and high
+halves directly into the current operand slot after checking capacity. Each half
+is written once before advancing the stack height. Previously these paths called
+the scalar publishing helper, which cleared the high half, then overwrote it with
+the raw high half. The general scalar helper remains available to other paths.
+PC advancement, fuel, scalar bit representations, alias resolution and the operand
+limit are unchanged. Local set and drop still consume their slots without adding
+a result; local tee republishes both halves after writing the local.
+
+Regressions alternate vector values with nonzero high halves, zero vectors, opaque
+references and scalar constants with exact negative-zero and integer bits. Each
+early publication path also exhausts the operand stack through recursive calls,
+checks the failing instruction offset, and recovers to read an intact vector
+global. Both bootstrap and hosted runtimes exercise these checks.
+
+Paired profiles count 14 fewer bootstrap instructions for each affected result:
+local.get falls from 161 to 147, global.get from 189 to 175, and i64.const from
+137 to 123. Paired hosted benchmarks improve across all nine existing cases;
+the full audit records the resulting suite-wide effect with unchanged stress
+inputs and frozen coverage.
+
+The complete hosted audit after direct raw publication takes 391,292 ms
+(6.52 minutes), compared with the preceding 405,924 ms (3.6% less time).
+Direct and reference tail-call files take 52.57 and 58.86 seconds, compared with
+56.46 and 63.76 seconds previously. All 142 tests pass, and both runtimes pass
+all 65,199 frozen commands across 258 files with zero skips and failures.
+The historical baseline and all preceding measurements remain in
+`test/performance.json`; local timings remain subject to run variation.
