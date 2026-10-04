@@ -206,6 +206,140 @@
 		)
 	)
 
+	;; Evaluate permitted unfused floating multiply-adds and signed byte dot products lane by lane.
+	(func $vector-relaxed
+		(param $op i32)
+		(param $a i64)
+		(param $ah i64)
+		(param $b i64)
+		(param $bh i64)
+		(param $c i64)
+		(param $ch i64)
+		(result i64)
+		(local $i i32)
+		(local $j i32)
+		(local $width i32)
+		(local $group i32)
+		(local $x i64)
+		(local $y i64)
+		(local $z i64)
+		(local $sum i64)
+		(local $f f32)
+		(local $d f64)
+
+		(global.set $vector-low (i64.const 0))
+		(global.set $vector-high (i64.const 0))
+		(local.set $width
+			(select (i32.const 32) (i32.const 64) (i32.le_u (local.get $op) (i32.const 446)))
+		)
+		;; Dot operations group two or four signed bytes into one output lane.
+		(if (i32.ge_u (local.get $op) (i32.const 458))
+			(then
+				(local.set $width
+					(select (i32.const 16) (i32.const 32) (i32.eq (local.get $op) (i32.const 458)))
+				)
+				(local.set $group (i32.div_u (local.get $width) (i32.const 8)))
+			)
+		)
+		;; Each output lane is packed after its scalar calculation.
+		(loop $lanes
+			(local.set $x
+				(call $vector-lane (local.get $a) (local.get $ah) (local.get $width) (local.get $i))
+			)
+			(local.set $y
+				(call $vector-lane (local.get $b) (local.get $bh) (local.get $width) (local.get $i))
+			)
+			(local.set $z
+				(call $vector-lane (local.get $c) (local.get $ch) (local.get $width) (local.get $i))
+			)
+			;; Signed dot products accumulate exact byte products before output-width wrapping.
+			(if (local.get $group)
+				(then
+					(local.set $sum
+						(select (local.get $z) (i64.const 0) (i32.eq (local.get $op) (i32.const 459)))
+					)
+					(local.set $j (i32.const 0))
+					;; Accumulate every byte belonging to this output lane.
+					(loop $bytes
+						(local.set $sum
+							(i64.add
+								(local.get $sum)
+								(i64.mul
+									(call $vector-signed
+										(call $vector-lane
+											(local.get $a)
+											(local.get $ah)
+											(i32.const 8)
+											(i32.add (i32.mul (local.get $i) (local.get $group)) (local.get $j))
+										)
+										(i32.const 8)
+									)
+									(call $vector-signed
+										(call $vector-lane
+											(local.get $b)
+											(local.get $bh)
+											(i32.const 8)
+											(i32.add (i32.mul (local.get $i) (local.get $group)) (local.get $j))
+										)
+										(i32.const 8)
+									)
+								)
+							)
+						)
+						(local.set $j (i32.add (local.get $j) (i32.const 1)))
+						(br_if $bytes (i32.lt_u (local.get $j) (local.get $group)))
+					)
+				)
+				;; Floating operations round the multiplication before adding the third operand.
+				(else
+					;; The lane width selects the matching IEEE arithmetic and bit representation.
+					(if (i32.eq (local.get $width) (i32.const 32))
+						(then
+							(local.set $f
+								(f32.mul
+									(f32.reinterpret_i32 (i32.wrap_i64 (local.get $x)))
+									(f32.reinterpret_i32 (i32.wrap_i64 (local.get $y)))
+								)
+							)
+							;; nmadd negates the rounded product before addition.
+							(if (i32.eq (local.get $op) (i32.const 446))
+								(then
+									(local.set $f (f32.neg (local.get $f)))
+								)
+							)
+							(local.set $sum
+								(i64.extend_i32_u
+									(i32.reinterpret_f32
+										(f32.add (local.get $f) (f32.reinterpret_i32 (i32.wrap_i64 (local.get $z))))
+									)
+								)
+							)
+						)
+						;; Double lanes retain the full sixty-four-bit payload.
+						(else
+							(local.set $d
+								(f64.mul (f64.reinterpret_i64 (local.get $x)) (f64.reinterpret_i64 (local.get $y)))
+							)
+							;; nmadd negates the rounded product before addition.
+							(if (i32.eq (local.get $op) (i32.const 448))
+								(then
+									(local.set $d (f64.neg (local.get $d)))
+								)
+							)
+							(local.set $sum
+								(i64.reinterpret_f64 (f64.add (local.get $d) (f64.reinterpret_i64 (local.get $z))))
+							)
+						)
+					)
+				)
+			)
+			(call $vector-insert (local.get $sum) (local.get $width) (local.get $i))
+			(local.set $i (i32.add (local.get $i) (i32.const 1)))
+			(br_if $lanes (i32.lt_u (local.get $i) (i32.div_u (i32.const 128) (local.get $width))))
+		)
+		(global.get $vector-low)
+	)
+
 	;; Dispatch SIMD arithmetic to scalar lane operations and return its lower half.
 	(func $vector-apply
 		(param $op i32)
@@ -223,6 +357,113 @@
 		(local $x i64)
 		(local $y i64)
 
+		;; i8x16.relaxed_swizzle uses the permitted strict operation as its deterministic result.
+		(if (i32.eq (local.get $op) (i32.const 440))
+			(then
+				(local.set $op (i32.const 336))
+			)
+		)
+		;; i32x4.relaxed_trunc_f32x4_s uses the permitted strict operation as its deterministic result.
+		(if (i32.eq (local.get $op) (i32.const 441))
+			(then
+				(local.set $op (i32.const 408))
+			)
+		)
+		;; i32x4.relaxed_trunc_f32x4_u uses the permitted strict operation as its deterministic result.
+		(if (i32.eq (local.get $op) (i32.const 442))
+			(then
+				(local.set $op (i32.const 409))
+			)
+		)
+		;; i32x4.relaxed_trunc_f64x2_s_zero uses the permitted strict operation as its deterministic result.
+		(if (i32.eq (local.get $op) (i32.const 443))
+			(then
+				(local.set $op (i32.const 412))
+			)
+		)
+		;; i32x4.relaxed_trunc_f64x2_u_zero uses the permitted strict operation as its deterministic result.
+		(if (i32.eq (local.get $op) (i32.const 444))
+			(then
+				(local.set $op (i32.const 413))
+			)
+		)
+		;; i8x16.relaxed_laneselect uses the permitted strict operation as its deterministic result.
+		(if (i32.eq (local.get $op) (i32.const 449))
+			(then
+				(local.set $op (i32.const 362))
+			)
+		)
+		;; i16x8.relaxed_laneselect uses the permitted strict operation as its deterministic result.
+		(if (i32.eq (local.get $op) (i32.const 450))
+			(then
+				(local.set $op (i32.const 362))
+			)
+		)
+		;; i32x4.relaxed_laneselect uses the permitted strict operation as its deterministic result.
+		(if (i32.eq (local.get $op) (i32.const 451))
+			(then
+				(local.set $op (i32.const 362))
+			)
+		)
+		;; i64x2.relaxed_laneselect uses the permitted strict operation as its deterministic result.
+		(if (i32.eq (local.get $op) (i32.const 452))
+			(then
+				(local.set $op (i32.const 362))
+			)
+		)
+		;; f32x4.relaxed_min uses the permitted strict operation as its deterministic result.
+		(if (i32.eq (local.get $op) (i32.const 453))
+			(then
+				(local.set $op (i32.const 320))
+			)
+		)
+		;; f32x4.relaxed_max uses the permitted strict operation as its deterministic result.
+		(if (i32.eq (local.get $op) (i32.const 454))
+			(then
+				(local.set $op (i32.const 321))
+			)
+		)
+		;; f64x2.relaxed_min uses the permitted strict operation as its deterministic result.
+		(if (i32.eq (local.get $op) (i32.const 455))
+			(then
+				(local.set $op (i32.const 331))
+			)
+		)
+		;; f64x2.relaxed_max uses the permitted strict operation as its deterministic result.
+		(if (i32.eq (local.get $op) (i32.const 456))
+			(then
+				(local.set $op (i32.const 332))
+			)
+		)
+		;; i16x8.relaxed_q15mulr_s uses the permitted strict operation as its deterministic result.
+		(if (i32.eq (local.get $op) (i32.const 457))
+			(then
+				(local.set $op (i32.const 374))
+			)
+		)
+		;; Relaxed multiply-add and dot products evaluate scalar lanes without native guest execution.
+		(if
+			(i32.or
+				(i32.and
+					(i32.ge_u (local.get $op) (i32.const 445))
+					(i32.le_u (local.get $op) (i32.const 448))
+				)
+				(i32.ge_u (local.get $op) (i32.const 458))
+			)
+			(then
+				(return
+					(call $vector-relaxed
+						(local.get $op)
+						(local.get $a)
+						(local.get $ah)
+						(local.get $b)
+						(local.get $bh)
+						(local.get $c)
+						(local.get $ch)
+					)
+				)
+			)
+		)
 		(global.set $vector-low (i64.const 0))
 		(global.set $vector-high (i64.const 0))
 		;; Execute i8x16.eq independently in each 8-bit lane.
@@ -5199,9 +5440,7 @@
 		(if (i32.eq (local.get $op) (i32.const 416))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 16))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 16)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5217,9 +5456,7 @@
 		(if (i32.eq (local.get $op) (i32.const 417))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 8))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5246,9 +5483,7 @@
 		(if (i32.eq (local.get $op) (i32.const 418))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 8))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5272,9 +5507,7 @@
 		(if (i32.eq (local.get $op) (i32.const 419))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 8))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5301,9 +5534,7 @@
 		(if (i32.eq (local.get $op) (i32.const 420))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 8))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5327,9 +5558,7 @@
 		(if (i32.eq (local.get $op) (i32.const 421))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 8))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5356,9 +5585,7 @@
 		(if (i32.eq (local.get $op) (i32.const 422))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 8))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5382,9 +5609,7 @@
 		(if (i32.eq (local.get $op) (i32.const 423))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 1))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 1)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5404,9 +5629,7 @@
 		(if (i32.eq (local.get $op) (i32.const 424))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 2))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 2)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5426,9 +5649,7 @@
 		(if (i32.eq (local.get $op) (i32.const 425))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 4))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 4)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5448,9 +5669,7 @@
 		(if (i32.eq (local.get $op) (i32.const 426))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 8))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5470,9 +5689,7 @@
 		(if (i32.eq (local.get $op) (i32.const 427))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 16))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 16)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5488,9 +5705,7 @@
 		(if (i32.eq (local.get $op) (i32.const 428))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 4))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 4)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5505,9 +5720,7 @@
 		(if (i32.eq (local.get $op) (i32.const 429))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 8))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5522,9 +5735,7 @@
 		(if (i32.eq (local.get $op) (i32.const 430))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 1))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 1)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5552,9 +5763,7 @@
 		(if (i32.eq (local.get $op) (i32.const 431))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 2))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 2)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5582,9 +5791,7 @@
 		(if (i32.eq (local.get $op) (i32.const 432))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 4))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 4)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5612,9 +5819,7 @@
 		(if (i32.eq (local.get $op) (i32.const 433))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 8))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5642,9 +5847,7 @@
 		(if (i32.eq (local.get $op) (i32.const 434))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 1))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 1)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5662,9 +5865,7 @@
 		(if (i32.eq (local.get $op) (i32.const 435))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 2))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 2)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5682,9 +5883,7 @@
 		(if (i32.eq (local.get $op) (i32.const 436))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 4))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 4)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then
@@ -5702,9 +5901,7 @@
 		(if (i32.eq (local.get $op) (i32.const 437))
 			(then
 				;; Translate the complete range before reading or writing any byte.
-				(local.set $p
-					(call $guest-address (i32.wrap_i64 (local.get $a)) (local.get $imm) (i32.const 8))
-				)
+				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
 				;; A failed bound check returns before touching native memory.
 				(if (global.get $error)
 					(then

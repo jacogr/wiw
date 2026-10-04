@@ -1,8 +1,8 @@
 # Official specification tests
 
-[WebAssembly/spec](https://github.com/WebAssembly/spec/tree/wg-2.0) is included
-as the Git submodule `test/spec/upstream`, pinned to tag `wg-2.0` and commit
-`fffc6e12fa454e475455a7b58d3b5dc343980c10`. All 148 core `.wast` files, including the SIMD subdirectory, and their
+[WebAssembly/spec](https://github.com/WebAssembly/spec/tree/wg-3.0) is included
+as the Git submodule `test/spec/upstream`, pinned to tag `wg-3.0` and commit
+`9d36019973201a19f9c9ebb0f10828b2fe2374aa`. All 258 core `.wast` files, including the GC, exception, memory64, relaxed SIMD and SIMD subdirectories, and their
 Apache 2.0 license are read directly from that checkout. wiw owns the runner,
 entry point, revision/hash metadata and coverage manifest.
 
@@ -16,18 +16,18 @@ unnecessary. Tests need no network after initialization. The runner checks HEAD
 against the recorded revision and verifies file/license hashes. Missing or
 mismatched checkouts fail with an actionable diagnostic.
 
-The complete 2.0 core suite passes through the default interpreted WAT copy
+The complete 3.0 core suite passes through the default interpreted WAT copy
 on the optimized bootstrap (`-O4 --converge`):
 
 | Scope | Files | Passed | Skipped | Failed |
 | --- | ---: | ---: | ---: | ---: |
-| CI and full interpreted target audit | 148 | 54,006 | 0 | 0 |
+| CI and full interpreted target audit | 258 | 65,199 | 0 | 0 |
 
 Counts include module loads, registrations and assertions. `upstream.json`
 records every target file. `capabilities.json` includes the entire inventory in
 `verifiedFiles` and freezes its per-file counts. `make check-spec` fails on any
 failure or skip. Regression tests cover text/binary loading, multivalue controls,
-reference identity, independently indexed tables, bulk memory and SIMD.
+reference identity, independently indexed tables, bulk memory, SIMD, recursive GC types, packed fields, extended constants and exceptions.
 Every SIMD wire opcode is also checked against a native-Wasm test oracle.
 Self-hosting executes guests through two interpreted layers, including vector
 parameters, results, arithmetic, conversion and memory access.
@@ -43,7 +43,7 @@ all 73 files / 19,270 commands with zero skips.
 interpreted WAT copy on the optimized bootstrap. Every script instance, including
 spectest and negative assertions, runs inside its own copy. Partial and completed
 reports are written to `build/spec-selfhost-*.json`, with source hashes and
-per-file timings. The optimized build completes all 54,006 commands with zero failures/skips.
+per-file timings. The optimized build completes all 65,199 commands with zero failures/skips.
 `selfhost.json` records the matching completion snapshot, engine source hash and
 measured timings; coverage remains frozen in `capabilities.json`. CI runs
 `make check`, whose spec test executes this complete interpreted inventory once
@@ -91,7 +91,7 @@ new coverage automatically. Review reports, implement gaps and promote complete 
 Document the new tag/SHA here and in README.md. Stage the gitlink and metadata together:
 
 ```sh
-git add test/spec/upstream test/spec/upstream.json test/spec/capabilities.json test/spec/progress.json test/spec/README.md README.md
+git add test/spec/upstream test/spec/upstream.json test/spec/capabilities.json test/spec/progress.json test/spec/selfhost.json test/spec/README.md README.md
 ```
 
 Upstream files remain untouched; future upgrades move the submodule pointer.
@@ -99,5 +99,5 @@ Upstream files remain untouched; future upgrades move the submodule pointer.
 Multivalue functions and controls support ordered result vectors, block parameters,
 loop inputs and explicit type uses. Node invocations and synchronous callbacks
 return arrays for multiple results; raw arrays preserve individual numeric bits
-and reference identity. Every non-SIMD file in the 2.0 pin now completes without
-skips or failures on the optimized build.
+and reference identity. Every file in the 3.0 pin completes without skips or failures on the optimized
+build, including its SIMD and proposal feature subdirectories.

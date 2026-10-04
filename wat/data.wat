@@ -474,7 +474,7 @@
 					)
 				)
 				(call $segment-target (local.get $record))
-				(local.set $offset (call $initializer))
+				(local.set $offset (call $initializer (call $data-offset-type (local.get $record))))
 				(local.set $reference (global.get $initializer-reference))
 			)
 			;; Passive segments retain bytes without requiring or writing a memory at instantiation.
@@ -504,6 +504,7 @@
 		(local $i i32)
 		(local $record i32)
 		(local $op i32)
+		(local $target i32)
 
 		;; Finish after every normalized instruction has had its deferred data reference checked.
 		(block $done
@@ -515,9 +516,22 @@
 					(i32.add (global.get $code-base) (i32.mul (local.get $i) (i32.const 16)))
 				)
 				(local.set $op (i32.load (local.get $record)))
+				;; memory.init stores its data reference in the independent auxiliary target pair.
+				(if (i32.eq (local.get $op) (i32.const 189))
+					(then
+						(local.set $target (i32.load offset=4 (local.get $record)))
+						(i32.store offset=24
+							(local.get $target)
+							(call $data-target
+								(i32.load offset=24 (local.get $target))
+								(i32.load offset=28 (local.get $target))
+							)
+						)
+						(i32.store offset=28 (local.get $target) (i32.const 0))
+					)
+				)
 				;; Other opcodes retain their existing immediate metadata.
-				(if
-					(i32.or (i32.eq (local.get $op) (i32.const 189)) (i32.eq (local.get $op) (i32.const 190)))
+				(if (i32.eq (local.get $op) (i32.const 190))
 					(then
 						(global.set $tok (i32.load offset=8 (local.get $record)))
 						(i32.store offset=4
@@ -532,6 +546,32 @@
 				)
 				(local.set $i (i32.add (local.get $i) (i32.const 1)))
 				(br $code)
+			)
+		)
+		(local.set $i (i32.const 0))
+		;; Resolve active segment selectors after the complete memory namespace exists.
+		(block $segments-done
+			;; Passive data has no target memory requirement.
+			(loop $segments
+				(br_if $segments-done (i32.eq (local.get $i) (global.get $segment-count)))
+				(local.set $record (call $data-record (local.get $i)))
+				;; Empty active segments still validate their memory selector.
+				(if (i32.eqz (i32.load offset=40 (local.get $record)))
+					(then
+						(i32.store offset=16
+							(local.get $record)
+							(call $resource-target
+								(i32.const 1)
+								(i32.load offset=16 (local.get $record))
+								(i32.load offset=20 (local.get $record))
+								(i32.load offset=12 (local.get $record))
+							)
+						)
+						(i32.store offset=20 (local.get $record) (i32.const 0))
+					)
+				)
+				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br $segments)
 			)
 		)
 	)
@@ -640,4 +680,28 @@
 			)
 		)
 		(local.get $width)
+	)
+
+	;; Choose a declared data target's width while leaving forward memory references for module validation.
+	(func $data-offset-type
+		(param $record i32)
+		(result i32)
+		(local $index i32)
+
+		(local.set $index (i32.load offset=16 (local.get $record)))
+		;; Resolve names before computing descriptor addresses.
+		(if (i32.load offset=20 (local.get $record))
+			(then
+				(local.set $index
+					(call $find-memory (local.get $index) (i32.load offset=20 (local.get $record)))
+				)
+			)
+		)
+		;; Forward declarations use the default width until all resources have been parsed.
+		(if (i32.ge_u (local.get $index) (global.get $memory-present))
+			(then
+				(return (i32.const 1))
+			)
+		)
+		(i32.load offset=24 (call $memory-record (local.get $index)))
 	)

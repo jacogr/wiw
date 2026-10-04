@@ -55,7 +55,7 @@ for (const binary of ['wiw-opt.wasm']) {
 for (const binary of ['wiw-opt.wasm']) {
   test(`${binary}: every SIMD opcode matches native memory results through text and binary decoding`, async () => {
     const rows = (await readFile(new URL('../scripts/opcodes.tsv',import.meta.url),'utf8')).trim().split('\n')
-      .filter(row=>!row.startsWith('#')).map(row=>row.split(/\s+/)).filter(row=>Number(row[0])>=202);
+      .filter(row=>!row.startsWith('#')).map(row=>row.split(/\s+/)).filter(row=>Number(row[0])>=202 && row[4]==='simd' && !row[1].includes('.relaxed_'));
     const operations = rows.map(([id,name,inputCount,outputCount,operation,inputType,outputType,wire,secondType]) => {
       const count=Number(inputCount), out=Number(outputType), laneShape=name.match(/^[if](\d+)x(\d+)\./);
       let immediate='';

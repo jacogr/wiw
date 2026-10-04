@@ -188,9 +188,9 @@ for (const binary of ['wiw-opt.wasm']) {
     i.load(`(module (func $recurse (export "run") ${blocks}))`);
     assert.throws(() => i.invoke('run'), /resource limit/);
     // Branch-table storage has an independent bound and includes each default entry.
-    i.load(guest(`i32.const 42 i32.const 0 br_table ${'0 '.repeat(32768)}`));
+    i.load(guest(`i32.const 42 i32.const 0 br_table ${'0 '.repeat(131072)}`));
     assert.equal(i.invoke('run'), 42);
-    assert.throws(() => i.load(guest(`i32.const 42 i32.const 0 br_table ${'0 '.repeat(32769)}`)), /resource limit/);
+    assert.throws(() => i.load(guest(`i32.const 42 i32.const 0 br_table ${'0 '.repeat(131073)}`)), /resource limit/);
     const flat = depth => 'block '.repeat(depth) + 'nop ' + 'end '.repeat(depth);
     i.load(guest(flat(256), ''));
     assert.equal(i.invoke('run'), undefined);

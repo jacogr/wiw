@@ -1,13 +1,13 @@
 {
-  "tag": "wg-2.0",
-  "revision": "fffc6e12fa454e475455a7b58d3b5dc343980c10",
-  "scope": "Entire recursively inventoried core suite, including SIMD; optimized bootstrap diagnostic report passes and the default interpreted runtime verifies all files in CI.",
-  "passed": 54006,
+  "tag": "wg-3.0",
+  "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
+  "scope": "Entire recursively inventoried WebAssembly 3.0 core suite, including GC, exceptions, memory64, relaxed SIMD and SIMD; optimized bootstrap and default interpreted execution pass all files with frozen CI coverage.",
+  "passed": 65199,
   "skipped": 0,
   "failed": 0,
-  "fileCount": 148,
-  "verifiedFileCount": 148,
-  "verifiedCommands": 54006,
+  "fileCount": 258,
+  "verifiedFileCount": 258,
+  "verifiedCommands": 65199,
   "files": [
     {
       "file": "address.wast",
@@ -18,7 +18,14 @@
     },
     {
       "file": "align.wast",
-      "passed": 162,
+      "passed": 165,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "annotations.wast",
+      "passed": 74,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -32,7 +39,7 @@
     },
     {
       "file": "binary.wast",
-      "passed": 136,
+      "passed": 127,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -53,21 +60,84 @@
     },
     {
       "file": "br_if.wast",
-      "passed": 118,
+      "passed": 119,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "br_on_non_null.wast",
+      "passed": 12,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "br_on_null.wast",
+      "passed": 10,
       "skipped": 0,
       "reasons": {},
       "failed": 0
     },
     {
       "file": "br_table.wast",
-      "passed": 174,
+      "passed": 186,
       "skipped": 0,
       "reasons": {},
       "failed": 0
     },
     {
-      "file": "bulk.wast",
+      "file": "bulk-memory/bulk.wast",
       "passed": 117,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "bulk-memory/memory_copy.wast",
+      "passed": 4450,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "bulk-memory/memory_fill.wast",
+      "passed": 100,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "bulk-memory/memory_init.wast",
+      "passed": 240,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "bulk-memory/table-sub.wast",
+      "passed": 3,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "bulk-memory/table_copy.wast",
+      "passed": 1728,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "bulk-memory/table_fill.wast",
+      "passed": 45,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "bulk-memory/table_init.wast",
+      "passed": 780,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -82,6 +152,13 @@
     {
       "file": "call_indirect.wast",
       "passed": 172,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "call_ref.wast",
+      "passed": 35,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -116,14 +193,14 @@
     },
     {
       "file": "data.wast",
-      "passed": 61,
+      "passed": 65,
       "skipped": 0,
       "reasons": {},
       "failed": 0
     },
     {
       "file": "elem.wast",
-      "passed": 98,
+      "passed": 151,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -136,8 +213,36 @@
       "failed": 0
     },
     {
+      "file": "exceptions/tag.wast",
+      "passed": 10,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "exceptions/throw.wast",
+      "passed": 13,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "exceptions/throw_ref.wast",
+      "passed": 15,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "exceptions/try_table.wast",
+      "passed": 62,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
       "file": "exports.wast",
-      "passed": 96,
+      "passed": 97,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -228,7 +333,7 @@
     },
     {
       "file": "func.wast",
-      "passed": 172,
+      "passed": 175,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -241,8 +346,127 @@
       "failed": 0
     },
     {
+      "file": "gc/array.wast",
+      "passed": 54,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/array_copy.wast",
+      "passed": 35,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/array_fill.wast",
+      "passed": 17,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/array_init_data.wast",
+      "passed": 46,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/array_init_elem.wast",
+      "passed": 23,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/array_new_data.wast",
+      "passed": 28,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/array_new_elem.wast",
+      "passed": 22,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/binary-gc.wast",
+      "passed": 1,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/br_on_cast.wast",
+      "passed": 37,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/br_on_cast_fail.wast",
+      "passed": 37,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/extern.wast",
+      "passed": 18,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/i31.wast",
+      "passed": 73,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/ref_cast.wast",
+      "passed": 45,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/ref_eq.wast",
+      "passed": 89,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/ref_test.wast",
+      "passed": 71,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/struct.wast",
+      "passed": 30,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "gc/type-subtyping.wast",
+      "passed": 117,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
       "file": "global.wast",
-      "passed": 110,
+      "passed": 124,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -262,6 +486,13 @@
       "failed": 0
     },
     {
+      "file": "id.wast",
+      "passed": 7,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
       "file": "if.wast",
       "passed": 241,
       "skipped": 0,
@@ -270,7 +501,7 @@
     },
     {
       "file": "imports.wast",
-      "passed": 178,
+      "passed": 218,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -278,6 +509,13 @@
     {
       "file": "inline-module.wast",
       "passed": 1,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "instance.wast",
+      "passed": 23,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -312,7 +550,7 @@
     },
     {
       "file": "linking.wast",
-      "passed": 132,
+      "passed": 163,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -332,6 +570,13 @@
       "failed": 0
     },
     {
+      "file": "local_init.wast",
+      "passed": 10,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
       "file": "local_set.wast",
       "passed": 53,
       "skipped": 0,
@@ -340,7 +585,7 @@
     },
     {
       "file": "local_tee.wast",
-      "passed": 97,
+      "passed": 98,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -354,35 +599,189 @@
     },
     {
       "file": "memory.wast",
-      "passed": 88,
+      "passed": 90,
       "skipped": 0,
       "reasons": {},
       "failed": 0
     },
     {
-      "file": "memory_copy.wast",
+      "file": "memory64/address64.wast",
+      "passed": 242,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/align64.wast",
+      "passed": 157,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/binary_leb128_64.wast",
+      "passed": 2,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/bulk64.wast",
+      "passed": 70,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/call_indirect64.wast",
+      "passed": 2,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/endianness64.wast",
+      "passed": 69,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/float_memory64.wast",
+      "passed": 90,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/load64.wast",
+      "passed": 97,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/memory64-imports.wast",
+      "passed": 78,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/memory64.wast",
+      "passed": 69,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/memory_copy64.wast",
       "passed": 4450,
       "skipped": 0,
       "reasons": {},
       "failed": 0
     },
     {
-      "file": "memory_fill.wast",
+      "file": "memory64/memory_fill64.wast",
       "passed": 100,
       "skipped": 0,
       "reasons": {},
       "failed": 0
     },
     {
-      "file": "memory_grow.wast",
-      "passed": 104,
+      "file": "memory64/memory_grow64.wast",
+      "passed": 49,
       "skipped": 0,
       "reasons": {},
       "failed": 0
     },
     {
-      "file": "memory_init.wast",
+      "file": "memory64/memory_init64.wast",
       "passed": 240,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/memory_redundancy64.wast",
+      "passed": 8,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/memory_trap64.wast",
+      "passed": 172,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/table64.wast",
+      "passed": 14,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/table_copy64.wast",
+      "passed": 1728,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/table_copy_mixed.wast",
+      "passed": 4,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/table_fill64.wast",
+      "passed": 80,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/table_get64.wast",
+      "passed": 11,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/table_grow64.wast",
+      "passed": 22,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/table_init64.wast",
+      "passed": 876,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/table_set64.wast",
+      "passed": 19,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory64/table_size64.wast",
+      "passed": 37,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "memory_grow.wast",
+      "passed": 106,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -409,6 +808,293 @@
       "failed": 0
     },
     {
+      "file": "multi-memory/address0.wast",
+      "passed": 92,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/address1.wast",
+      "passed": 127,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/align0.wast",
+      "passed": 5,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/binary0.wast",
+      "passed": 7,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/data0.wast",
+      "passed": 7,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/data1.wast",
+      "passed": 14,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/data_drop0.wast",
+      "passed": 11,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/exports0.wast",
+      "passed": 8,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/float_exprs0.wast",
+      "passed": 14,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/float_exprs1.wast",
+      "passed": 3,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/float_memory0.wast",
+      "passed": 30,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/imports0.wast",
+      "passed": 8,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/imports1.wast",
+      "passed": 5,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/imports2.wast",
+      "passed": 20,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/imports3.wast",
+      "passed": 10,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/imports4.wast",
+      "passed": 16,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/linking0.wast",
+      "passed": 6,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/linking1.wast",
+      "passed": 14,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/linking2.wast",
+      "passed": 11,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/linking3.wast",
+      "passed": 14,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/load0.wast",
+      "passed": 3,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/load1.wast",
+      "passed": 18,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/load2.wast",
+      "passed": 38,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/memory-multi.wast",
+      "passed": 6,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/memory_copy0.wast",
+      "passed": 29,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/memory_copy1.wast",
+      "passed": 14,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/memory_fill0.wast",
+      "passed": 16,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/memory_grow.wast",
+      "passed": 51,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/memory_init0.wast",
+      "passed": 13,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/memory_size0.wast",
+      "passed": 8,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/memory_size1.wast",
+      "passed": 15,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/memory_size2.wast",
+      "passed": 21,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/memory_size3.wast",
+      "passed": 2,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/memory_size_import.wast",
+      "passed": 7,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/memory_trap0.wast",
+      "passed": 14,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/memory_trap1.wast",
+      "passed": 168,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/start0.wast",
+      "passed": 9,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/store0.wast",
+      "passed": 5,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/store1.wast",
+      "passed": 13,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/store2.wast",
+      "passed": 25,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "multi-memory/traps0.wast",
+      "passed": 15,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
       "file": "names.wast",
       "passed": 486,
       "skipped": 0,
@@ -430,6 +1116,20 @@
       "failed": 0
     },
     {
+      "file": "ref.wast",
+      "passed": 13,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "ref_as_non_null.wast",
+      "passed": 7,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
       "file": "ref_func.wast",
       "passed": 17,
       "skipped": 0,
@@ -438,14 +1138,63 @@
     },
     {
       "file": "ref_is_null.wast",
-      "passed": 16,
+      "passed": 22,
       "skipped": 0,
       "reasons": {},
       "failed": 0
     },
     {
       "file": "ref_null.wast",
+      "passed": 34,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "relaxed-simd/i16x8_relaxed_q15mulr_s.wast",
       "passed": 3,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "relaxed-simd/i32x4_relaxed_trunc.wast",
+      "passed": 1,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "relaxed-simd/i8x16_relaxed_swizzle.wast",
+      "passed": 6,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "relaxed-simd/relaxed_dot_product.wast",
+      "passed": 11,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "relaxed-simd/relaxed_laneselect.wast",
+      "passed": 12,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "relaxed-simd/relaxed_madd_nmadd.wast",
+      "passed": 19,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "relaxed-simd/relaxed_min_max.wast",
+      "passed": 25,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -458,8 +1207,29 @@
       "failed": 0
     },
     {
+      "file": "return_call.wast",
+      "passed": 47,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "return_call_indirect.wast",
+      "passed": 79,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "return_call_ref.wast",
+      "passed": 51,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
       "file": "select.wast",
-      "passed": 148,
+      "passed": 157,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -501,7 +1271,7 @@
     },
     {
       "file": "simd/simd_const.wast",
-      "passed": 757,
+      "passed": 758,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -822,6 +1592,13 @@
       "failed": 0
     },
     {
+      "file": "simd/simd_memory-multi.wast",
+      "passed": 1,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
       "file": "simd/simd_select.wast",
       "passed": 7,
       "skipped": 0,
@@ -906,29 +1683,8 @@
       "failed": 0
     },
     {
-      "file": "table-sub.wast",
-      "passed": 2,
-      "skipped": 0,
-      "reasons": {},
-      "failed": 0
-    },
-    {
       "file": "table.wast",
-      "passed": 19,
-      "skipped": 0,
-      "reasons": {},
-      "failed": 0
-    },
-    {
-      "file": "table_copy.wast",
-      "passed": 1728,
-      "skipped": 0,
-      "reasons": {},
-      "failed": 0
-    },
-    {
-      "file": "table_fill.wast",
-      "passed": 45,
+      "passed": 46,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -943,13 +1699,6 @@
     {
       "file": "table_grow.wast",
       "passed": 58,
-      "skipped": 0,
-      "reasons": {},
-      "failed": 0
-    },
-    {
-      "file": "table_init.wast",
-      "passed": 780,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -970,7 +1719,7 @@
     },
     {
       "file": "token.wast",
-      "passed": 58,
+      "passed": 61,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -978,6 +1727,27 @@
     {
       "file": "traps.wast",
       "passed": 36,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "type-canon.wast",
+      "passed": 2,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "type-equivalence.wast",
+      "passed": 32,
+      "skipped": 0,
+      "reasons": {},
+      "failed": 0
+    },
+    {
+      "file": "type-rec.wast",
+      "passed": 27,
       "skipped": 0,
       "reasons": {},
       "failed": 0
@@ -998,14 +1768,14 @@
     },
     {
       "file": "unreached-invalid.wast",
-      "passed": 118,
+      "passed": 121,
       "skipped": 0,
       "reasons": {},
       "failed": 0
     },
     {
       "file": "unreached-valid.wast",
-      "passed": 7,
+      "passed": 13,
       "skipped": 0,
       "reasons": {},
       "failed": 0

@@ -75,6 +75,14 @@
 				(return)
 			)
 		)
+		;; Imported tags retain a host-provided exception identity and their complete type signature.
+		(if (call $is-exception-word (i32.const 0))
+			(then
+				(call $parse-tag)
+				(call $expect (i32.const 2))
+				(return)
+			)
+		)
 		;; Only a function keyword remains valid after the resource alternatives.
 		(if (i32.eqz (call $is-word (i32.const 6) (i32.const 4)))
 			(then
@@ -140,7 +148,7 @@
 		(param $index i32)
 		(param $calls i32)
 		(param $frame i32)
-		(param $fuel i32)
+		(param $fuel i64)
 
 		(global.set $pending-import (i32.load offset=12 (call $function (local.get $index))))
 		(global.set $pending-offset (global.get $tok))
@@ -161,7 +169,7 @@
 		(global.set $control-count (i32.const 0))
 		(global.set $tok (i32.load offset=28 (call $function (local.get $index))))
 		;; A root import consumes one fuel unit just like an imported call instruction.
-		(if (i32.eqz (global.get $fuel-limit))
+		(if (i64.eqz (global.get $fuel-limit))
 			(then
 				(call $fail (i32.const 12))
 				(return (i64.const 0))
@@ -191,7 +199,7 @@
 			(local.get $index)
 			(i32.const 0)
 			(i32.const 0)
-			(i32.sub (global.get $fuel-limit) (i32.const 1))
+			(i64.sub (global.get $fuel-limit) (i64.const 1))
 		)
 		(i64.const 0)
 	)
@@ -419,5 +427,6 @@
 				(return (i32.const -1))
 			)
 		)
+		(call $use-memory (i32.const 0))
 		(call $guest-grow (local.get $delta))
 	)

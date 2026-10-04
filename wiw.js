@@ -1,7 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
-const messages = ['', 'invalid syntax', 'unsupported feature', 'integer out of range', 'unknown export', 'invalid buffer', 'resource limit', 'invalid operand stack', 'divide by zero', 'integer overflow', 'invalid or duplicate reference', 'argument mismatch', 'exhausted fuel', 'executed unreachable', 'memory out of bounds', 'invalid memory limits', 'immutable global', 'interpreter error', 'export kind mismatch', 'invalid alignment', 'host import failed', 'invalid resume', 'invocation already suspended', 'host value type mismatch', 'undefined element', 'indirect call type mismatch', 'invalid table limits', 'element out of bounds', 'invalid conversion to integer', 'instance not initialized', 'table out of bounds'];
+const messages = ['', 'invalid syntax', 'unsupported feature', 'integer out of range', 'unknown export', 'invalid buffer', 'resource limit', 'invalid operand stack', 'divide by zero', 'integer overflow', 'invalid or duplicate reference', 'argument mismatch', 'exhausted fuel', 'executed unreachable', 'memory out of bounds', 'invalid memory limits', 'immutable global', 'interpreter error', 'export kind mismatch', 'invalid alignment', 'host import failed', 'invalid resume', 'invocation already suspended', 'host value type mismatch', 'undefined element', 'indirect call type mismatch', 'invalid table limits', 'element out of bounds', 'invalid conversion to integer', 'instance not initialized', 'table out of bounds', 'null reference', 'cast failure', 'array out of bounds', 'uncaught exception'];
+let nextTagIdentity = 1;
+const exceptionTypes = new WeakMap();
+export class WiwException extends Error {
+  constructor() {super('uncaught guest exception'); this.name = 'WiwException';}
+}
 
 // Typed forwarding bindings retain the provider's signature and load generation.
 /** @type {WeakMap<Function, {params: number[], results: number | number[], valid: () => boolean}>} */
@@ -31,7 +36,7 @@ export async function createInterpretedInterpreter(binary = new URL('./build/wiw
   // Parent ABI calls are implementation work, not guest-to-guest forwarding.
   backend.countsForwardingDepth = false;
   parent.load(options.source ?? await readFile(new URL('./build/wiw.wat', import.meta.url), 'utf8'));
-  parent.setFuel(options.parentFuel ?? 4294967295);
+  backend.exports.set_fuel64(BigInt(options.parentFuel ?? ((1n << 64n) - 1n)));
   // The parent holds child arenas as well as the child's full guest-memory capacity.
   backend.exports.enable_interpreter_backing();
   const memoryOffset = backend.memoryOffset + backend.exports.guest_memory_base();
@@ -78,7 +83,37 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     return bytes.length;
   }
   function check(/** @type {number} */ code) {
+    if (code === 34) throw guestException();
     if (code) throw new Error(`${messages[code] ?? 'interpreter error'} at byte ${Math.max(0, e.error_offset() - 4096)}`);
+  }
+  const importedExceptions = new Map();
+  function guestException() {
+    const reference = e.exception_reference();
+    if (importedExceptions.has(reference)) return importedExceptions.get(reference);
+    const view = new DataView(e.memory.buffer, memoryOffset), at = e.exception_info(reference);
+    const tag = view.getInt32(at + 8, true), identity = Number(view.getBigUint64(at + 16, true));
+    const heap = view.getInt32(e.tag_info(tag) + 24, true), count = view.getInt32(at + 4, true) - 1;
+    const params = Array.from({length: count}, (_, slot) => e.value_kind(e.heap_param_type(heap, slot)));
+    const args = params.map((type, slot) => {
+      const low = view.getBigInt64(at + 32 + slot * 16, true), high = view.getBigUint64(at + 40 + slot * 16, true);
+      return rawResult(type === 7 ? BigInt.asUintN(64, low) | (high << 64n) : low, type);
+    });
+    const exception = new WiwException();
+    exceptionTypes.set(exception, {identity, params, args});
+    return exception;
+  }
+  function importException(exception) {
+    const {identity, params, args} = exceptionTypes.get(exception);
+    const at = e.host_base(); ensure(at + args.length * 8);
+    const view = new DataView(e.memory.buffer, memoryOffset);
+    args.forEach((arg, slot) => {
+      const bits = rawSlot(arg, params[slot]);
+      view.setBigInt64(at + slot * 8, BigInt.asIntN(64, bits), true);
+      view.setBigInt64(e.argument_high_base() + slot * 8, BigInt.asIntN(64, bits >> 64n), true);
+    });
+    const reference = e.import_exception(identity, args.length, at);
+    importedExceptions.set(reference, exception);
+    return reference;
   }
   function requireLoaded() {
     if (!loaded) throw new Error('no loaded module');
@@ -106,14 +141,27 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
   function readText(/** @type {number} */ p, /** @type {number} */ n) {
     return new TextDecoder('utf-8', {ignoreBOM: true}).decode(new Uint8Array(e.memory.buffer, memoryOffset + p, n));
   }
-  const scalarNames = [null, 'i32', 'i64', 'f32', 'f64', 'funcref', 'externref', 'v128'];
+  const scalarNames = [null, 'i32', 'i64', 'f32', 'f64', 'funcref', 'externref', 'v128', 'anyref', 'exnref'];
+  const opaqueReferences = new Map();
+  const opaqueReferenceValues = new WeakMap();
+  const isHostReference = type => type >= 5 && type !== 7;
   function decodedValue(/** @type {bigint} */ bits, /** @type {number} */ type) {
     if (!type) return undefined;
     if (type === 1) return Number(BigInt.asIntN(32, bits));
     if (type === 2) return BigInt.asIntN(64, bits);
     if (type === 7) return BigInt.asUintN(128, bits);
     if (type === 5) return bits === 0n ? null : functionReference(Number(bits - 1n)).callback;
-    if (type === 6) return externalValues[Number(bits)];
+    if (type === 6) return (bits & 0xc0000000n) ? decodedValue(bits, 8) : externalValues[Number(bits)];
+    if (type >= 8) {
+      if (bits === 0n) return null;
+      if (type === 8 && (bits & 0xe0000000n) === 0x20000000n) return externalValues[Number(bits & 0x1fffffffn)];
+      const key = `${type}:${bits}`;
+      if (!opaqueReferences.has(key)) {
+        const reference = Object.freeze({});
+        opaqueReferences.set(key, reference); opaqueReferenceValues.set(reference, {bits, type});
+      }
+      return opaqueReferences.get(key);
+    }
     const view = new DataView(new ArrayBuffer(8));
     view.setBigInt64(0, bits, true);
     return type === 3 ? view.getFloat32(0, true) : view.getFloat64(0, true);
@@ -132,12 +180,21 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     }
     if (type === 6) {
       if (value === null) return 0n;
+      const opaque = opaqueReferenceValues.get(value);
+      if (opaque?.type === 8) return opaque.bits;
       const key = Object.is(value, -0) ? negativeZeroKey : value;
       if (!externalIds.has(key)) {
         if (externalValues.length >= 65536) throw new Error('external reference resource limit');
         externalIds.set(key, externalValues.length); externalValues.push(value);
       }
       return BigInt(externalIds.get(key));
+    }
+    if (type >= 8) {
+      if (value === null) return 0n;
+      const reference = opaqueReferenceValues.get(value);
+      if (!reference && type === 8) return typedValue(value, 6) | 0x20000000n;
+      if (!reference || reference.type !== type) throw new Error('value must be a live opaque wiw reference or null');
+      return reference.bits;
     }
     if (type === 3 || type === 4) {
       if (typeof value !== 'number') throw new Error(`value must be an ${scalarNames[type]} Number`);
@@ -165,12 +222,12 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
   }
   // Reference descriptors carry opaque values; numeric descriptors retain exact bits.
   function rawResult(bits, type) {
-    return type === 5 || type === 6 ? {type: scalarNames[type], value: decodedValue(bits, type)} :
+    return isHostReference(type) ? {type: scalarNames[type], value: decodedValue(bits, type), ...(type === 8 ? {heap: bits === 0n ? null : (bits & 0x80000000n) ? 'i31' : (bits & 0x40000000n) ? (e.reference_category(e.object_type(bits)) === 22 ? 'struct' : 'array') : 'any'} : {})} :
       {type: scalarNames[type], bits: BigInt.asUintN(type === 7 ? 128 : type === 1 || type === 3 ? 32 : 64, bits)};
   }
   function rawSlot(arg, type) {
     if (arg.type !== scalarNames[type]) throw new Error('raw argument type mismatch');
-    if (type === 5 || type === 6) {
+    if (isHostReference(type)) {
       if (!Object.hasOwn(arg, 'value')) throw new Error('raw reference requires an opaque value');
       return typedValue(arg.value, type);
     }
@@ -178,16 +235,86 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     return type === 7 ? BigInt.asUintN(128, arg.bits) : BigInt.asIntN(64, arg.bits);
   }
   // Shared state is synchronized at each synchronous guest/host boundary.
+  // Type graphs retain nullability and structural heap signatures across independent instances.
+  function typeDescription(type, heaps = new Map()) {
+    const kind = e.value_kind(type);
+    if (!isHostReference(kind)) return {kind};
+    const result = {kind, nonnull: Boolean(e.type_nonnull(type)), heap: e.reference_category(type)};
+    const index = e.type_heap(type);
+    if (index < 0) return result;
+    const describeHeap = index => {
+      if (heaps.has(index)) return heaps.get(index);
+      const view = new DataView(e.memory.buffer, memoryOffset);
+      const at = e.heap_info(index);
+      const heap = {index, kind: view.getInt32(at, true), final: view.getInt32(at + 12, true), group: [], params: [], results: [], fields: []};
+      heaps.set(index, heap);
+      const start = view.getInt32(at + 4, true), count = view.getInt32(at + 8, true);
+      heap.position = index - start;
+      const parent = view.getInt32(at + 16, true);
+      heap.parent = parent < 0 ? null : typeDescription(parent, heaps).heap;
+      if (heap.kind === 0) {
+        heap.params = Array.from({length: e.heap_params(index)}, (_, slot) => typeDescription(e.heap_param_type(index, slot), heaps));
+        heap.results = Array.from({length: e.heap_results(index)}, (_, slot) => typeDescription(e.heap_result_type(index, slot), heaps));
+      } else {
+        const first = view.getInt32(at + 20, true), length = view.getInt32(at + 24, true);
+        heap.fields = Array.from({length}, (_, slot) => {
+          const field = e.field_info(first + slot);
+          return {type: typeDescription(view.getInt32(field, true), heaps), mutable: view.getInt32(field + 4, true)};
+        });
+      }
+      heap.group = Array.from({length: count}, (_, slot) => describeHeap(start + slot));
+      return heap;
+    };
+    result.heap = describeHeap(index);
+    return result;
+  }
+  // Recursive group references compare by their relative positions within paired groups.
+  function equalHeap(actual, expected, contexts = []) {
+    if (typeof actual === 'number' || typeof expected === 'number') return actual === expected;
+    for (const [left, right] of contexts) {
+      const a = left.indexOf(actual), b = right.indexOf(expected);
+      if (a >= 0 || b >= 0) return a === b && a >= 0;
+    }
+    if (actual.position !== expected.position || actual.group.length !== expected.group.length) return false;
+    contexts.push([actual.group, expected.group]);
+    const sameType = (a, b) => a.kind === b.kind && a.nonnull === b.nonnull && (!isHostReference(a.kind) || equalHeap(a.heap, b.heap, contexts));
+    const sameVector = (a, b) => a.length === b.length && a.every((type, slot) => sameType(type, b[slot]));
+    const result = actual.group.every((a, slot) => {
+      const b = expected.group[slot];
+      return a.kind === b.kind && a.final === b.final && Boolean(a.parent) === Boolean(b.parent) &&
+        (!a.parent || equalHeap(a.parent, b.parent, contexts)) && sameVector(a.params, b.params) && sameVector(a.results, b.results) &&
+        a.fields.length === b.fields.length && a.fields.every((field, i) => field.mutable === b.fields[i].mutable && sameType(field.type, b.fields[i].type));
+    });
+    contexts.pop();
+    return result;
+  }
+  function compatibleType(actual, expected) {
+    if (!isHostReference(expected.kind)) return actual.kind === expected.kind;
+    if (!isHostReference(actual.kind) || (expected.nonnull && !actual.nonnull)) return false;
+    if (typeof expected.heap === 'number') {
+      const category = typeof actual.heap === 'number' ? actual.heap : actual.heap.kind === 0 ? 5 : actual.heap.kind === 1 ? 22 : 24;
+      if (category === expected.heap) return true;
+      if (category === 26) return [16,18,20,22,24].includes(expected.heap);
+      if (category === 28) return expected.heap === 5;
+      if (category === 30) return expected.heap === 6;
+      if (category === 34) return expected.heap === 32;
+      return (expected.heap === 16 && [18,20,22,24].includes(category)) || (expected.heap === 18 && [20,22,24].includes(category));
+    }
+    if (typeof actual.heap === 'number') return actual.heap === (expected.heap.kind === 0 ? 28 : 26);
+    for (let heap = actual.heap; heap; heap = heap.parent) if (equalHeap(heap, expected.heap)) return true;
+    return false;
+  }
   function synchronizeIn() {
     for (const binding of resources) {
       const state = binding.state;
+      if (state.kind === 4) continue;
       if (!state.valid()) throw new Error('stale resource binding');
       if (state.kind === 1) {
-        const delta = state.pages - e.guest_memory_pages();
-        if (delta > 0 && e.grow_guest_memory(delta) < 0) throw new Error('shared memory growth exceeds capacity');
-        new Uint8Array(e.memory.buffer, memoryOffset + e.guest_memory_base(), state.bytes.length).set(state.bytes);
+        const delta = state.pages - e.memory_pages(binding.index);
+        if (delta > 0 && e.grow_memory(binding.index, delta) < 0) throw new Error('shared memory growth exceeds capacity');
+        new Uint8Array(e.memory.buffer, memoryOffset + e.memory_base(binding.index), state.bytes.length).set(state.bytes);
       } else if (state.kind === 2) {
-        const bits = (state.type === 5 || state.type === 6) ? typedValue(state.value, state.type) : state.bits;
+        const bits = (isHostReference(state.type)) ? typedValue(state.value, state.type) : state.bits;
         const view = new DataView(e.memory.buffer, memoryOffset), at = e.global_info(binding.index);
         view.setBigInt64(at + 24, BigInt.asIntN(64, bits), true);
         view.setBigInt64(at + 72, state.type === 7 ? BigInt.asIntN(64, bits >> 64n) : 0n, true);
@@ -204,13 +331,14 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
   function synchronizeOut() {
     for (const binding of resources) {
       const state = binding.state;
+      if (state.kind === 4) continue;
       if (state.kind === 1) {
-        state.pages = e.guest_memory_pages();
-        state.bytes = new Uint8Array(e.memory.buffer, memoryOffset + e.guest_memory_base(), state.pages * 65536).slice();
+        state.pages = e.memory_pages(binding.index);
+        state.bytes = new Uint8Array(e.memory.buffer, memoryOffset + e.memory_base(binding.index), state.pages * 65536).slice();
       } else if (state.kind === 2) {
         state.bits = new DataView(e.memory.buffer, memoryOffset).getBigInt64(e.global_info(binding.index) + 24, true);
         if (state.type === 7) state.bits = BigInt.asUintN(64, state.bits) | (BigInt.asUintN(64, new DataView(e.memory.buffer, memoryOffset).getBigInt64(e.global_info(binding.index) + 72, true)) << 64n);
-        if ((state.type === 5 || state.type === 6)) state.value = decodedValue(state.bits, state.type);
+        if ((isHostReference(state.type))) state.value = decodedValue(state.bits, state.type);
       } else state.entries = Array.from({length: e.table_size(binding.index)}, (_, index) => {
         const target = new DataView(e.memory.buffer, memoryOffset).getInt32(e.table_base(binding.index) + index * 4, true);
         return state.type === 6 ? decodedValue(BigInt(target + 1), 6) : target < 0 ? null : functionReference(target);
@@ -258,13 +386,13 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     if (reference.owner === owner) return reference.index;
     if (foreignFunctions.has(reference)) return foreignFunctions.get(reference);
     const {params, results} = reference.signature;
-    const at = e.host_base(); ensure(at + params.length);
-    new Uint8Array(e.memory.buffer, memoryOffset + at, params.length).set(params);
+    const at = e.host_base(); ensure(at + params.length * 4);
+    new Uint32Array(e.memory.buffer, memoryOffset + at, params.length).set(params);
     const slot = bindings.length;
     const index = e.foreign_function(params.length, Array.isArray(results) ? results[0] : results, at, slot);
     if (index >= 0 && Array.isArray(results)) {
-      ensure(at + results.length);
-      new Uint8Array(e.memory.buffer, memoryOffset + at, results.length).set(results);
+      ensure(at + results.length * 4);
+      new Uint32Array(e.memory.buffer, memoryOffset + at, results.length).set(results);
       check(e.foreign_results(index, at, results.length));
     }
     check(e.error_code());
@@ -280,19 +408,20 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     if (!state) {
       const currentGeneration = generation;
       state = {kind, valid: () => loaded && generation === currentGeneration};
-      if (kind === 1) Object.assign(state, {pages: e.guest_memory_pages(), maximum: e.memory_max(), bytes: new Uint8Array(e.memory.buffer, memoryOffset + e.guest_memory_base(), e.guest_memory_pages() * 65536).slice()});
+      if (kind === 4) Object.assign(state, {identity: new DataView(e.memory.buffer, memoryOffset).getInt32(e.tag_info(index) + 16, true), descriptor: typeDescription(e.tag_type(index))});
+      else if (kind === 1) Object.assign(state, {addressType: e.memory_width(index), pages: e.memory_pages(index), maximum: e.memory_maximum(index), bytes: new Uint8Array(e.memory.buffer, memoryOffset + e.memory_base(index), e.memory_pages(index) * 65536).slice()});
       else if (kind === 2) {
         const view = new DataView(e.memory.buffer, memoryOffset), at = e.global_info(index);
-        Object.assign(state, {type: view.getInt32(at + 12, true), mutable: view.getInt32(at + 8, true), bits: view.getBigInt64(at + 24, true)});
+        Object.assign(state, {type: e.value_kind(view.getInt32(at + 12, true)), descriptor: typeDescription(view.getInt32(at + 12, true)), mutable: view.getInt32(at + 8, true), bits: view.getBigInt64(at + 24, true)});
         if (state.type === 7) state.bits = BigInt.asUintN(64, state.bits) | (BigInt.asUintN(64, view.getBigInt64(at + 72, true)) << 64n);
-        if ((state.type === 5 || state.type === 6)) state.value = decodedValue(state.bits, state.type);
-      } else Object.assign(state, {type: e.table_type(index), maximum: e.table_max(index), entries: Array.from({length: e.table_size(index)}, (_, slot) => {
+        if ((isHostReference(state.type))) state.value = decodedValue(state.bits, state.type);
+      } else Object.assign(state, {addressType: e.table_address_type(index), type: e.table_type(index), descriptor: typeDescription(new DataView(e.memory.buffer, memoryOffset).getInt32(e.table_info(index) + 16, true)), maximum: e.table_max(index), entries: Array.from({length: e.table_size(index)}, (_, slot) => {
         const target = new DataView(e.memory.buffer, memoryOffset).getInt32(e.table_base(index) + slot * 4, true);
         return e.table_type(index) === 6 ? decodedValue(BigInt(target + 1), 6) : target < 0 ? null : functionReference(target);
       })});
       resources.push({index, state});
     }
-    const handle = Object.freeze({kind: ['function', 'memory', 'global', 'table'][kind]});
+    const handle = Object.freeze({kind: ['function', 'memory', 'global', 'table', 'tag'][kind]});
     resourceTypes.set(handle, state); exportedResources.set(key, handle);
     return handle;
   }
@@ -340,6 +469,11 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
           }
         }
       } catch (error) { failure = error; failed = true; }
+      // Guest exceptions retain their tag identity and unwind through the caller's own handlers.
+      if (failed && exceptionTypes.has(failure)) {
+        value = e.resume_exception(importException(failure));
+        check(e.error_code()); continue;
+      }
       // The scalar ABI carries only the low 64 bits; vector high bits live in their separate slots.
       value = e.resume64(BigInt.asIntN(64, result), failed ? 1 : 0);
       if (failed) {
@@ -390,17 +524,29 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       }
   }
   const api = {
+    // Parse and validate a module without imports, resource allocation, segment effects or start execution.
+    validate(source, binarySource = false) {
+      requireIdle();
+      loaded = false;
+      generation++;
+      const sourceLength = write(source, 4096);
+      e.validation_only(1);
+      try { check(binarySource ? e.load_binary(4096, sourceLength) : e.load(4096, sourceLength)); }
+      finally { e.validation_only(0); }
+      return api;
+    },
     load(/** @type {string} */ source, /** @type {Record<string, Record<string, Function>>} */ imports = {}, binarySource = false) {
       requireIdle();
       loaded = false;
       generation++;
-      bindings = []; resources = []; exportedResources = new Map(); exportedFunctions = new Map();
+      bindings = []; resources = []; importedExceptions.clear(); exportedResources = new Map(); exportedFunctions = new Map();
       tableFunctions = new Map(); foreignFunctions = new Map();
       externalValues = [null]; externalIds = new Map();
       const sourceLength = write(source, 4096);
       check(binarySource ? e.load_binary(4096, sourceLength) : e.load(4096, sourceLength));
+      for (let index = 0; index < e.tag_count(); index++) e.bind_tag(index, nextTagIdentity++);
       const resolved = [], resourceBindings = [];
-      let pages = e.memory_min(), maximum = e.memory_max(), entries = e.table_size(0), tableMaximum = e.table_max(0);
+      let pages = e.memory_minimum(0), maximum = e.memory_maximum(0), entries = e.table_size(0), tableMaximum = e.table_max(0);
       for (let index = 0; index < e.import_count(); index++) {
         const view = new DataView(e.memory.buffer, memoryOffset);
         const at = e.import_info(index);
@@ -414,16 +560,22 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
           const state = callback && resourceTypes.get(callback);
           if (!state) throw new Error(`missing resource import ${module}.${name}`);
           if (!state.valid() || state.kind !== kind) throw new Error(`import signature mismatch or stale binding ${module}.${name}`);
+          if (kind === 4) {
+            const descriptor = typeDescription(e.tag_type(target));
+            if (!compatibleType(state.descriptor, descriptor) || !compatibleType(descriptor, state.descriptor)) throw new Error(`import signature mismatch ${module}.${name}`);
+            e.bind_tag(target, state.identity); resourceBindings.push({index: target, state}); resolved.push(null); continue;
+          }
           if (kind === 1 || kind === 3) {
+            if (state.addressType !== (kind === 1 ? e.memory_width(target) : e.table_address_type(target))) throw new Error(`import signature mismatch ${module}.${name}`);
             const actual = kind === 1 ? state.pages : state.entries.length;
-            const minimum = kind === 1 ? pages : e.table_size(target), requiredMaximum = kind === 1 ? maximum : e.table_max(target);
-            if (kind === 3 && state.type !== e.table_type(target)) throw new Error(`import signature mismatch ${module}.${name}`);
+            const minimum = kind === 1 ? e.memory_minimum(target) : e.table_size(target), requiredMaximum = kind === 1 ? e.memory_maximum(target) : e.table_max(target);
+            if (kind === 3 && (!compatibleType(state.descriptor, typeDescription(view.getInt32(e.table_info(target) + 16, true))) || !compatibleType(typeDescription(view.getInt32(e.table_info(target) + 16, true)), state.descriptor))) throw new Error(`import signature mismatch ${module}.${name}`);
             if (actual < minimum || (requiredMaximum !== -1 && (state.maximum === -1 || state.maximum > requiredMaximum))) throw new Error(`import signature mismatch ${module}.${name}`);
-            if (kind === 1) {pages = actual; maximum = state.maximum;}
+            if (kind === 1) check(e.bind_guest_memory(target, actual, state.maximum));
             else check(e.bind_guest_table(target, actual, state.maximum));
           } else {
             const globalAt = e.global_info(target);
-            if (state.type !== view.getInt32(globalAt + 12, true) || state.mutable !== view.getInt32(globalAt + 8, true)) throw new Error(`import signature mismatch ${module}.${name}`);
+            if (state.mutable !== view.getInt32(globalAt + 8, true) || !compatibleType(state.descriptor, typeDescription(view.getInt32(globalAt + 12, true))) || (state.mutable && !compatibleType(typeDescription(view.getInt32(globalAt + 12, true)), state.descriptor))) throw new Error(`import signature mismatch ${module}.${name}`);
           }
           resourceBindings.push({index: target, state});
           resolved.push(null); continue;
@@ -432,12 +584,22 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
         const results = resultSignature(target);
         if (typeof callback !== 'function') throw new Error(`missing function import ${module}.${name}`);
         const signature = functionTypes.get(callback);
-        if (signature && (!signature.valid() || signature.params.join(',') !== params.join(',') || JSON.stringify(signature.results) !== JSON.stringify(results))) {
+        if (signature && (!signature.valid() || signature.params.join(',') !== params.join(',') || JSON.stringify(signature.results) !== JSON.stringify(results) || (signature.descriptor && !compatibleType(signature.descriptor, typeDescription(e.function_heap_type(target)))))) {
           throw new Error(`import signature mismatch or stale binding ${module}.${name}`);
         }
         resolved.push({ module, name, params, results, callback });
       }
       bindings = resolved; resources = resourceBindings;
+      const globalAliases = new Map();
+      for (const binding of resources) if (binding.state.kind === 2) {
+        if (globalAliases.has(binding.state)) e.alias_guest_global(binding.index, globalAliases.get(binding.state));
+        else globalAliases.set(binding.state, binding.index);
+      }
+      const memoryAliases = new Map();
+      for (const binding of resources) if (binding.state.kind === 1) {
+        if (memoryAliases.has(binding.state)) e.alias_guest_memory(binding.index, memoryAliases.get(binding.state));
+        else memoryAliases.set(binding.state, binding.index);
+      }
       const tableAliases = new Map();
       for (const binding of resources) if (binding.state.kind === 3) {
         if (tableAliases.has(binding.state)) e.alias_guest_table(binding.index, tableAliases.get(binding.state));
@@ -516,6 +678,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       };
       functionTypes.set(callback, {
         params: signature.params, results: signature.results,
+        descriptor: typeDescription(e.function_heap_type(signature.index)),
         valid: () => loaded && generation === currentGeneration,
         raw: args => {
           if (!loaded || generation !== currentGeneration) throw new Error('stale forwarded function');

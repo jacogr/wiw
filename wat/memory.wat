@@ -106,15 +106,59 @@
 	(func $memarg
 		(param $op i32)
 		(result i32)
-		(local $offset i32)
+		(local $offset i64)
+		(local $record i32)
+		(local $start i32)
+		(local $named i32)
 		(local $alignment i32)
 		(local $at i32)
 
+		(local.set $record (call $new-memory-immediate))
+		(local.set $start (global.get $tok))
+		(local.set $named (call $named))
+		;; A lone number on a lane instruction denotes its lane rather than its optional memory.
+		(if (call $table-reference (i32.add (local.get $record) (i32.const 8)))
+			(then
+				(local.set $at
+					(i32.or
+						(call $attribute (i32.const 99) (i32.const 7))
+						(call $attribute (i32.const 106) (i32.const 6))
+					)
+				)
+				;; Another numeric immediate also distinguishes an explicit memory selector from a lane.
+				(if
+					(i32.and
+						(i32.eq (global.get $kind) (i32.const 3))
+						(i32.and
+							(i32.ge_u (i32.load8_u (global.get $tok)) (i32.const 48))
+							(i32.le_u (i32.load8_u (global.get $tok)) (i32.const 57))
+						)
+					)
+					(then
+						(local.set $at (i32.const 1))
+					)
+				)
+				;; Rewind a numeric lane when no following memory attribute or lane number exists.
+				(if
+					(i32.and
+						(i32.ne (call $vector-memory-lanes (local.get $op)) (i32.const 0))
+						(i32.and (i32.eqz (local.get $named)) (i32.eqz (local.get $at)))
+					)
+					(then
+						(i64.store offset=8 (local.get $record) (i64.const 0))
+						(global.set $pos (local.get $start))
+						(call $next)
+					)
+				)
+			)
+		)
 		(local.set $alignment (call $access-width (local.get $op)))
 		;; An omitted offset defaults to zero.
 		(if (call $attribute (i32.const 99) (i32.const 7))
 			(then
-				(local.set $offset (call $attribute-index (i32.const 7)))
+				(global.set $tok (i32.add (global.get $tok) (i32.const 7)))
+				(global.set $len (i32.sub (global.get $len) (i32.const 7)))
+				(local.set $offset (call $index64))
 			)
 		)
 		;; Alignment is a byte count, defaults to natural width, and follows offset.
@@ -154,7 +198,8 @@
 			)
 		)
 		(global.set $immediate-length (local.get $alignment))
-		(local.get $offset)
+		(i64.store (local.get $record) (local.get $offset))
+		(local.get $record)
 	)
 
 	;; Check resource references and mutability regardless of validation reachability.
@@ -249,6 +294,58 @@
 		(i32.add (global.get $guest-base) (i32.wrap_i64 (local.get $effective)))
 	)
 
+	;; Check wide guest addresses and offsets without overflow or truncation before translating to backing memory.
+	(func $guest-address64
+		(param $address i64)
+		(param $offset i64)
+		(param $width i64)
+		(result i32)
+		(local $limit i64)
+
+		(local.set $limit
+			(i64.mul (i64.extend_i32_u (global.get $guest-pages)) (i64.const 65536))
+		)
+		;; Subtraction-based checks reject overflow and permit a zero-length range at the endpoint.
+		(if
+			(i32.or
+				(i64.gt_u (local.get $address) (local.get $limit))
+				(i32.or
+					(i64.gt_u (local.get $offset) (i64.sub (local.get $limit) (local.get $address)))
+					(i64.gt_u
+						(local.get $width)
+						(i64.sub (i64.sub (local.get $limit) (local.get $address)) (local.get $offset))
+					)
+				)
+			)
+			(then
+				(call $fail (i32.const 14))
+				(return (i32.const 0))
+			)
+		)
+		(i32.add
+			(global.get $guest-base)
+			(i32.wrap_i64 (i64.add (local.get $address) (local.get $offset)))
+		)
+	)
+
+	;; Normalize the address according to its logical memory type before checking an access immediate.
+	(func $memory-address
+		(param $address i64)
+		(param $immediate i32)
+		(param $width i32)
+		(result i32)
+
+		(call $guest-address64
+			(select
+				(local.get $address)
+				(i64.extend_i32_u (i32.wrap_i64 (local.get $address)))
+				(i32.eq (global.get $memory-type) (i32.const 2))
+			)
+			(i64.load (local.get $immediate))
+			(i64.extend_i32_u (local.get $width))
+		)
+	)
+
 	;; Let a trusted bootstrap parent hold interpreter arenas plus its child's complete guest memory.
 	(func (export "enable_interpreter_backing")
 		(global.set $guest-capacity (i32.const 65536))
@@ -261,6 +358,10 @@
 		(local $old i32)
 		(local $pages i64)
 		(local $end i64)
+		(local $start i32)
+		(local $bytes i32)
+		(local $i i32)
+		(local $record i32)
 
 		(local.set $old (global.get $guest-pages))
 		(local.set $pages
@@ -278,21 +379,54 @@
 		)
 		(local.set $end
 			(i64.add
-				(i64.extend_i32_u (global.get $guest-base))
-				(i64.mul (local.get $pages) (i64.const 65536))
+				(i64.extend_i32_u (global.get $host-base))
+				(i64.mul (i64.extend_i32_u (local.get $delta)) (i64.const 65536))
 			)
 		)
-		;; Leave physical room for the host's next export name/argument buffer.
+		;; Grow the backing range before moving following memories or changing any logical descriptor.
 		(if (i32.eqz (call $ensure-bytes (i64.add (local.get $end) (i64.const 1024))))
 			(then
 				(return (i32.const -1))
 			)
 		)
-		(call $zero-bytes
+		(local.set $start
 			(i32.add (global.get $guest-base) (i32.mul (local.get $old) (i32.const 65536)))
-			(i32.mul (local.get $delta) (i32.const 65536))
+		)
+		(local.set $bytes (i32.mul (local.get $delta) (i32.const 65536)))
+		(memory.copy
+			(i32.add (local.get $start) (local.get $bytes))
+			(local.get $start)
+			(i32.sub (global.get $host-base) (local.get $start))
+		)
+		(call $zero-bytes (local.get $start) (local.get $bytes))
+		;; Packed regions after this canonical memory move together, including zero-page declarations.
+		(block $done
+			;; Declaration order disambiguates adjacent empty memories that share a byte base.
+			(loop $memories
+				(br_if $done (i32.eq (local.get $i) (global.get $memory-present)))
+				(local.set $record (call $memory-record (local.get $i)))
+				;; Aliases follow their canonical descriptor and do not own a separate region.
+				(if
+					(i32.and
+						(i32.gt_u (local.get $i) (global.get $memory-index))
+						(i32.eqz (i32.load offset=52 (local.get $record)))
+					)
+					(then
+						(i32.store offset=20
+							(local.get $record)
+							(i32.add (i32.load offset=20 (local.get $record)) (local.get $bytes))
+						)
+					)
+				)
+				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br $memories)
+			)
 		)
 		(global.set $guest-pages (i32.wrap_i64 (local.get $pages)))
+		(i32.store offset=16
+			(call $memory-record (global.get $memory-index))
+			(global.get $guest-pages)
+		)
 		(global.set $host-base (i32.wrap_i64 (local.get $end)))
 		(local.get $old)
 	)
@@ -309,13 +443,16 @@
 		;; Global reads return their persistent current value.
 		(if (i32.eq (local.get $op) (i32.const 49))
 			(then
-				(return (i64.load offset=24 (call $global-record (local.get $immediate))))
+				(return (i64.load offset=24 (call $canonical-global-record (local.get $immediate))))
 			)
 		)
 		;; Validated mutable globals retain writes across calls and invocations.
 		(if (i32.eq (local.get $op) (i32.const 50))
 			(then
-				(i64.store offset=24 (call $global-record (local.get $immediate)) (local.get $a))
+				(i64.store offset=24
+					(call $canonical-global-record (local.get $immediate))
+					(local.get $a)
+				)
 				(return (i64.const 0))
 			)
 		)
@@ -328,12 +465,22 @@
 		;; memory.grow returns the previous size or -1 without trapping on a limit/allocation failure.
 		(if (i32.eq (local.get $op) (i32.const 52))
 			(then
+				;; Wide deltas must be rejected before conversion to the physical page counter.
+				(if
+					(i32.and
+						(i32.eq (global.get $memory-type) (i32.const 2))
+						(i64.gt_u (local.get $a) (i64.const 4294967295))
+					)
+					(then
+						(return (i64.const -1))
+					)
+				)
 				(return (i64.extend_i32_s (call $guest-grow (i32.wrap_i64 (local.get $a)))))
 			)
 		)
 		(local.set $address
-			(call $guest-address
-				(i32.wrap_i64 (local.get $a))
+			(call $memory-address
+				(local.get $a)
 				(local.get $immediate)
 				(call $access-width (local.get $op))
 			)
@@ -489,14 +636,14 @@
 	(func (export "guest_memory_base")
 		(result i32)
 
-		(global.get $guest-base)
+		(i32.load offset=20 (call $canonical-memory-record (i32.const 0)))
 	)
 
 	;; Return the logical guest page count; it can change during an invocation.
 	(func (export "guest_memory_pages")
 		(result i32)
 
-		(global.get $guest-pages)
+		(i32.load offset=16 (call $canonical-memory-record (i32.const 0)))
 	)
 
 	;; Distinguish an absent memory from a present zero-page memory.
@@ -512,4 +659,231 @@
 		(param $n i32)
 
 		(memory.fill (local.get $p) (i32.const 0) (local.get $n))
+	)
+
+	;; Locate one memory declaration in its bounded namespace arena.
+	(func $memory-record
+		(param $index i32)
+		(result i32)
+
+		(i32.add (global.get $memory-arena) (i32.mul (local.get $index) (i32.const 64)))
+	)
+
+	;; Follow an import alias directly to its canonical memory descriptor.
+	(func $canonical-memory-record
+		(param $index i32)
+		(result i32)
+		(local $record i32)
+
+		(local.set $record (call $memory-record (local.get $index)))
+		;; Aliases point directly to the first import of the same shared memory.
+		(if (i32.load offset=52 (local.get $record))
+			(then
+				(return
+					(call $memory-record (i32.sub (i32.load offset=52 (local.get $record)) (i32.const 1)))
+				)
+			)
+		)
+		(local.get $record)
+	)
+
+	;; Select one memory's logical limits and physical byte range for validation or execution.
+	(func $use-memory
+		(param $index i32)
+		(local $record i32)
+
+		(local.set $record (call $canonical-memory-record (local.get $index)))
+		(global.set $memory-index
+			(i32.div_u (i32.sub (local.get $record) (global.get $memory-arena)) (i32.const 64))
+		)
+		(global.set $memory-name (i32.load (local.get $record)))
+		(global.set $memory-name-length (i32.load offset=4 (local.get $record)))
+		(global.set $guest-min (i32.load offset=8 (local.get $record)))
+		(global.set $guest-max (i32.load offset=12 (local.get $record)))
+		(global.set $guest-pages (i32.load offset=16 (local.get $record)))
+		(global.set $guest-base (i32.load offset=20 (local.get $record)))
+		(global.set $memory-type
+			(select
+				(i32.const 2)
+				(i32.const 1)
+				(i32.eq (i32.load offset=24 (local.get $record)) (i32.const 2))
+			)
+		)
+		(global.set $memory-max-present (i32.load offset=28 (local.get $record)))
+		(global.set $memory-min64 (i64.load offset=32 (local.get $record)))
+		(global.set $memory-max64 (i64.load offset=40 (local.get $record)))
+		(global.set $memory-offset (i32.load offset=48 (local.get $record)))
+	)
+
+	;; Resolve a memory identifier without mixing resource or function namespaces.
+	(func $find-memory
+		(param $p i32)
+		(param $n i32)
+		(result i32)
+		(local $i i32)
+		(local $record i32)
+
+		;; Exhaustion produces the missing-name sentinel.
+		(block $done
+			;; Compare each complete identifier span in declaration order.
+			(loop $names
+				(br_if $done (i32.eq (local.get $i) (global.get $memory-present)))
+				(local.set $record (call $memory-record (local.get $i)))
+				;; Exact names match only within the memory namespace.
+				(if
+					(i32.and
+						(i32.eq (local.get $n) (i32.load offset=4 (local.get $record)))
+						(call $equal (local.get $p) (i32.load (local.get $record)) (local.get $n))
+					)
+					(then
+						(return (local.get $i))
+					)
+				)
+				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br $names)
+			)
+		)
+		(i32.const -1)
+	)
+
+	;; Publish a parsed memory's complete descriptor before finalizing its import or definition.
+	(func $finish-memory
+		(param $index i32)
+		(local $record i32)
+
+		(local.set $record (call $memory-record (local.get $index)))
+		(i32.store (local.get $record) (global.get $memory-name))
+		(i32.store offset=4 (local.get $record) (global.get $memory-name-length))
+		(i32.store offset=8 (local.get $record) (global.get $guest-min))
+		(i32.store offset=12 (local.get $record) (global.get $guest-max))
+		(i32.store offset=24 (local.get $record) (global.get $memory-type))
+		(i32.store offset=28 (local.get $record) (global.get $memory-max-present))
+		(i64.store offset=32 (local.get $record) (global.get $memory-min64))
+		(i64.store offset=40 (local.get $record) (global.get $memory-max64))
+		(i32.store offset=48 (local.get $record) (global.get $memory-offset))
+		(i32.store offset=56 (local.get $record) (global.get $parsing-import))
+		(call $finish-resource-declaration (i32.const 1) (local.get $index))
+	)
+
+	;; Allocate one independent auxiliary memory immediate with space for offsets, memory pairs and data targets.
+	(func $new-memory-immediate
+		(result i32)
+		(local $record i32)
+
+		;; Eight slots cannot overlap following branch vectors or other instruction immediates.
+		(if
+			(i32.gt_u (global.get $table-count) (i32.sub (i32.const CAP_TABLE) (i32.const 8)))
+			(then
+				(call $fail (i32.const 6))
+				(return (i32.const 0))
+			)
+		)
+		(local.set $record
+			(i32.add (global.get $table-base) (i32.mul (global.get $table-count) (i32.const 4)))
+		)
+		(global.set $table-count (i32.add (global.get $table-count) (i32.const 8)))
+		(call $zero-bytes (local.get $record) (i32.const 32))
+		(local.get $record)
+	)
+
+	;; Read optional memory selectors for size, growth, fill and copy before folded operands.
+	(func $memory-immediate
+		(param $op i32)
+		(result i32)
+		(local $record i32)
+
+		(local.set $record (call $new-memory-immediate))
+		;; Explicit copy destinations must be paired with explicit sources.
+		(if (call $table-reference (i32.add (local.get $record) (i32.const 8)))
+			(then
+				;; Copy retains its independently resolved source memory.
+				(if (i32.eq (local.get $op) (i32.const 187))
+					(then
+						;; Incomplete memory pairs are text syntax errors.
+						(if (i32.eqz (call $table-reference (i32.add (local.get $record) (i32.const 16))))
+							(then
+								(call $fail (i32.const 1))
+							)
+						)
+					)
+				)
+			)
+		)
+		(local.get $record)
+	)
+
+	;; Parse memory.init's data index with an optional leading memory selector.
+	(func $memory-init-immediate
+		(result i32)
+		(local $record i32)
+
+		(local.set $record (call $new-memory-immediate))
+		;; At least the data target is required.
+		(if (i32.eqz (call $table-reference (i32.add (local.get $record) (i32.const 24))))
+			(then
+				(call $fail (i32.const 1))
+				(return (local.get $record))
+			)
+		)
+		;; With two targets, the first is the memory and the second is the data segment.
+		(if (call $table-reference (i32.add (local.get $record) (i32.const 8)))
+			(then
+				(i64.store offset=16 (local.get $record) (i64.load offset=8 (local.get $record)))
+				(i64.store offset=8 (local.get $record) (i64.load offset=24 (local.get $record)))
+				(i64.store offset=24 (local.get $record) (i64.load offset=16 (local.get $record)))
+				(i64.store offset=16 (local.get $record) (i64.const 0))
+			)
+		)
+		(local.get $record)
+	)
+
+	;; Resolve an instruction's selected memories and cache their logical address widths.
+	(func $resolve-memory-immediate
+		(param $op i32)
+		(param $record i32)
+		(param $source i32)
+
+		(i32.store offset=8
+			(local.get $record)
+			(call $resource-target
+				(i32.const 1)
+				(i32.load offset=8 (local.get $record))
+				(i32.load offset=12 (local.get $record))
+				(local.get $source)
+			)
+		)
+		(i32.store offset=12 (local.get $record) (i32.const 0))
+		;; Invalid indices must never become descriptor addresses.
+		(if (global.get $error)
+			(then
+				(return)
+			)
+		)
+		(call $use-memory (i32.load offset=8 (local.get $record)))
+		;; Copy resolves and validates the source independently of the destination.
+		(if (i32.eq (local.get $op) (i32.const 187))
+			(then
+				(i32.store offset=16
+					(local.get $record)
+					(call $resource-target
+						(i32.const 1)
+						(i32.load offset=16 (local.get $record))
+						(i32.load offset=20 (local.get $record))
+						(local.get $source)
+					)
+				)
+				(i32.store offset=20 (local.get $record) (i32.const 0))
+				;; Both references must exist before reading either logical width.
+				(if (global.get $error)
+					(then
+						(return)
+					)
+				)
+				(global.set $memory-source-type
+					(i32.load offset=24
+						(call $canonical-memory-record (i32.load offset=16 (local.get $record)))
+					)
+				)
+			)
+		)
 	)

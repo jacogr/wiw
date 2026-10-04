@@ -15,6 +15,13 @@
 		(global.set $start-length (i32.const 0))
 		(global.set $start-offset (i32.const 0))
 		(global.set $signature-count (i32.const 0))
+		(global.set $tag-count (i32.const 0))
+		(global.set $exception-pending (i32.const 0))
+		(global.set $field-type-count (i32.const 0))
+		(global.set $gc-object-used (i32.const 0))
+		(global.set $rec-active (i32.const 0))
+		(global.set $reference-type-count (i32.const 0))
+		(global.set $type-comparison-depth (i32.const 0))
 		(global.set $indirect-type-count (i32.const 0))
 		(global.set $element-count (i32.const 0))
 		(global.set $element-entry-count (i32.const 0))
@@ -32,6 +39,7 @@
 		(global.set $segment-count (i32.const 0))
 		(global.set $data-count (i32.const 0))
 		(global.set $memory-present (i32.const 0))
+		(global.set $memory-type (i32.const 1))
 		(global.set $memory-name (i32.const 0))
 		(global.set $memory-name-length (i32.const 0))
 		(global.set $guest-pages (i32.const 0))
@@ -73,6 +81,28 @@
 			)
 		)
 		(global.set $code-base (i32.wrap_i64 (local.get $base)))
+		(global.set $tag-base (i32.add (global.get $code-base) (i32.const TAG_OFFSET)))
+		(global.set $gc-object-base
+			(i32.add (global.get $code-base) (i32.const GC_OBJECT_OFFSET))
+		)
+		(global.set $heap-type-base
+			(i32.add (global.get $code-base) (i32.const HEAP_TYPE_OFFSET))
+		)
+		(global.set $field-type-base
+			(i32.add (global.get $code-base) (i32.const FIELD_TYPE_OFFSET))
+		)
+		(call $zero-bytes (global.get $heap-type-base) (i32.const 49152))
+		(global.set $local-init-base
+			(i32.add (global.get $code-base) (i32.const LOCAL_INIT_OFFSET))
+		)
+		(global.set $type-comparison-base
+			(i32.add (global.get $code-base) (i32.const TYPE_COMPARISON_OFFSET))
+		)
+		(global.set $reference-type-base
+			(i32.add (global.get $code-base) (i32.const REFERENCE_TYPE_OFFSET))
+		)
+		(global.set $memory-arena (i32.add (global.get $code-base) (i32.const MEMORY_OFFSET)))
+		(call $zero-bytes (global.get $memory-arena) (i32.const 32768))
 		(global.set $frame-base (i32.add (global.get $code-base) (i32.const FRAME_OFFSET)))
 		(global.set $stack-base (i32.add (global.get $code-base) (i32.const STACK_OFFSET)))
 		(global.set $function-base (i32.add (global.get $code-base) (i32.const FUNCTION_OFFSET)))
@@ -127,8 +157,9 @@
 		;; Reset optional descriptor fields when reload reuses an existing arena layout.
 		(call $zero-bytes (global.get $segment-base) (i32.const 6144))
 		(call $zero-bytes (global.get $import-base) (i32.const 32768))
-		(call $zero-bytes (global.get $global-base) (i32.const 10240))
-		(call $zero-bytes (global.get $signature-base) (i32.const 98304))
+		(call $zero-bytes (global.get $global-base) (i32.const 40960))
+		(call $zero-bytes (global.get $segment-base) (i32.const 6144))
+		(call $zero-bytes (global.get $signature-base) (i32.const 974848))
 		(i32.const 1)
 	)
 

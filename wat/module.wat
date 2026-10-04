@@ -20,7 +20,7 @@
 		(i32.and
 			(i32.eq (global.get $kind) (i32.const 3))
 			(i32.and
-				(i32.ne (global.get $len) (i32.const 0))
+				(i32.gt_u (global.get $len) (i32.const 1))
 				(i32.eq (i32.load8_u (global.get $tok)) (i32.const 36))
 			)
 		)
@@ -45,6 +45,70 @@
 			)
 		)
 		(call $integer)
+	)
+
+	;; Read an optional resource address type, defaulting to thirty-two-bit indices.
+	(func $address-type
+		(result i32)
+
+		;; Exact i64 and i32 keywords select a logical address width.
+		(if
+			(i32.and
+				(i32.eq (global.get $kind) (i32.const 3))
+				(i32.eq (global.get $len) (i32.const 3))
+			)
+			(then
+				;; i64 consumes its token and returns the wide scalar type.
+				(if
+					(i32.and
+						(i32.eq (i32.load8_u (global.get $tok)) (i32.const 105))
+						(i32.and
+							(i32.eq (i32.load8_u offset=1 (global.get $tok)) (i32.const 54))
+							(i32.eq (i32.load8_u offset=2 (global.get $tok)) (i32.const 52))
+						)
+					)
+					(then
+						(call $next)
+						(return (i32.const 2))
+					)
+				)
+				;; i32 consumes its token and shares the omitted-type result.
+				(if
+					(i32.and
+						(i32.eq (i32.load8_u (global.get $tok)) (i32.const 105))
+						(i32.and
+							(i32.eq (i32.load8_u offset=1 (global.get $tok)) (i32.const 51))
+							(i32.eq (i32.load8_u offset=2 (global.get $tok)) (i32.const 50))
+						)
+					)
+					(then
+						(call $next)
+					)
+				)
+			)
+		)
+		(i32.const 1)
+	)
+
+	;; Decode an unsigned sixty-four-bit declaration limit or memory offset.
+	(func $index64
+		(result i64)
+
+		;; Unsigned indices reject signed spellings before consuming the literal.
+		(if
+			(i32.or
+				(i32.ne (global.get $kind) (i32.const 3))
+				(i32.or
+					(i32.lt_u (i32.load8_u (global.get $tok)) (i32.const 48))
+					(i32.gt_u (i32.load8_u (global.get $tok)) (i32.const 57))
+				)
+			)
+			(then
+				(call $fail (i32.const 1))
+				(return (i64.const 0))
+			)
+		)
+		(call $integer64)
 	)
 
 	;; Locate a function's 32-byte record.
@@ -242,7 +306,7 @@
 		(local.set $record (call $local-name (local.get $count)))
 		(i32.store (local.get $record) (local.get $p))
 		(i32.store offset=4 (local.get $record) (local.get $n))
-		(i32.store8
+		(i32.store
 			(call $local-type (global.get $current-function) (local.get $count))
 			(local.get $type)
 		)
@@ -593,10 +657,15 @@
 		(local $i i32)
 		(local $record i32)
 
+		(call $resolve-reference-types)
+		(call $validate-heap-types)
 		(call $intern-function-types)
 		(call $resolve-signatures)
+		(call $resolve-tags)
 		(call $resolve-control-signatures)
 		(call $resolve-elements)
+		(call $validate-table-initializers)
+		(call $validate-element-types)
 		(call $resolve-reference-globals)
 		;; End call resolution when all instruction records have been checked.
 		(block $calls-done
@@ -609,7 +678,10 @@
 				;; Direct calls resolve against the completed function namespace.
 				(if
 					(i32.or
-						(i32.eq (i32.load (local.get $record)) (i32.const 36))
+						(i32.or
+							(i32.eq (i32.load (local.get $record)) (i32.const 36))
+							(i32.eq (i32.load (local.get $record)) (i32.const 438))
+						)
 						(i32.eq (i32.load (local.get $record)) (i32.const 195))
 					)
 					(then
@@ -692,4 +764,26 @@
 				(br $functions)
 			)
 		)
+	)
+
+	;; Recognize a numeric index token without consuming it or reading beyond the source.
+	(func $index-token
+		(result i32)
+
+		;; Only nonempty atoms can contain an unsigned index.
+		(if
+			(i32.and
+				(i32.eq (global.get $kind) (i32.const 3))
+				(i32.ne (global.get $len) (i32.const 0))
+			)
+			(then
+				(return
+					(i32.and
+						(i32.ge_u (i32.load8_u (global.get $tok)) (i32.const 48))
+						(i32.le_u (i32.load8_u (global.get $tok)) (i32.const 57))
+					)
+				)
+			)
+		)
+		(i32.const 0)
 	)

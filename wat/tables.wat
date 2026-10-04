@@ -44,6 +44,13 @@
 		(global.set $guest-table-size (i32.load offset=8 (local.get $record)))
 		(global.set $guest-table-max (i32.load offset=12 (local.get $record)))
 		(global.set $guest-table-type (i32.load offset=16 (local.get $record)))
+		(global.set $table-address-type
+			(select
+				(i32.const 2)
+				(i32.const 1)
+				(i32.eq (i32.load offset=24 (local.get $record)) (i32.const 2))
+			)
+		)
 	)
 
 	;; Resolve a table name within its own module namespace.
@@ -183,21 +190,19 @@
 		(local $nested i32)
 		(local $op i32)
 		(local $type i32)
+		(local $closed i32)
 
 		(i32.store offset=4 (local.get $record) (global.get $element-entry-count))
 		;; Legacy func lists contain bare indices; typed lists contain constant expressions.
 		(if (call $is-word (i32.const 6) (i32.const 4))
 			(then
+				(i32.store offset=48 (local.get $record) (i32.const 8))
 				(call $next)
 			)
 			;; An explicit reference type introduces the expression form.
 			(else
 				;; Inline table abbreviations may omit the funcref annotation before expressions.
-				(if
-					(i32.or
-						(call $is-word (i32.const 3845) (i32.const 7))
-						(call $is-word (i32.const 3893) (i32.const 9))
-					)
+				(if (call $reference-type-token)
 					(then
 						(i32.store offset=48 (local.get $record) (call $value-type))
 						(local.set $expression (i32.const 1))
@@ -232,6 +237,7 @@
 				(i32.store offset=8 (local.get $entry) (global.get $tok))
 				(local.set $wrapper (i32.const 0))
 				(local.set $nested (i32.const 0))
+				(local.set $closed (i32.const 0))
 				;; Expressions use a parenthesized ref.func/ref.null/global.get, optionally inside item.
 				(if (local.get $expression)
 					(then
@@ -254,12 +260,6 @@
 						;; Function expressions implicitly declare their target after forward resolution.
 						(if (i32.eq (local.get $op) (i32.const 195))
 							(then
-								;; A function expression must belong to a funcref list.
-								(if (i32.ne (i32.load offset=48 (local.get $record)) (global.get $guest-table-type))
-									(then
-										(call $fail (i32.const 7))
-									)
-								)
 								(call $next)
 								(i32.store (local.get $entry) (call $function-reference))
 								(i32.store offset=4 (local.get $entry) (global.get $immediate-length))
@@ -271,8 +271,12 @@
 									(then
 										(call $next)
 										(local.set $type (call $reference-type))
+										(i32.store offset=4 (local.get $entry) (local.get $type))
 										;; Mixed function/external nulls are invalid constant-expression types.
-										(if (i32.ne (local.get $type) (i32.load offset=48 (local.get $record)))
+										(if
+											(i32.eqz
+												(call $type-compatible (local.get $type) (i32.load offset=48 (local.get $record)))
+											)
 											(then
 												(call $fail (i32.const 7))
 											)
@@ -291,14 +295,71 @@
 											)
 											;; Reject unknown constant operators without consuming following segment syntax.
 											(else
-												(call $fail (i32.const 1))
+												;; Small integer constants use the same raw table-slot encoding as other references.
+												(if (i32.eq (local.get $op) (i32.const 470))
+													(then
+														(call $next)
+														(i32.store
+															(local.get $entry)
+															(i32.sub
+																(i32.wrap_i64
+																	(call $gc-reference-apply
+																		(i32.const 470)
+																		(call $global-initializer (i32.const 1))
+																		(i64.const 0)
+																		(i32.const 0)
+																	)
+																)
+																(i32.const 1)
+															)
+														)
+														(i32.store offset=4 (local.get $entry) (i32.const 21))
+														(i32.store offset=12 (local.get $entry) (i32.const 470))
+													)
+													;; Remaining operators are not valid element constants yet.
+													(else
+														;; Aggregate constructors are folded constant expressions with their own closing delimiter.
+														(if
+															(i32.or
+																(i32.or (i32.eq (local.get $op) (i32.const 473)) (i32.eq (local.get $op) (i32.const 474)))
+																(i32.and
+																	(i32.ge_u (local.get $op) (i32.const 479))
+																	(i32.le_u (local.get $op) (i32.const 481))
+																)
+															)
+															(then
+																(i32.store
+																	(local.get $entry)
+																	(i32.sub
+																		(i32.wrap_i64
+																			(call $gc-constant (local.get $op) (i32.load offset=48 (local.get $record)))
+																		)
+																		(i32.const 1)
+																	)
+																)
+																(i32.store offset=4 (local.get $entry) (i32.load offset=48 (local.get $record)))
+																(i32.store offset=12 (local.get $entry) (i32.const 470))
+																(local.set $closed (i32.const 1))
+															)
+															;; Other operators cannot initialize a constant reference list.
+															(else
+																(call $fail (i32.const 1))
+															)
+														)
+													)
+												)
 											)
 										)
 									)
 								)
 							)
 						)
-						(call $expect (i32.const 2))
+						;; Aggregate constants already consumed their expression delimiter.
+						(if (i32.eqz (local.get $closed))
+							(then
+								(call $expect (i32.const 2))
+							)
+						)
 						;; A nested item has one outer close in addition to its expression close.
 						(if (i32.and (local.get $wrapper) (local.get $nested))
 							(then
@@ -348,7 +409,7 @@
 		(local.set $record (call $element-record (global.get $element-count)))
 		(call $zero-bytes (local.get $record) (i32.const 64))
 		(i32.store offset=12 (local.get $record) (global.get $tok))
-		(i32.store offset=48 (local.get $record) (i32.const 5))
+		(i32.store offset=48 (local.get $record) (i32.const 8))
 		(global.set $element-count (i32.add (global.get $element-count) (i32.const 1)))
 		(local.get $record)
 	)
@@ -396,7 +457,7 @@
 				;; Legacy numeric table targets and parenthesized offsets share the active path.
 				(if
 					(i32.or
-						(i32.eq (global.get $kind) (i32.const 1))
+						(i32.and (i32.eq (global.get $kind) (i32.const 1)) (i32.eqz (call $reference-type-token)))
 						(i32.and
 							(i32.eq (global.get $kind) (i32.const 3))
 							(i32.le_u (i32.sub (i32.load8_u (global.get $tok)) (i32.const 48)) (i32.const 9))
@@ -430,7 +491,10 @@
 							)
 						)
 						(call $segment-target (local.get $record))
-						(i32.store (local.get $record) (call $initializer))
+						(i32.store
+							(local.get $record)
+							(call $initializer (call $table-offset-type (local.get $record)))
+						)
 						(i32.store offset=28 (local.get $record) (global.get $initializer-reference))
 					)
 					;; Passive lists need no table declaration or instantiation bounds.
@@ -484,6 +548,8 @@
 		(local $offset i32)
 		(local $index i32)
 		(local $descriptor i32)
+		(local $minimum i64)
+		(local $maximum i64)
 
 		;; A second table remains outside the supported single-table subset.
 		(if (i32.ge_u (global.get $guest-table-present) (i32.const 32))
@@ -515,12 +581,10 @@
 			)
 		)
 		(call $resource-exports (i32.const 3) (local.get $index))
+		(global.set $table-address-type (call $address-type))
+		(i32.store offset=24 (local.get $descriptor) (global.get $table-address-type))
 		;; Inline elements fix both minimum and maximum to the number of references.
-		(if
-			(i32.or
-				(call $is-word (i32.const 3845) (i32.const 7))
-				(call $is-word (i32.const 3893) (i32.const 9))
-			)
+		(if (call $reference-type-token)
 			(then
 				(global.set $guest-table-type (call $value-type))
 				(call $expect (i32.const 1))
@@ -540,18 +604,59 @@
 			)
 			;; A regular declaration supplies unsigned entry limits followed by funcref.
 			(else
-				(global.set $guest-table-size (call $index))
-				(global.set $guest-table-max (i32.const -1))
-				;; An optional second numeric limit supplies the maximum.
+				(local.set $minimum (call $index64))
+				(local.set $maximum
+					(select
+						(i64.const -1)
+						(i64.const 4294967295)
+						(i32.eq (global.get $table-address-type) (i32.const 2))
+					)
+				)
+				;; A numeric token supplies the optional maximum before the reference type.
 				(if
-					(i32.eqz
-						(i32.or
-							(call $is-word (i32.const 3845) (i32.const 7))
-							(call $is-word (i32.const 3893) (i32.const 9))
+					(i32.and
+						(i32.eq (global.get $kind) (i32.const 3))
+						(i32.and
+							(i32.ge_u (i32.load8_u (global.get $tok)) (i32.const 48))
+							(i32.le_u (i32.load8_u (global.get $tok)) (i32.const 57))
 						)
 					)
 					(then
-						(global.set $guest-table-max (call $index))
+						(local.set $maximum (call $index64))
+						(i32.store offset=48 (local.get $descriptor) (i32.const 1))
+					)
+				)
+				(i64.store offset=32 (local.get $descriptor) (local.get $minimum))
+				(i64.store offset=40 (local.get $descriptor) (local.get $maximum))
+				;; Full-width limits are validated before narrowing to the bounded physical entry arena.
+				(if
+					(i32.or
+						(i64.gt_u (local.get $minimum) (local.get $maximum))
+						(i32.and
+							(i32.eq (global.get $table-address-type) (i32.const 1))
+							(i64.gt_u (local.get $maximum) (i64.const 4294967295))
+						)
+					)
+					(then
+						(call $fail (i32.const 26))
+					)
+				)
+				(global.set $guest-table-size
+					(i32.wrap_i64
+						(select
+							(i64.const 4294967295)
+							(local.get $minimum)
+							(i64.gt_u (local.get $minimum) (i64.const 4294967295))
+						)
+					)
+				)
+				(global.set $guest-table-max
+					(i32.wrap_i64
+						(select
+							(i64.const 4294967295)
+							(local.get $maximum)
+							(i64.gt_u (local.get $maximum) (i64.const 4294967295))
+						)
 					)
 				)
 				(global.set $guest-table-type (call $value-type))
@@ -561,6 +666,31 @@
 						(call $fail (i32.const 7))
 					)
 				)
+			)
+		)
+		;; Explicit table initializers fill all entries with one typed constant reference.
+		(if (i32.eq (global.get $kind) (i32.const 1))
+			(then
+				(i32.store offset=60
+					(local.get $descriptor)
+					(call $parse-table-initializer (global.get $guest-table-type))
+				)
+			)
+		)
+		;; Non-null regular tables require an initializer even when their minimum is zero.
+		(if
+			(i32.and
+				(i32.eqz (global.get $parsing-import))
+				(i32.and
+					(call $reference-nonnull (global.get $guest-table-type))
+					(i32.and
+						(i32.eqz (local.get $record))
+						(i32.eqz (i32.load offset=60 (local.get $descriptor)))
+					)
+				)
+			)
+			(then
+				(call $fail (i32.const 7))
 			)
 		)
 		(i32.store (local.get $descriptor) (global.get $guest-table-name))
@@ -578,7 +708,11 @@
 			)
 		)
 		;; Actual initial storage is bounded even when a larger maximum is declared.
-		(if (i32.gt_u (global.get $guest-table-size) (i32.const 4096))
+		(if
+			(i32.and
+				(i32.eqz (global.get $validation-only))
+				(i32.gt_u (global.get $guest-table-size) (i32.const 4096))
+			)
 			(then
 				(global.set $tok (local.get $offset))
 				(call $fail (i32.const 6))
@@ -614,7 +748,13 @@
 						(i32.store offset=20 (local.get $record) (i32.const 0))
 						(call $use-table (i32.load offset=16 (local.get $record)))
 						;; Element and target table types must agree exactly.
-						(if (i32.ne (i32.load offset=48 (local.get $record)) (global.get $guest-table-type))
+						(if
+							(i32.eqz
+								(call $type-compatible
+									(i32.load offset=48 (local.get $record))
+									(global.get $guest-table-type)
+								)
+							)
 							(then
 								(call $fail (i32.const 7))
 							)
@@ -655,11 +795,73 @@
 		)
 	)
 
+	;; Validate the resolved initializer's concrete type against its declared table type.
+	(func $validate-table-initializers
+		(local $i i32)
+		(local $table i32)
+		(local $entry i32)
+
+		;; Complete after every independent table descriptor.
+		(block $done
+			;; Imported tables have no local initializer.
+			(loop $tables
+				(br_if $done (global.get $error))
+				(br_if $done (i32.eq (local.get $i) (global.get $guest-table-present)))
+				(local.set $table (call $guest-table-record (local.get $i)))
+				(local.set $entry (i32.load offset=60 (local.get $table)))
+				;; Only explicit initializer records require a deferred type check.
+				(if (local.get $entry)
+					(then
+						;; Function references acquire their precise type after function type resolution.
+						(if (i32.eqz (i32.load offset=12 (local.get $entry)))
+							(then
+								;; Each function entry must satisfy the destination table reference type.
+								(if
+									(i32.eqz
+										(call $type-compatible
+											(call $function-reference-type (i32.load (local.get $entry)))
+											(i32.load offset=16 (local.get $table))
+										)
+									)
+									(then
+										(call $fail (i32.const 7))
+									)
+								)
+							)
+						)
+					)
+				)
+				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br $tables)
+			)
+		)
+	)
+
 	;; Return the current table-storage representation of a validated element constant.
 	(func $element-value
 		(param $entry i32)
 		(result i32)
 
+		;; Deferred composite constants are reevaluated after imported globals are bound.
+		(if
+			(i32.and
+				(i32.eq (i32.load offset=12 (local.get $entry)) (i32.const 470))
+				(i32.lt_s (i32.load offset=8 (local.get $entry)) (i32.const 0))
+			)
+			(then
+				(return
+					(i32.sub
+						(i32.wrap_i64
+							(call $initializer-value
+								(i32.load offset=8 (local.get $entry))
+								(i32.load offset=4 (local.get $entry))
+							)
+						)
+						(i32.const 1)
+					)
+				)
+			)
+		)
 		;; Imported immutable globals are read after resource binding and converted from nullable slots.
 		(if (i32.eq (i32.load offset=12 (local.get $entry)) (i32.const 49))
 			(then
@@ -752,11 +954,7 @@
 					(then
 						(i32.store
 							(local.get $record)
-							(i32.wrap_i64
-								(i64.load offset=24
-									(call $global-record (i32.sub (i32.load offset=28 (local.get $record)) (i32.const 1)))
-								)
-							)
+							(i32.wrap_i64 (call $table-initializer-offset (i32.load offset=28 (local.get $record))))
 						)
 					)
 				)
@@ -1129,4 +1327,225 @@
 		)
 		(call $table-fill (local.get $old) (local.get $value) (local.get $delta))
 		(local.get $old)
+	)
+
+	;; Resolve a deferred active offset and reject wide out-of-range offsets before narrowing.
+	(func $table-initializer-offset
+		(param $reference i32)
+		(result i64)
+		(local $value i64)
+
+		(local.set $value
+			(call $initializer-value (local.get $reference) (global.get $table-address-type))
+		)
+		;; Every actual table fits the physical entry arena; larger logical offsets cannot initialize it.
+		(if (i64.gt_u (local.get $value) (i64.const 4294967295))
+			(then
+				(call $fail (i32.const 27))
+			)
+		)
+		(local.get $value)
+	)
+
+	;; Resolve an already declared segment table safely before choosing its constant-offset width.
+	(func $table-offset-type
+		(param $record i32)
+		(result i32)
+		(local $index i32)
+
+		(local.set $index (i32.load offset=16 (local.get $record)))
+		;; Source-backed names are looked up before any descriptor address is formed.
+		(if (i32.load offset=20 (local.get $record))
+			(then
+				(local.set $index
+					(call $find-table (local.get $index) (i32.load offset=20 (local.get $record)))
+				)
+			)
+		)
+		;; A forward target retains the default width until full namespace validation.
+		(if (i32.ge_u (local.get $index) (global.get $guest-table-present))
+			(then
+				(return (i32.const 1))
+			)
+		)
+		(select
+			(i32.const 2)
+			(i32.const 1)
+			(i32.eq (i32.load offset=24 (call $guest-table-record (local.get $index))) (i32.const 2))
+		)
+	)
+
+	;; Parse one table reference initializer into the shared deferred element-entry representation.
+	(func $parse-table-initializer
+		(param $type i32)
+		(result i32)
+		(local $entry i32)
+		(local $source i32)
+		(local $value i64)
+
+		;; Initializer entries share the bounded element-entry arena.
+		(if (i32.ge_u (global.get $element-entry-count) (i32.const 4096))
+			(then
+				(call $fail (i32.const 6))
+				(return (i32.const 0))
+			)
+		)
+		(local.set $source (global.get $tok))
+		(local.set $value (call $global-initializer (local.get $type)))
+		;; Table initializers can read imported globals; local global definitions are outside their constant context.
+		(if (i32.gt_s (global.get $initializer-reference) (i32.const 0))
+			(then
+				;; Reject a local global before publishing a bound table initializer.
+				(if
+					(i32.eqz
+						(i32.load offset=36
+							(call $global-record (i32.sub (global.get $initializer-reference) (i32.const 1)))
+						)
+					)
+					(then
+						(call $fail (i32.const 10))
+					)
+				)
+			)
+		)
+		(local.set $entry
+			(i32.add
+				(global.get $element-entry-base)
+				(i32.mul (global.get $element-entry-count) (i32.const 16))
+			)
+		)
+		(call $zero-bytes (local.get $entry) (i32.const 16))
+		(i32.store offset=8 (local.get $entry) (local.get $source))
+		;; Function names and indices resolve after parsing every declaration.
+		(if (global.get $initializer-function-present)
+			(then
+				(i32.store (local.get $entry) (global.get $initializer-function))
+				(i32.store offset=4 (local.get $entry) (global.get $initializer-function-length))
+			)
+			;; Nulls and global reads retain their separate persistent entry representation.
+			(else
+				;; Global reads evaluate after the host installs imported values.
+				(if (i32.gt_s (global.get $initializer-reference) (i32.const 0))
+					(then
+						(i32.store (local.get $entry) (i32.sub (global.get $initializer-reference) (i32.const 1)))
+						(i32.store offset=12 (local.get $entry) (i32.const 49))
+					)
+					;; Null table entries use the -1 sentinel.
+					(else
+						(i32.store (local.get $entry) (i32.sub (i32.wrap_i64 (local.get $value)) (i32.const 1)))
+						(i32.store offset=4 (local.get $entry) (local.get $type))
+						(i32.store offset=8 (local.get $entry) (global.get $initializer-reference))
+						(i32.store offset=12 (local.get $entry) (i32.const 470))
+					)
+				)
+			)
+		)
+		(global.set $element-entry-count
+			(i32.add (global.get $element-entry-count) (i32.const 1))
+		)
+		(local.get $entry)
+	)
+
+	;; Fill locally initialized tables after immutable globals have received their bound values.
+	(func $apply-table-initializers
+		(local $i i32)
+		(local $j i32)
+		(local $record i32)
+		(local $entry i32)
+		(local $value i32)
+
+		;; Finish after each table has been initialized.
+		(block $done
+			;; Explicit initializers precede active element segments.
+			(loop $tables
+				(br_if $done (global.get $error))
+				(br_if $done (i32.eq (local.get $i) (global.get $guest-table-present)))
+				(local.set $record (call $guest-table-record (local.get $i)))
+				(local.set $entry (i32.load offset=60 (local.get $record)))
+				;; Imported and default-initialized tables need no additional fill.
+				(if (local.get $entry)
+					(then
+						(call $use-table (local.get $i))
+						(local.set $value (call $element-value (local.get $entry)))
+						(local.set $j (i32.const 0))
+						;; Fill exactly the declared initial entries with the resolved reference value.
+						(block $filled
+							;; Persistent table storage encodes null as -1 and functions by their index.
+							(loop $entries
+								(br_if $filled (i32.eq (local.get $j) (global.get $guest-table-size)))
+								(i32.store
+									(i32.add (global.get $guest-table-base) (i32.mul (local.get $j) (i32.const 4)))
+									(local.get $value)
+								)
+								(local.set $j (i32.add (local.get $j) (i32.const 1)))
+								(br $entries)
+							)
+						)
+					)
+				)
+				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br $tables)
+			)
+		)
+	)
+
+	;; Check every resolved element expression against its declared segment reference type.
+	(func $validate-element-types
+		(local $i i32)
+		(local $j i32)
+		(local $record i32)
+		(local $entry i32)
+		(local $type i32)
+
+		;; Finish after all segment descriptors have been checked.
+		(block $done
+			;; Segment types also constrain passive and declarative element expressions.
+			(loop $segments
+				(br_if $done (global.get $error))
+				(br_if $done (i32.eq (local.get $i) (global.get $element-count)))
+				(local.set $record (call $element-record (local.get $i)))
+				(local.set $j (i32.const 0))
+				;; Complete each ordered initializer list before moving to its next segment.
+				(block $entries-done
+					;; Function, null and immutable-global entries retain their own concrete result type.
+					(loop $entries
+						(br_if $entries-done (global.get $error))
+						(br_if $entries-done (i32.eq (local.get $j) (i32.load offset=8 (local.get $record))))
+						(local.set $entry
+							(i32.add
+								(global.get $element-entry-base)
+								(i32.mul (i32.add (i32.load offset=4 (local.get $record)) (local.get $j)) (i32.const 16))
+							)
+						)
+						(local.set $type (i32.load offset=4 (local.get $entry)))
+						;; Function expressions are non-null and have a precise declared function type.
+						(if (i32.eqz (i32.load offset=12 (local.get $entry)))
+							(then
+								(local.set $type (call $function-reference-type (i32.load (local.get $entry))))
+							)
+						)
+						;; Global expressions retain the immutable global's complete reference type.
+						(if (i32.eq (i32.load offset=12 (local.get $entry)) (i32.const 49))
+							(then
+								(local.set $type (i32.load offset=12 (call $global-record (i32.load (local.get $entry)))))
+							)
+						)
+						;; Each initializer result must be a subtype of the declared element type.
+						(if
+							(i32.eqz
+								(call $type-compatible (local.get $type) (i32.load offset=48 (local.get $record)))
+							)
+							(then
+								(global.set $tok (i32.load offset=8 (local.get $entry)))
+								(call $fail (i32.const 7))
+							)
+						)
+						(local.set $j (i32.add (local.get $j) (i32.const 1)))
+						(br $entries)
+					)
+				)
+				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br $segments)
+			)
+		)
 	)

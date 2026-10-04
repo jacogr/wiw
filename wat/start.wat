@@ -113,6 +113,7 @@
 				(call $initialize-global-references)
 				;; Bound resources and functions remain alive after a later segment traps.
 				(global.set $segments-ready (i32.const 1))
+				(call $apply-table-initializers)
 				(call $apply-elements)
 				;; A failed table initializer prevents subsequent memory writes.
 				(if (i32.eqz (global.get $error))

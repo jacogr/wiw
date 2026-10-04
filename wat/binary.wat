@@ -9,6 +9,9 @@
 	(global $bin-data-declared (mut i32) (i32.const -1))
 	(global $bin-data-actual (mut i32) (i32.const 0))
 	(global $bin-data-used (mut i32) (i32.const 0))
+	(global $bin-type-count (mut i32) (i32.const 0))
+	(global $bin-type-map (mut i32) (i32.const 0))
+	(global $bin-constant-base (mut i32) (i32.const 0))
 	(global $bin-function-map (mut i32) (i32.const 0))
 	(data (i32.const 3877) "0123456789abcdef")
 	;; Read one byte without crossing the current section or function-body boundary.
@@ -474,6 +477,34 @@
 				(return)
 			)
 		)
+		;; Compact abstract heap bytes denote nullable reference types.
+		(if
+			(i32.and
+				(i32.ge_u (local.get $byte) (i32.const 105))
+				(i32.le_u (local.get $byte) (i32.const 116))
+			)
+			(then
+				(call $binary-explicit-reference
+					(i32.const 99)
+					(i64.extend_i32_s (i32.sub (local.get $byte) (i32.const 128)))
+				)
+				(return)
+			)
+		)
+		;; Explicit reference types retain a signed heap type and their nullability prefix.
+		(if
+			(i32.or
+				(i32.eq (local.get $byte) (i32.const 99))
+				(i32.eq (local.get $byte) (i32.const 100))
+			)
+			(then
+				(call $binary-explicit-reference
+					(local.get $byte)
+					(call $binary-leb (i32.const 33) (i32.const 1))
+				)
+				(return)
+			)
+		)
 		(call $fail (i32.const 1))
 	)
 
@@ -530,21 +561,51 @@
 
 	;; Decode MVP resource limits, rejecting unsupported flag bytes before reading either bound.
 	(func $binary-limits
+		(param $memory i32)
 		(local $flag i32)
 
 		(local.set $flag (call $binary-read))
-		;; MVP limits have only zero or one as their flag byte.
-		(if (i32.gt_u (local.get $flag) (i32.const 1))
+		;; Limits accept an optional maximum and the sixty-four-bit address flag.
+		(if (i32.ne (i32.and (local.get $flag) (i32.const -6)) (i32.const 0))
 			(then
 				(call $fail (i32.const 1))
 				(return)
 			)
 		)
-		(call $binary-index)
-		;; Flag one supplies an explicit maximum after the minimum.
-		(if (local.get $flag)
+		;; Wide limit flags emit their explicit logical address type before the limits.
+		(if (i32.and (local.get $flag) (i32.const 4))
 			(then
-				(call $binary-index)
+				(call $binary-byte (i32.const 105))
+				(call $binary-byte (i32.const 54))
+				(call $binary-byte (i32.const 52))
+				(call $binary-byte (i32.const 32))
+			)
+		)
+		;; Memory memargs later decode offsets using the declared logical address width.
+		(if (local.get $memory)
+			(then
+				(global.set $bin-memory-type
+					(select (i32.const 2) (i32.const 1) (i32.and (local.get $flag) (i32.const 4)))
+				)
+			)
+		)
+		(call $binary-hex
+			(call $binary-leb
+				(select (i32.const 64) (i32.const 32) (i32.and (local.get $flag) (i32.const 4)))
+				(i32.const 0)
+			)
+		)
+		(call $binary-byte (i32.const 32))
+		;; Flag one supplies an explicit maximum after the minimum.
+		(if (i32.and (local.get $flag) (i32.const 1))
+			(then
+				(call $binary-hex
+					(call $binary-leb
+						(select (i32.const 64) (i32.const 32) (i32.and (local.get $flag) (i32.const 4)))
+						(i32.const 0)
+					)
+				)
+				(call $binary-byte (i32.const 32))
 			)
 		)
 	)
@@ -553,9 +614,12 @@
 	(func $binary-global-type
 		(local $position i32)
 		(local $mut i32)
+		(local $used i32)
 
 		(local.set $position (global.get $bin-pos))
-		(drop (call $binary-read))
+		(local.set $used (global.get $bin-used))
+		(call $binary-value-type)
+		(global.set $bin-used (local.get $used))
 		(local.set $mut (call $binary-read))
 		;; Mutability is a byte enum, not a LEB integer.
 		(if (i32.gt_u (local.get $mut) (i32.const 1))
@@ -581,47 +645,214 @@
 		)
 	)
 
-	;; Decode a single MVP constant expression and its mandatory end byte.
+	;; Reverse a bounded output span to rotate stack operands into folded constant syntax.
+	(func $binary-reverse
+		(param $begin i32)
+		(param $end i32)
+		(local $a i32)
+		(local $b i32)
+
+		;; Empty and singleton spans already have their final order.
+		(block $done
+			;; Swap each outside pair exactly once.
+			(loop $bytes
+				(br_if $done (i32.ge_u (local.get $begin) (local.get $end)))
+				(local.set $end (i32.sub (local.get $end) (i32.const 1)))
+				(local.set $a (i32.add (global.get $bin-out) (local.get $begin)))
+				(local.set $b (i32.load8_u (i32.add (global.get $bin-out) (local.get $end))))
+				(i32.store8 (i32.add (global.get $bin-out) (local.get $end)) (i32.load8_u (local.get $a)))
+				(i32.store8 (local.get $a) (local.get $b))
+				(local.set $begin (i32.add (local.get $begin) (i32.const 1)))
+				(br $bytes)
+			)
+		)
+	)
+
+	;; Decode the stack form of a constant expression into equivalent folded initializer syntax.
 	(func $binary-initializer
 		(local $byte i32)
+		(local $arity i32)
+		(local $depth i32)
+		(local $start i32)
+		(local $args i32)
+		(local $position i32)
+		(local $type i32)
 
-		(local.set $byte (call $binary-read))
-		;; SIMD constant expressions retain the prefixed wire opcode for common decoding.
-		(if (i32.eq (local.get $byte) (i32.const 253))
-			(then
-				(local.set $byte (i32.add (i32.const 512) (call $binary-u32)))
-			)
-		)
-		;; Initializers contain only scalar constants or imported-global reads.
-		(if
-			(i32.eqz
-				(i32.or
-					(i32.or
-						(i32.or
-							(i32.eq (local.get $byte) (i32.const 35))
-							(i32.eq (local.get $byte) (i32.const 524))
-						)
-						(i32.or
-							(i32.eq (local.get $byte) (i32.const 208))
-							(i32.eq (local.get $byte) (i32.const 210))
-						)
-					)
-					(i32.and
-						(i32.ge_u (local.get $byte) (i32.const 65))
-						(i32.le_u (local.get $byte) (i32.const 68))
+		;; End terminates the expression after all operands have been consumed.
+		(block $done
+			;; Every permitted constant instruction leaves one folded expression on the temporary stack.
+			(loop $constants
+				(br_if $done (global.get $error))
+				(local.set $byte (call $binary-read))
+				(br_if $done (i32.eq (local.get $byte) (i32.const 11)))
+				;; SIMD constants and GC constructors use independent prefixed wire namespaces.
+				(if (i32.eq (local.get $byte) (i32.const 253))
+					(then
+						(local.set $byte (i32.add (i32.const 512) (call $binary-u32)))
 					)
 				)
-			)
-			(then
-				(call $fail (i32.const 1))
-				(return)
+				;; GC constants retain their ordinary instruction decoder and validator.
+				(if (i32.eq (local.get $byte) (i32.const 251))
+					(then
+						(local.set $byte (i32.add (i32.const 1024) (call $binary-u32)))
+					)
+				)
+				(local.set $arity (i32.const -1))
+				;; Literal constants and immutable-global reads need no stack operands.
+				(if
+					(i32.or
+						(i32.and
+							(i32.ge_u (local.get $byte) (i32.const 65))
+							(i32.le_u (local.get $byte) (i32.const 68))
+						)
+						(i32.or
+							(i32.eq (local.get $byte) (i32.const 35))
+							(i32.or
+								(i32.eq (local.get $byte) (i32.const 208))
+								(i32.or
+									(i32.eq (local.get $byte) (i32.const 210))
+									(i32.eq (local.get $byte) (i32.const 524))
+								)
+							)
+						)
+					)
+					(then
+						(local.set $arity (i32.const 0))
+					)
+				)
+				;; Extended integer arithmetic consumes its two preceding expressions.
+				(if
+					(i32.or
+						(i32.and
+							(i32.ge_u (local.get $byte) (i32.const 106))
+							(i32.le_u (local.get $byte) (i32.const 108))
+						)
+						(i32.and
+							(i32.ge_u (local.get $byte) (i32.const 124))
+							(i32.le_u (local.get $byte) (i32.const 126))
+						)
+					)
+					(then
+						(local.set $arity (i32.const 2))
+					)
+				)
+				;; Aggregate constructors derive their operand count from their type or immediate count.
+				(if
+					(i32.or
+						(i32.and
+							(i32.ge_u (local.get $byte) (i32.const 1024))
+							(i32.le_u (local.get $byte) (i32.const 1025))
+						)
+						(i32.and
+							(i32.ge_u (local.get $byte) (i32.const 1030))
+							(i32.le_u (local.get $byte) (i32.const 1032))
+						)
+					)
+					(then
+						(local.set $position (global.get $bin-pos))
+						(local.set $type (call $binary-u32))
+						;; A referenced type must lie within the expanded type vector.
+						(if (i32.ge_u (local.get $type) (global.get $bin-type-count))
+							(then
+								(call $fail (i32.const 4))
+								(br $done)
+							)
+						)
+						(local.set $arity (i32.const 0))
+						;; Struct construction uses every declared field in order.
+						(if (i32.eq (local.get $byte) (i32.const 1024))
+							(then
+								(local.set $arity
+									(i32.load (i32.add (global.get $bin-type-map) (i32.mul (local.get $type) (i32.const 4))))
+								)
+							)
+						)
+						;; Repeated array construction consumes a value and a length.
+						(if (i32.eq (local.get $byte) (i32.const 1030))
+							(then
+								(local.set $arity (i32.const 2))
+							)
+						)
+						;; Default array construction consumes only its length.
+						(if (i32.eq (local.get $byte) (i32.const 1031))
+							(then
+								(local.set $arity (i32.const 1))
+							)
+						)
+						;; Fixed array construction names its exact operand count.
+						(if (i32.eq (local.get $byte) (i32.const 1032))
+							(then
+								(local.set $arity (call $binary-u32))
+							)
+						)
+						(global.set $bin-pos (local.get $position))
+					)
+				)
+				;; Conversions and i31 construction consume one reference or integer expression.
+				(if
+					(i32.and
+						(i32.ge_u (local.get $byte) (i32.const 1050))
+						(i32.le_u (local.get $byte) (i32.const 1052))
+					)
+					(then
+						(local.set $arity (i32.const 1))
+					)
+				)
+				;; Unsupported initializer instructions remain malformed rather than executable guest code.
+				(if (i32.eq (local.get $arity) (i32.const -1))
+					(then
+						(call $fail (i32.const 1))
+						(br $done)
+					)
+				)
+				;; The initializer stack must provide every required operand.
+				(if (i32.gt_u (local.get $arity) (local.get $depth))
+					(then
+						(call $fail (i32.const 7))
+						(br $done)
+					)
+				)
+				(local.set $start (global.get $bin-used))
+				(call $binary-byte (i32.const 40))
+				(drop (call $binary-opname (local.get $byte)))
+				(call $binary-immediate (local.get $byte))
+				(local.set $depth (i32.sub (local.get $depth) (local.get $arity)))
+				(local.set $args (local.get $start))
+				;; Move the operator before its operands while retaining their original left-to-right order.
+				(if (local.get $arity)
+					(then
+						(local.set $args
+							(i32.load
+								(i32.add (global.get $bin-constant-base) (i32.mul (local.get $depth) (i32.const 4)))
+							)
+						)
+						(call $binary-reverse (local.get $args) (local.get $start))
+						(call $binary-reverse (local.get $start) (global.get $bin-used))
+						(call $binary-reverse (local.get $args) (global.get $bin-used))
+					)
+				)
+				(call $binary-close)
+				;; The bounded temporary constant stack cannot overwrite decoder scratch metadata.
+				(if (i32.ge_u (local.get $depth) (i32.const 256))
+					(then
+						(call $fail (i32.const 6))
+						(br $done)
+					)
+				)
+				(i32.store
+					(i32.add (global.get $bin-constant-base) (i32.mul (local.get $depth) (i32.const 4)))
+					(local.get $args)
+				)
+				(local.set $depth (i32.add (local.get $depth) (i32.const 1)))
+				(br $constants)
 			)
 		)
-		(call $binary-byte (i32.const 40))
-		(drop (call $binary-opname (local.get $byte)))
-		(call $binary-immediate (local.get $byte))
-		(call $binary-close)
-		(call $binary-expect (i32.const 11))
+		;; A well-typed constant expression produces exactly one value.
+		(if (i32.ne (local.get $depth) (i32.const 1))
+			(then
+				(call $fail (i32.const 7))
+			)
+		)
 	)
 
 	;; Decode instruction immediates into the ordinary WAT syntax consumed by the interpreter.
@@ -633,6 +864,133 @@
 		(local $type i32)
 		(local $wide i64)
 
+		;; Aggregate instructions carry one type index and, for selected forms, a second field or segment index.
+		(if
+			(i32.and
+				(i32.ge_u (local.get $byte) (i32.const 1024))
+				(i32.le_u (local.get $byte) (i32.const 1043))
+			)
+			(then
+				;; Array length has no immediate type or index.
+				(if (i32.ne (local.get $byte) (i32.const 1039))
+					(then
+						(call $binary-index)
+					)
+				)
+				;; Fields, fixed sizes, segment constructors, copies and segment initializers carry another index.
+				(if
+					(i32.or
+						(i32.and
+							(i32.ge_u (local.get $byte) (i32.const 1026))
+							(i32.le_u (local.get $byte) (i32.const 1029))
+						)
+						(i32.or
+							(i32.and
+								(i32.ge_u (local.get $byte) (i32.const 1032))
+								(i32.le_u (local.get $byte) (i32.const 1034))
+							)
+							(i32.ge_u (local.get $byte) (i32.const 1041))
+						)
+					)
+					(then
+						(call $binary-index)
+					)
+				)
+				(return)
+			)
+		)
+		;; Cast branches encode a label and two heap types with separate nullability bits.
+		(if
+			(i32.or
+				(i32.eq (local.get $byte) (i32.const 1048))
+				(i32.eq (local.get $byte) (i32.const 1049))
+			)
+			(then
+				(local.set $alignment (call $binary-read))
+				;; Reserved cast flag bits are malformed.
+				(if (i32.gt_u (local.get $alignment) (i32.const 3))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				(call $binary-index)
+				(call $binary-explicit-reference
+					(select (i32.const 99) (i32.const 100) (i32.and (local.get $alignment) (i32.const 1)))
+					(call $binary-leb (i32.const 33) (i32.const 1))
+				)
+				(call $binary-explicit-reference
+					(select (i32.const 99) (i32.const 100) (i32.and (local.get $alignment) (i32.const 2)))
+					(call $binary-leb (i32.const 33) (i32.const 1))
+				)
+				(return)
+			)
+		)
+		;; Throw selects one tag in the module's independent tag namespace.
+		(if (i32.eq (local.get $byte) (i32.const 8))
+			(then
+				(call $binary-index)
+				(return)
+			)
+		)
+		;; Try tables use the ordinary block signature followed by a counted ordered catch vector.
+		(if (i32.eq (local.get $byte) (i32.const 31))
+			(then
+				(call $binary-immediate (i32.const 2))
+				(local.set $count (call $binary-u32))
+				;; Stop after the complete vector or the first malformed catch.
+				(block $done
+					;; Catch encodings distinguish typed payloads and catch-all references.
+					(loop $catches
+						(br_if $done (global.get $error))
+						(br_if $done (i32.eq (local.get $i) (local.get $count)))
+						(local.set $type (call $binary-read))
+						;; Only the four core catch forms are valid.
+						(if (i32.gt_u (local.get $type) (i32.const 3))
+							(then
+								(call $fail (i32.const 1))
+								(br $done)
+							)
+						)
+						(call $binary-byte (i32.const 40))
+						;; Typed catches distinguish whether the reference accompanies their payload.
+						(if (i32.lt_u (local.get $type) (i32.const 2))
+							(then
+								;; The reference variant includes the exception object.
+								(if (local.get $type)
+									(then
+										(call $binary-word-catch_ref)
+									)
+									;; The ordinary typed catch receives the payload without its exception reference.
+									(else
+										(call $binary-word-catch)
+									)
+								)
+								(call $binary-index)
+							)
+							;; Catch-all handlers receive only their optional exception reference.
+							(else
+								;; The catch-all reference variant additionally forwards the exception object.
+								(if (i32.eq (local.get $type) (i32.const 3))
+									(then
+										(call $binary-word-catch_all_ref)
+									)
+									;; An ordinary catch-all forwards no payload or reference.
+									(else
+										(call $binary-word-catch_all)
+									)
+								)
+							)
+						)
+						(call $binary-index)
+						(call $binary-close)
+						(local.set $i (i32.add (local.get $i) (i32.const 1)))
+						(br $catches)
+					)
+				)
+				(return)
+			)
+		)
 		;; Decode the 1 byte lane indices for SIMD opcode 544.
 		(if (i32.eq (local.get $byte) (i32.const 544))
 			(then
@@ -832,6 +1190,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 512))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -841,7 +1213,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -853,6 +1226,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 513))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -862,7 +1249,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -874,6 +1262,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 514))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -883,7 +1285,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -895,6 +1298,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 515))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -904,7 +1321,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -916,6 +1334,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 516))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -925,7 +1357,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -937,6 +1370,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 517))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -946,7 +1393,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -958,6 +1406,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 518))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -967,7 +1429,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -979,6 +1442,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 519))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -988,7 +1465,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1000,6 +1478,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 520))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1009,7 +1501,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1021,6 +1514,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 521))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1030,7 +1537,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1042,6 +1550,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 522))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1051,7 +1573,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1063,6 +1586,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 523))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1072,7 +1609,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1084,6 +1622,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 604))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1093,7 +1645,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1105,6 +1658,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 605))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1114,7 +1681,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1126,6 +1694,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 596))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1135,7 +1717,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1149,6 +1732,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 597))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1158,7 +1755,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1172,6 +1770,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 598))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1181,7 +1793,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1195,6 +1808,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 599))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1204,7 +1831,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1218,6 +1846,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 600))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1227,7 +1869,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1241,6 +1884,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 601))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1250,7 +1907,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1264,6 +1922,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 602))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1273,7 +1945,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1287,6 +1960,20 @@
 		(if (i32.eq (local.get $byte) (i32.const 603))
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1296,7 +1983,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1341,29 +2029,37 @@
 				(return)
 			)
 		)
-		;; Null heap types are the func/extern reference bytes used by the pinned grammar.
-		(if (i32.eq (local.get $byte) (i32.const 208))
+		;; Reference tests and casts carry a signed heap type with opcode-selected nullability.
+		(if
+			(i32.and
+				(i32.ge_u (local.get $byte) (i32.const 1044))
+				(i32.le_u (local.get $byte) (i32.const 1047))
+			)
 			(then
-				(local.set $type (call $binary-read))
-				;; Function nulls render the heap spelling, rather than the funcref value spelling.
-				(if (i32.eq (local.get $type) (i32.const 112))
+				(call $binary-byte (i32.const 40))
+				(call $binary-byte (i32.const 114))
+				(call $binary-byte (i32.const 101))
+				(call $binary-byte (i32.const 102))
+				(call $binary-byte (i32.const 32))
+				;; The odd variant accepts null references.
+				(if (i32.and (local.get $byte) (i32.const 1))
 					(then
-						(call $binary-copy (i32.const 6) (i32.const 4))
-					)
-					;; External nulls render extern; other bytes are malformed heap types.
-					(else
-						;; Only the second supported heap enum may enter reference validation.
-						(if (i32.eq (local.get $type) (i32.const 111))
-							(then
-								(call $binary-copy (i32.const 3902) (i32.const 6))
-							)
-							;; Invalid heap bytes never become an untyped null.
-							(else
-								(call $fail (i32.const 1))
-							)
-						)
+						(call $binary-byte (i32.const 110))
+						(call $binary-byte (i32.const 117))
+						(call $binary-byte (i32.const 108))
+						(call $binary-byte (i32.const 108))
+						(call $binary-byte (i32.const 32))
 					)
 				)
+				(call $binary-heap-type (call $binary-leb (i32.const 33) (i32.const 1)))
+				(call $binary-close)
+				(return)
+			)
+		)
+		;; Null reference immediates carry signed heap types, including declared function type indices.
+		(if (i32.eq (local.get $byte) (i32.const 208))
+			(then
+				(call $binary-heap-type (call $binary-leb (i32.const 33) (i32.const 1)))
 				(return)
 			)
 		)
@@ -1391,18 +2087,15 @@
 			)
 			(then
 				(global.set $bin-data-used (i32.const 1))
-				(call $binary-index)
-				;; memory.init additionally carries a checked default-memory index.
+				(local.set $count (call $binary-u32))
+				;; Initialization text places its optional memory selector before the required data target.
 				(if (i32.eq (local.get $byte) (i32.const 264))
 					(then
-						;; Nonzero memory indices cannot select an absent second memory.
-						(if (call $binary-u32)
-							(then
-								(call $fail (i32.const 10))
-							)
-						)
+						(call $binary-index)
 					)
 				)
+				(call $binary-hex (i64.extend_i32_u (local.get $count)))
+				(call $binary-byte (i32.const 32))
 				(return)
 			)
 		)
@@ -1441,13 +2134,8 @@
 					;; Nonzero indices are invalid references, and never reach guest execution.
 					(loop $memories
 						(br_if $done (i32.eq (local.get $i) (local.get $count)))
-						;; Check every index after decoding its complete unsigned representation.
-						(if (call $binary-u32)
-							(then
-								(call $fail (i32.const 10))
-								(return)
-							)
-						)
+						;; Each memory index validates later against the completed namespace.
+						(call $binary-index)
 						(local.set $i (i32.add (local.get $i) (i32.const 1)))
 						(br $memories)
 					)
@@ -1470,6 +2158,7 @@
 			(then
 				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 1)))
 				(call $binary-byte (i32.const 32))
+				(call $binary-byte (i32.const 32))
 				(return)
 			)
 		)
@@ -1486,6 +2175,28 @@
 				(return)
 			)
 		)
+		;; Typed reference calls carry one declared function type index.
+		(if
+			(i32.or
+				(i32.eq (local.get $byte) (i32.const 20))
+				(i32.eq (local.get $byte) (i32.const 21))
+			)
+			(then
+				(call $binary-index)
+				(return)
+			)
+		)
+		;; Nullability branch instructions carry one unsigned label depth.
+		(if
+			(i32.or
+				(i32.eq (local.get $byte) (i32.const 213))
+				(i32.eq (local.get $byte) (i32.const 214))
+			)
+			(then
+				(call $binary-index)
+				(return)
+			)
+		)
 		;; Calls, branches, and variable instructions carry one unsigned index.
 		(if
 			(i32.or
@@ -1494,7 +2205,10 @@
 					(i32.eq (local.get $byte) (i32.const 13))
 				)
 				(i32.or
-					(i32.eq (local.get $byte) (i32.const 16))
+					(i32.or
+						(i32.eq (local.get $byte) (i32.const 16))
+						(i32.eq (local.get $byte) (i32.const 18))
+					)
 					(i32.and
 						(i32.ge_u (local.get $byte) (i32.const 32))
 						(i32.le_u (local.get $byte) (i32.const 38))
@@ -1507,7 +2221,11 @@
 			)
 		)
 		;; Indirect calls carry a type index and an unsigned table index.
-		(if (i32.eq (local.get $byte) (i32.const 17))
+		(if
+			(i32.or
+				(i32.eq (local.get $byte) (i32.const 17))
+				(i32.eq (local.get $byte) (i32.const 19))
+			)
 			(then
 				(local.set $count (call $binary-u32))
 				(call $binary-index)
@@ -1544,6 +2262,20 @@
 			)
 			(then
 				(local.set $alignment (call $binary-u32))
+				;; The memarg flag permits one explicit memory selector before the full-width offset.
+				(if (i32.ge_u (local.get $alignment) (i32.const 128))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; Flag bit six distinguishes a memory index from the alignment exponent.
+				(if (i32.and (local.get $alignment) (i32.const 64))
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $alignment (i32.and (local.get $alignment) (i32.const 63)))
 				;; An unrepresentable alignment cannot wrap into a valid smaller alignment.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
@@ -1553,7 +2285,8 @@
 				)
 				(call $binary-copy (i32.const 99) (i32.const 7))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
-				(call $binary-index)
+				(call $binary-hex (call $binary-leb (i32.const 64) (i32.const 0)))
+				(call $binary-byte (i32.const 32))
 				(call $binary-copy (i32.const 106) (i32.const 6))
 				(global.set $bin-used (i32.sub (global.get $bin-used) (i32.const 1)))
 				(call $binary-hex (i64.shl (i64.const 1) (i64.extend_i32_u (local.get $alignment))))
@@ -1561,14 +2294,14 @@
 				(return)
 			)
 		)
-		;; Memory size and growth have one strict zero reserved byte.
+		;; Memory size and growth carry an unsigned memory index.
 		(if
 			(i32.or
 				(i32.eq (local.get $byte) (i32.const 63))
 				(i32.eq (local.get $byte) (i32.const 64))
 			)
 			(then
-				(call $binary-expect (i32.const 0))
+				(call $binary-index)
 				(return)
 			)
 		)
@@ -1595,8 +2328,17 @@
 							(i32.le_u (local.get $type) (i32.const 127))
 						)
 						(i32.or
-							(i32.eq (local.get $type) (i32.const 112))
-							(i32.eq (local.get $type) (i32.const 111))
+							(i32.or
+								(i32.eq (local.get $type) (i32.const 112))
+								(i32.or
+									(i32.eq (local.get $type) (i32.const 99))
+									(i32.eq (local.get $type) (i32.const 100))
+								)
+							)
+							(i32.and
+								(i32.ge_u (local.get $type) (i32.const 105))
+								(i32.le_u (local.get $type) (i32.const 116))
+							)
 						)
 					)
 					(then
@@ -1749,6 +2491,12 @@
 				(br_if $done (global.get $error))
 				(local.set $byte (call $binary-read))
 				(br_if $done (global.get $error))
+				;; GC instructions occupy their own prefixed opcode namespace.
+				(if (i32.eq (local.get $byte) (i32.const 251))
+					(then
+						(local.set $byte (i32.add (i32.const 1024) (call $binary-u32)))
+					)
+				)
 				;; SIMD uses an independent prefixed opcode space, including unsigned padded subopcodes.
 				(if (i32.eq (local.get $byte) (i32.const 253))
 					(then
@@ -1778,9 +2526,12 @@
 				)
 				;; Block, loop, and if introduce another region requiring an end byte.
 				(if
-					(i32.and
-						(i32.ge_u (local.get $byte) (i32.const 2))
-						(i32.le_u (local.get $byte) (i32.const 4))
+					(i32.or
+						(i32.eq (local.get $byte) (i32.const 31))
+						(i32.and
+							(i32.ge_u (local.get $byte) (i32.const 2))
+							(i32.le_u (local.get $byte) (i32.const 4))
+						)
 					)
 					(then
 						(local.set $depth (i32.add (local.get $depth) (i32.const 1)))
@@ -1814,29 +2565,89 @@
 
 	;; Decode a reference table type and its unsigned limits.
 	(func $binary-table-type
+		(param $defined i32)
 		(local $type i32)
+		(local $heap i64)
+		(local $initializer i32)
 
 		(local.set $type (call $binary-read))
-		;; Numeric value types cannot describe table entries.
-		(if
-			(i32.and
-				(i32.ne (local.get $type) (i32.const 112))
-				(i32.ne (local.get $type) (i32.const 111))
-			)
+		;; A defined table can carry an explicit initializer marker before its reference type.
+		(if (i32.eq (local.get $type) (i32.const 64))
 			(then
-				(call $fail (i32.const 1))
-				(return)
+				;; Imports do not permit an initializer marker.
+				(if (i32.eqz (local.get $defined))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				(call $binary-expect (i32.const 0))
+				(local.set $initializer (i32.const 1))
+				(local.set $type (call $binary-read))
 			)
 		)
-		(call $binary-limits)
-		;; Emit the corresponding reference type after the limits.
-		(if (i32.eq (local.get $type) (i32.const 112))
-			(then
-				(call $binary-copy (i32.const 3845) (i32.const 7))
+		;; Explicit reference types include a signed heap type following their prefix.
+		(if
+			(i32.or
+				(i32.eq (local.get $type) (i32.const 99))
+				(i32.eq (local.get $type) (i32.const 100))
 			)
-			;; External tables carry opaque host values using local handles.
+			(then
+				(local.set $heap (call $binary-leb (i32.const 33) (i32.const 1)))
+			)
+			;; Compact function and external reference bytes have no additional heap payload.
 			(else
-				(call $binary-copy (i32.const 3893) (i32.const 9))
+				;; Numeric or unrecognized value types cannot describe table entries.
+				(if
+					(i32.or
+						(i32.lt_u (local.get $type) (i32.const 105))
+						(i32.gt_u (local.get $type) (i32.const 116))
+					)
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+			)
+		)
+		(call $binary-limits (i32.const 0))
+		;; Preserve compact aliases while rendering explicit reference declarations after the limits.
+		(if
+			(i32.or
+				(i32.eq (local.get $type) (i32.const 99))
+				(i32.eq (local.get $type) (i32.const 100))
+			)
+			(then
+				(call $binary-explicit-reference (local.get $type) (local.get $heap))
+			)
+			;; Legacy compact table types keep their established spelling.
+			(else
+				;; Abstract compact references render their explicit nullable heap spelling.
+				(if
+					(i32.and
+						(i32.ne (local.get $type) (i32.const 112))
+						(i32.ne (local.get $type) (i32.const 111))
+					)
+					(then
+						(call $binary-explicit-reference
+							(i32.const 99)
+							(i64.extend_i32_s (i32.sub (local.get $type) (i32.const 128)))
+						)
+					)
+					;; Legacy aliases retain their established text names.
+					(else
+						(call $binary-copy
+							(select (i32.const 3845) (i32.const 3893) (i32.eq (local.get $type) (i32.const 112)))
+							(select (i32.const 7) (i32.const 9) (i32.eq (local.get $type) (i32.const 112)))
+						)
+					)
+				)
+			)
+		)
+		;; Initializer expressions follow the complete table type in the wire format.
+		(if (local.get $initializer)
+			(then
+				(call $binary-initializer)
 			)
 		)
 	)
@@ -1913,49 +2724,10 @@
 			(loop $entries
 				(br_if $done (global.get $error))
 				(br_if $done (i32.eq (local.get $i) (local.get $count)))
-				;; Type entries contain a function marker, a parameter vector, and an MVP result vector.
+				;; Type entries may be singleton subtypes or complete recursive groups.
 				(if (i32.eq (local.get $section) (i32.const 1))
 					(then
-						(call $binary-expect (i32.const 96))
-						(call $binary-open (i32.const 3856) (i32.const 4))
-						(call $binary-open (i32.const 6) (i32.const 4))
-						(call $binary-open (i32.const 64) (i32.const 5))
-						(local.set $n (call $binary-u32))
-						(local.set $j (i32.const 0))
-						;; Copy the complete parameter vector, including an empty vector.
-						(block $params-done
-							;; Every scalar type remains in its original parameter position.
-							(loop $params
-								(br_if $params-done (global.get $error))
-								(br_if $params-done (i32.eq (local.get $j) (local.get $n)))
-								(call $binary-value-type)
-								(local.set $j (i32.add (local.get $j) (i32.const 1)))
-								(br $params)
-							)
-						)
-						(call $binary-close)
-						(local.set $n (call $binary-u32))
-						;; Emit the complete counted result vector in declaration order.
-						(if (local.get $n)
-							(then
-								(call $binary-open (i32.const 17) (i32.const 6))
-								(local.set $j (i32.const 0))
-								;; Finish once every result type has been decoded.
-								(block $results-done
-									;; The parser enforces the interpreter's result capacity after expansion.
-									(loop $results
-										(br_if $results-done (global.get $error))
-										(br_if $results-done (i32.eq (local.get $j) (local.get $n)))
-										(call $binary-value-type)
-										(local.set $j (i32.add (local.get $j) (i32.const 1)))
-										(br $results)
-									)
-								)
-								(call $binary-close)
-							)
-						)
-						(call $binary-close)
-						(call $binary-close)
+						(call $binary-rec-type)
 					)
 				)
 				;; Imports have two strict UTF-8 names and one typed descriptor.
@@ -1979,7 +2751,7 @@
 						(if (i32.eq (local.get $kind) (i32.const 1))
 							(then
 								(call $binary-open (i32.const 3840) (i32.const 5))
-								(call $binary-table-type)
+								(call $binary-table-type (i32.const 0))
 								(call $binary-close)
 							)
 						)
@@ -1987,7 +2759,7 @@
 						(if (i32.eq (local.get $kind) (i32.const 2))
 							(then
 								(call $binary-open (i32.const 80) (i32.const 6))
-								(call $binary-limits)
+								(call $binary-limits (i32.const 1))
 								(call $binary-close)
 							)
 						)
@@ -1999,8 +2771,20 @@
 								(call $binary-close)
 							)
 						)
-						;; No other import kinds exist in the pinned MVP format.
-						(if (i32.gt_u (local.get $kind) (i32.const 3))
+						;; Tag imports carry an attribute byte and their function type use.
+						(if (i32.eq (local.get $kind) (i32.const 4))
+							(then
+								(call $binary-byte (i32.const 40))
+								(call $binary-word-tag)
+								(call $binary-expect (i32.const 0))
+								(call $binary-open (i32.const 3856) (i32.const 4))
+								(call $binary-index)
+								(call $binary-close)
+								(call $binary-close)
+							)
+						)
+						;; Unknown import kinds cannot be interpreted as a valid descriptor.
+						(if (i32.gt_u (local.get $kind) (i32.const 4))
 							(then
 								(call $fail (i32.const 1))
 							)
@@ -2021,7 +2805,7 @@
 				(if (i32.eq (local.get $section) (i32.const 4))
 					(then
 						(call $binary-open (i32.const 3840) (i32.const 5))
-						(call $binary-table-type)
+						(call $binary-table-type (i32.const 1))
 						(call $binary-close)
 					)
 				)
@@ -2029,7 +2813,19 @@
 				(if (i32.eq (local.get $section) (i32.const 5))
 					(then
 						(call $binary-open (i32.const 80) (i32.const 6))
-						(call $binary-limits)
+						(call $binary-limits (i32.const 1))
+						(call $binary-close)
+					)
+				)
+				;; Defined tags encode the exception attribute and a parameter-only function type use.
+				(if (i32.eq (local.get $section) (i32.const 13))
+					(then
+						(call $binary-byte (i32.const 40))
+						(call $binary-word-tag)
+						(call $binary-expect (i32.const 0))
+						(call $binary-open (i32.const 3856) (i32.const 4))
+						(call $binary-index)
+						(call $binary-close)
 						(call $binary-close)
 					)
 				)
@@ -2072,8 +2868,15 @@
 								(call $binary-open (i32.const 86) (i32.const 6))
 							)
 						)
+						;; Tag exports refer to the independent tag index space.
+						(if (i32.eq (local.get $kind) (i32.const 4))
+							(then
+								(call $binary-byte (i32.const 40))
+								(call $binary-word-tag)
+							)
+						)
 						;; Unknown binary kinds cannot fall through to a valid export descriptor.
-						(if (i32.gt_u (local.get $kind) (i32.const 3))
+						(if (i32.gt_u (local.get $kind) (i32.const 4))
 							(then
 								(call $fail (i32.const 1))
 								(br $done)
@@ -2111,13 +2914,9 @@
 						;; Explicit active mode includes one unsigned memory index before the offset.
 						(if (i32.eq (local.get $kind) (i32.const 2))
 							(then
-								;; This target accepts only its sole default memory.
-								(if (call $binary-u32)
-									(then
-										(call $fail (i32.const 10))
-										(br $done)
-									)
-								)
+								(call $binary-open (i32.const 80) (i32.const 6))
+								(call $binary-index)
+								(call $binary-close)
 							)
 						)
 						;; Passive data contributes payload bytes without an offset expression.
@@ -2154,6 +2953,7 @@
 				(return (global.get $error))
 			)
 		)
+		(global.set $bin-memory-type (i32.const 1))
 		(global.set $error (i32.const 0))
 		(global.set $ready (i32.const 0))
 		(global.set $segments-ready (i32.const 0))
@@ -2180,7 +2980,7 @@
 		(if
 			(i32.eqz
 				(call $ensure-bytes
-					(i64.add (i64.extend_i32_u (global.get $bin-out)) (i64.const 1052672))
+					(i64.add (i64.extend_i32_u (global.get $bin-out)) (i64.const 1056768))
 				)
 			)
 			(then
@@ -2189,6 +2989,10 @@
 			)
 		)
 		(global.set $bin-function-map (i32.add (global.get $bin-out) (i32.const 1048576)))
+		(global.set $bin-type-map (i32.add (global.get $bin-function-map) (i32.const 2048)))
+		(global.set $bin-constant-base (i32.add (global.get $bin-type-map) (i32.const 3072)))
+		(global.set $bin-type-count (i32.const 0))
+		(call $zero-bytes (global.get $bin-type-map) (i32.const 3072))
 		(call $binary-expect (i32.const 0))
 		(call $binary-expect (i32.const 97))
 		(call $binary-expect (i32.const 115))
@@ -2207,7 +3011,7 @@
 				(local.set $section (call $binary-read))
 				(local.set $section-end (call $binary-range (call $binary-u32)))
 				;; IDs outside the MVP section set are malformed rather than ignored.
-				(if (i32.gt_u (local.get $section) (i32.const 12))
+				(if (i32.gt_u (local.get $section) (i32.const 13))
 					(then
 						(call $fail (i32.const 1))
 						(br $done)
@@ -2224,6 +3028,18 @@
 								(i32.eq (local.get $section) (i32.const 12))
 							)
 						)
+					)
+				)
+				;; The tag section precedes globals, shifting every later core section by one.
+				(if (i32.ge_u (local.get $priority) (i32.const 6))
+					(then
+						(local.set $priority (i32.add (local.get $priority) (i32.const 1)))
+					)
+				)
+				;; Numeric section thirteen occupies the tag position after memory declarations.
+				(if (i32.eq (local.get $section) (i32.const 13))
+					(then
+						(local.set $priority (i32.const 6))
 					)
 				)
 				;; Custom section zero does not advance the core section-order cursor.
@@ -2341,7 +3157,16 @@
 						(if
 							(i32.and
 								(i32.ne (i32.load8_u (global.get $bin-pos)) (i32.const 112))
-								(i32.ne (i32.load8_u (global.get $bin-pos)) (i32.const 111))
+								(i32.and
+									(i32.or
+										(i32.lt_u (i32.load8_u (global.get $bin-pos)) (i32.const 105))
+										(i32.gt_u (i32.load8_u (global.get $bin-pos)) (i32.const 116))
+									)
+									(i32.and
+										(i32.ne (i32.load8_u (global.get $bin-pos)) (i32.const 99))
+										(i32.ne (i32.load8_u (global.get $bin-pos)) (i32.const 100))
+									)
+								)
 							)
 							(then
 								(call $fail (i32.const 1))
@@ -2385,4 +3210,570 @@
 			)
 		)
 		(call $binary-close)
+	)
+
+	;; Render a signed binary heap type as an abstract keyword or a declared type index.
+	(func $binary-heap-type
+		(param $heap i64)
+
+		;; Nonnegative heap types address the declared type namespace.
+		(if (i64.ge_s (local.get $heap) (i64.const 0))
+			(then
+				(call $binary-hex (local.get $heap))
+				(call $binary-byte (i32.const 32))
+				(return)
+			)
+		)
+		;; Function heap types use the func keyword rather than the funcref value alias.
+		(if (i64.eq (local.get $heap) (i64.const -16))
+			(then
+				(call $binary-copy (i32.const 6) (i32.const 4))
+				(return)
+			)
+		)
+		;; External heap types retain the opaque external reference category.
+		(if (i64.eq (local.get $heap) (i64.const -17))
+			(then
+				(call $binary-copy (i32.const 3902) (i32.const 6))
+				(return)
+			)
+		)
+		;; Render the noexn abstract heap keyword.
+		(if (i64.eq (local.get $heap) (i64.const -12))
+			(then
+				(call $binary-byte (i32.const 110))
+				(call $binary-byte (i32.const 111))
+				(call $binary-byte (i32.const 101))
+				(call $binary-byte (i32.const 120))
+				(call $binary-byte (i32.const 110))
+				(call $binary-byte (i32.const 32))
+				(return)
+			)
+		)
+		;; Render the nofunc abstract heap keyword.
+		(if (i64.eq (local.get $heap) (i64.const -13))
+			(then
+				(call $binary-byte (i32.const 110))
+				(call $binary-byte (i32.const 111))
+				(call $binary-byte (i32.const 102))
+				(call $binary-byte (i32.const 117))
+				(call $binary-byte (i32.const 110))
+				(call $binary-byte (i32.const 99))
+				(call $binary-byte (i32.const 32))
+				(return)
+			)
+		)
+		;; Render the noextern abstract heap keyword.
+		(if (i64.eq (local.get $heap) (i64.const -14))
+			(then
+				(call $binary-byte (i32.const 110))
+				(call $binary-byte (i32.const 111))
+				(call $binary-byte (i32.const 101))
+				(call $binary-byte (i32.const 120))
+				(call $binary-byte (i32.const 116))
+				(call $binary-byte (i32.const 101))
+				(call $binary-byte (i32.const 114))
+				(call $binary-byte (i32.const 110))
+				(call $binary-byte (i32.const 32))
+				(return)
+			)
+		)
+		;; Render the none abstract heap keyword.
+		(if (i64.eq (local.get $heap) (i64.const -15))
+			(then
+				(call $binary-byte (i32.const 110))
+				(call $binary-byte (i32.const 111))
+				(call $binary-byte (i32.const 110))
+				(call $binary-byte (i32.const 101))
+				(call $binary-byte (i32.const 32))
+				(return)
+			)
+		)
+		;; Render the any abstract heap keyword.
+		(if (i64.eq (local.get $heap) (i64.const -18))
+			(then
+				(call $binary-byte (i32.const 97))
+				(call $binary-byte (i32.const 110))
+				(call $binary-byte (i32.const 121))
+				(call $binary-byte (i32.const 32))
+				(return)
+			)
+		)
+		;; Render the eq abstract heap keyword.
+		(if (i64.eq (local.get $heap) (i64.const -19))
+			(then
+				(call $binary-byte (i32.const 101))
+				(call $binary-byte (i32.const 113))
+				(call $binary-byte (i32.const 32))
+				(return)
+			)
+		)
+		;; Render the i31 abstract heap keyword.
+		(if (i64.eq (local.get $heap) (i64.const -20))
+			(then
+				(call $binary-byte (i32.const 105))
+				(call $binary-byte (i32.const 51))
+				(call $binary-byte (i32.const 49))
+				(call $binary-byte (i32.const 32))
+				(return)
+			)
+		)
+		;; Render the struct abstract heap keyword.
+		(if (i64.eq (local.get $heap) (i64.const -21))
+			(then
+				(call $binary-byte (i32.const 115))
+				(call $binary-byte (i32.const 116))
+				(call $binary-byte (i32.const 114))
+				(call $binary-byte (i32.const 117))
+				(call $binary-byte (i32.const 99))
+				(call $binary-byte (i32.const 116))
+				(call $binary-byte (i32.const 32))
+				(return)
+			)
+		)
+		;; Render the array abstract heap keyword.
+		(if (i64.eq (local.get $heap) (i64.const -22))
+			(then
+				(call $binary-byte (i32.const 97))
+				(call $binary-byte (i32.const 114))
+				(call $binary-byte (i32.const 114))
+				(call $binary-byte (i32.const 97))
+				(call $binary-byte (i32.const 121))
+				(call $binary-byte (i32.const 32))
+				(return)
+			)
+		)
+		;; Render the exn abstract heap keyword.
+		(if (i64.eq (local.get $heap) (i64.const -23))
+			(then
+				(call $binary-byte (i32.const 101))
+				(call $binary-byte (i32.const 120))
+				(call $binary-byte (i32.const 110))
+				(call $binary-byte (i32.const 32))
+				(return)
+			)
+		)
+		(call $fail (i32.const 1))
+	)
+
+	;; Emit an explicit nullable or non-null reference type with its signed heap type.
+	(func $binary-explicit-reference
+		(param $prefix i32)
+		(param $heap i64)
+
+		(call $binary-byte (i32.const 40))
+		(call $binary-byte (i32.const 114))
+		(call $binary-byte (i32.const 101))
+		(call $binary-byte (i32.const 102))
+		(call $binary-byte (i32.const 32))
+		;; Nullable reference prefixes include the null keyword before their heap type.
+		(if (i32.eq (local.get $prefix) (i32.const 99))
+			(then
+				(call $binary-byte (i32.const 110))
+				(call $binary-byte (i32.const 117))
+				(call $binary-byte (i32.const 108))
+				(call $binary-byte (i32.const 108))
+				(call $binary-byte (i32.const 32))
+			)
+		)
+		(call $binary-heap-type (local.get $heap))
+		(call $binary-close)
+	)
+
+	;; Emit the struct grammar keyword followed by its token separator.
+	(func $binary-word-struct
+		(call $binary-byte (i32.const 115))
+		(call $binary-byte (i32.const 116))
+		(call $binary-byte (i32.const 114))
+		(call $binary-byte (i32.const 117))
+		(call $binary-byte (i32.const 99))
+		(call $binary-byte (i32.const 116))
+		(call $binary-byte (i32.const 32))
+	)
+
+	;; Emit the array grammar keyword followed by its token separator.
+	(func $binary-word-array
+		(call $binary-byte (i32.const 97))
+		(call $binary-byte (i32.const 114))
+		(call $binary-byte (i32.const 114))
+		(call $binary-byte (i32.const 97))
+		(call $binary-byte (i32.const 121))
+		(call $binary-byte (i32.const 32))
+	)
+
+	;; Emit the rec grammar keyword followed by its token separator.
+	(func $binary-word-rec
+		(call $binary-byte (i32.const 114))
+		(call $binary-byte (i32.const 101))
+		(call $binary-byte (i32.const 99))
+		(call $binary-byte (i32.const 32))
+	)
+
+	;; Emit the sub grammar keyword followed by its token separator.
+	(func $binary-word-sub
+		(call $binary-byte (i32.const 115))
+		(call $binary-byte (i32.const 117))
+		(call $binary-byte (i32.const 98))
+		(call $binary-byte (i32.const 32))
+	)
+
+	;; Emit the final grammar keyword followed by its token separator.
+	(func $binary-word-final
+		(call $binary-byte (i32.const 102))
+		(call $binary-byte (i32.const 105))
+		(call $binary-byte (i32.const 110))
+		(call $binary-byte (i32.const 97))
+		(call $binary-byte (i32.const 108))
+		(call $binary-byte (i32.const 32))
+	)
+
+	;; Emit the field grammar keyword followed by its token separator.
+	(func $binary-word-field
+		(call $binary-byte (i32.const 102))
+		(call $binary-byte (i32.const 105))
+		(call $binary-byte (i32.const 101))
+		(call $binary-byte (i32.const 108))
+		(call $binary-byte (i32.const 100))
+		(call $binary-byte (i32.const 32))
+	)
+
+	;; Emit the tag grammar keyword followed by its token separator.
+	(func $binary-word-tag
+		(call $binary-byte (i32.const 116))
+		(call $binary-byte (i32.const 97))
+		(call $binary-byte (i32.const 103))
+		(call $binary-byte (i32.const 32))
+	)
+
+	;; Emit the catch grammar keyword followed by its token separator.
+	(func $binary-word-catch
+		(call $binary-byte (i32.const 99))
+		(call $binary-byte (i32.const 97))
+		(call $binary-byte (i32.const 116))
+		(call $binary-byte (i32.const 99))
+		(call $binary-byte (i32.const 104))
+		(call $binary-byte (i32.const 32))
+	)
+
+	;; Emit the catch_ref grammar keyword followed by its token separator.
+	(func $binary-word-catch_ref
+		(call $binary-byte (i32.const 99))
+		(call $binary-byte (i32.const 97))
+		(call $binary-byte (i32.const 116))
+		(call $binary-byte (i32.const 99))
+		(call $binary-byte (i32.const 104))
+		(call $binary-byte (i32.const 95))
+		(call $binary-byte (i32.const 114))
+		(call $binary-byte (i32.const 101))
+		(call $binary-byte (i32.const 102))
+		(call $binary-byte (i32.const 32))
+	)
+
+	;; Emit the catch_all grammar keyword followed by its token separator.
+	(func $binary-word-catch_all
+		(call $binary-byte (i32.const 99))
+		(call $binary-byte (i32.const 97))
+		(call $binary-byte (i32.const 116))
+		(call $binary-byte (i32.const 99))
+		(call $binary-byte (i32.const 104))
+		(call $binary-byte (i32.const 95))
+		(call $binary-byte (i32.const 97))
+		(call $binary-byte (i32.const 108))
+		(call $binary-byte (i32.const 108))
+		(call $binary-byte (i32.const 32))
+	)
+
+	;; Emit the catch_all_ref grammar keyword followed by its token separator.
+	(func $binary-word-catch_all_ref
+		(call $binary-byte (i32.const 99))
+		(call $binary-byte (i32.const 97))
+		(call $binary-byte (i32.const 116))
+		(call $binary-byte (i32.const 99))
+		(call $binary-byte (i32.const 104))
+		(call $binary-byte (i32.const 95))
+		(call $binary-byte (i32.const 97))
+		(call $binary-byte (i32.const 108))
+		(call $binary-byte (i32.const 108))
+		(call $binary-byte (i32.const 95))
+		(call $binary-byte (i32.const 114))
+		(call $binary-byte (i32.const 101))
+		(call $binary-byte (i32.const 102))
+		(call $binary-byte (i32.const 32))
+	)
+
+	;; Emit the i8 grammar keyword followed by its token separator.
+	(func $binary-word-i8
+		(call $binary-byte (i32.const 105))
+		(call $binary-byte (i32.const 56))
+		(call $binary-byte (i32.const 32))
+	)
+
+	;; Emit the i16 grammar keyword followed by its token separator.
+	(func $binary-word-i16
+		(call $binary-byte (i32.const 105))
+		(call $binary-byte (i32.const 49))
+		(call $binary-byte (i32.const 54))
+		(call $binary-byte (i32.const 32))
+	)
+
+	;; Emit the mut grammar keyword followed by its token separator.
+	(func $binary-word-mut
+		(call $binary-byte (i32.const 109))
+		(call $binary-byte (i32.const 117))
+		(call $binary-byte (i32.const 116))
+		(call $binary-byte (i32.const 32))
+	)
+
+	;; Decode a packed or ordinary storage type followed by its field mutability.
+	(func $binary-field
+		(local $pos i32)
+		(local $kind i32)
+		(local $mut i32)
+		(local $used i32)
+
+		(local.set $used (global.get $bin-used))
+		(local.set $pos (global.get $bin-pos))
+		(local.set $kind (call $binary-read))
+		;; Packed storage occupies one byte; other storage uses the complete value type grammar.
+		(if
+			(i32.and
+				(i32.ne (local.get $kind) (i32.const 120))
+				(i32.ne (local.get $kind) (i32.const 119))
+			)
+			(then
+				(global.set $bin-pos (local.get $pos))
+				(call $binary-value-type)
+			)
+		)
+		(global.set $bin-used (local.get $used))
+		(local.set $mut (call $binary-read))
+		;; Only the two defined mutability bytes are accepted.
+		(if (i32.gt_u (local.get $mut) (i32.const 1))
+			(then
+				(call $fail (i32.const 1))
+				(return)
+			)
+		)
+		(global.set $bin-pos (local.get $pos))
+		;; Mutable fields wrap their storage type in a mut declaration.
+		(if (local.get $mut)
+			(then
+				(call $binary-byte (i32.const 40))
+				(call $binary-word-mut)
+			)
+		)
+		;; Packed types retain their declared width.
+		(if
+			(i32.or
+				(i32.eq (local.get $kind) (i32.const 120))
+				(i32.eq (local.get $kind) (i32.const 119))
+			)
+			(then
+				(drop (call $binary-read))
+				;; Select the packed width from its wire marker.
+				(if (i32.eq (local.get $kind) (i32.const 120))
+					(then
+						(call $binary-word-i8)
+					)
+					;; The second packed storage marker denotes a sixteen-bit field.
+					(else
+						(call $binary-word-i16)
+					)
+				)
+			)
+			;; Ordinary value types include explicit reference payloads.
+			(else
+				(call $binary-value-type)
+			)
+		)
+		(drop (call $binary-read))
+		;; Complete the mutable storage wrapper.
+		(if (local.get $mut)
+			(then
+				(call $binary-close)
+			)
+		)
+	)
+
+	;; Decode a function, struct, or array composite type and retain constructor arity.
+	(func $binary-composite
+		(param $kind i32)
+		(local $n i32)
+		(local $j i32)
+
+		;; Function types preserve their complete parameter and result vectors.
+		(if (i32.eq (local.get $kind) (i32.const 96))
+			(then
+				(call $binary-open (i32.const 6) (i32.const 4))
+				(call $binary-open (i32.const 64) (i32.const 5))
+				(local.set $n (call $binary-u32))
+				(local.set $j (i32.const 0))
+				;; Copy the complete parameter vector, including an empty vector.
+				(block $params-done
+					;; Every scalar type remains in its original parameter position.
+					(loop $params
+						(br_if $params-done (global.get $error))
+						(br_if $params-done (i32.eq (local.get $j) (local.get $n)))
+						(call $binary-value-type)
+						(local.set $j (i32.add (local.get $j) (i32.const 1)))
+						(br $params)
+					)
+				)
+				(call $binary-close)
+				(local.set $n (call $binary-u32))
+				;; Emit the complete counted result vector in declaration order.
+				(if (local.get $n)
+					(then
+						(call $binary-open (i32.const 17) (i32.const 6))
+						(local.set $j (i32.const 0))
+						;; Finish once every result type has been decoded.
+						(block $results-done
+							;; The parser enforces the interpreter's result capacity after expansion.
+							(loop $results
+								(br_if $results-done (global.get $error))
+								(br_if $results-done (i32.eq (local.get $j) (local.get $n)))
+								(call $binary-value-type)
+								(local.set $j (i32.add (local.get $j) (i32.const 1)))
+								(br $results)
+							)
+						)
+						(call $binary-close)
+					)
+				)
+				(call $binary-close)
+				(return)
+			)
+		)
+		;; A struct stores its counted fields in declaration order.
+		(if (i32.eq (local.get $kind) (i32.const 95))
+			(then
+				(call $binary-byte (i32.const 40))
+				(call $binary-word-struct)
+				(local.set $n (call $binary-u32))
+				(i32.store
+					(i32.add (global.get $bin-type-map) (i32.mul (global.get $bin-type-count) (i32.const 4)))
+					(local.get $n)
+				)
+				;; Finish after the last encoded field.
+				(block $done
+					;; Each field contains exactly one storage type and mutability flag.
+					(loop $fields
+						(br_if $done (global.get $error))
+						(br_if $done (i32.eq (local.get $j) (local.get $n)))
+						(call $binary-byte (i32.const 40))
+						(call $binary-word-field)
+						(call $binary-field)
+						(call $binary-close)
+						(local.set $j (i32.add (local.get $j) (i32.const 1)))
+						(br $fields)
+					)
+				)
+				(call $binary-close)
+				(return)
+			)
+		)
+		;; Arrays contain a single element storage descriptor.
+		(if (i32.eq (local.get $kind) (i32.const 94))
+			(then
+				(call $binary-byte (i32.const 40))
+				(call $binary-word-array)
+				(call $binary-field)
+				(call $binary-close)
+				(return)
+			)
+		)
+		(call $fail (i32.const 1))
+	)
+
+	;; Decode one subtype, including finality and its optional declared supertype.
+	(func $binary-subtype
+		(local $kind i32)
+		(local $n i32)
+		(local $sub i32)
+
+		;; Expanded recursive members have the same bounded type capacity as text declarations.
+		(if (i32.ge_u (global.get $bin-type-count) (i32.const CAP_TYPES))
+			(then
+				(call $fail (i32.const 6))
+				(return)
+			)
+		)
+		(call $binary-open (i32.const 3856) (i32.const 4))
+		(local.set $kind (call $binary-read))
+		;; Explicit subtype markers carry finality and a zero-or-one supertype vector.
+		(if
+			(i32.or
+				(i32.eq (local.get $kind) (i32.const 79))
+				(i32.eq (local.get $kind) (i32.const 80))
+			)
+			(then
+				(local.set $sub (i32.const 1))
+				(call $binary-byte (i32.const 40))
+				(call $binary-word-sub)
+				;; The final marker forbids further declared subtypes.
+				(if (i32.eq (local.get $kind) (i32.const 79))
+					(then
+						(call $binary-word-final)
+					)
+				)
+				(local.set $n (call $binary-u32))
+				;; Multiple inheritance is outside the core type grammar.
+				(if (i32.gt_u (local.get $n) (i32.const 1))
+					(then
+						(call $fail (i32.const 1))
+						(return)
+					)
+				)
+				;; A present supertype uses the expanded type index space.
+				(if (local.get $n)
+					(then
+						(call $binary-index)
+					)
+				)
+				(local.set $kind (call $binary-read))
+			)
+		)
+		(call $binary-composite (local.get $kind))
+		;; Complete the optional subtype wrapper before its enclosing type.
+		(if (local.get $sub)
+			(then
+				(call $binary-close)
+			)
+		)
+		(call $binary-close)
+		(global.set $bin-type-count (i32.add (global.get $bin-type-count) (i32.const 1)))
+	)
+
+	;; Expand a recursive group or a singleton into the common WAT type parser.
+	(func $binary-rec-type
+		(local $kind i32)
+		(local $n i32)
+		(local $i i32)
+
+		(local.set $kind (call $binary-read))
+		;; Recursive groups preserve membership and order for canonical identity.
+		(if (i32.eq (local.get $kind) (i32.const 78))
+			(then
+				(call $binary-byte (i32.const 40))
+				(call $binary-word-rec)
+				(local.set $n (call $binary-u32))
+				;; Decode every group member before closing its shared binder.
+				(block $done
+					;; Expand each member in order until the recursive group is complete.
+					(loop $members
+						(br_if $done (global.get $error))
+						(br_if $done (i32.eq (local.get $i) (local.get $n)))
+						(call $binary-subtype)
+						(local.set $i (i32.add (local.get $i) (i32.const 1)))
+						(br $members)
+					)
+				)
+				(call $binary-close)
+			)
+			;; Ordinary entries are singleton recursive groups.
+			(else
+				(global.set $bin-pos (i32.sub (global.get $bin-pos) (i32.const 1)))
+				(call $binary-subtype)
+			)
+		)
 	)

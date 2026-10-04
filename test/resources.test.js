@@ -193,7 +193,7 @@ for (const binary of ['wiw-opt.wasm']) {
           `(module (memory 1) (func (result i32) i32.const 0 i32.load ${arg}))`),
       '(module (memory 1) (func (result i32) i32.const 0 i32.load8_u align=2))',
       '(module (memory 1) (func (result i32) memory.size $missing))',
-      '(module (memory 1) (func (result i32) i32.const 1 memory.grow 0))',
+      '(module (memory 1) (func (result i32) i32.const 1 memory.grow 1))',
       ...['\\q', '\\0', '\\0g', '\\u{}', '\\u{_1}', '\\u{1_}', '\\u{1__0}', '\\u{1_f600}', '\\u{d800}', '\\u{dfff}', '\\u{110000}', '\\u{100000000}', '\\u123', '\\u{1'].map(text =>
         `(module (memory 1) (data (i32.const 0) "${text}"))`)
     ];
@@ -220,7 +220,7 @@ for (const binary of ['wiw-opt.wasm']) {
     const complete = String.raw`(module (memory (export "mem") 1 2) (global (export "g") (mut i32) (i32.const 42)) (data (i32.const 0) "a\"\\\u{1f600}"))`;
     for (let end = 0; end < complete.length; end++) assert.throws(() => i.load(complete.slice(0, end)), /syntax|unsupported/, `truncated at ${end}`);
     i.load(`(module ${'(global (mut i32) (i32.const 0))'.repeat(128)})`);
-    assert.throws(() => i.load(`(module ${'(global i32 (i32.const 0))'.repeat(129)})`), /resource limit/);
+    assert.throws(() => i.load(`(module ${'(global i32 (i32.const 0))'.repeat(513)})`), /resource limit/);
     i.load(`(module (memory 0) ${'(data (i32.const 0) "")'.repeat(128)})`);
     assert.throws(() => i.load(`(module (memory 0) ${'(data (i32.const 0) "")'.repeat(129)})`), /resource limit/);
     i.load(`(module (memory 1) (data (i32.const 0) "${'x'.repeat(65536)}"))`);
@@ -228,9 +228,9 @@ for (const binary of ['wiw-opt.wasm']) {
     assert.throws(() => i.load(`(module (memory 2) (data (i32.const 0) "${'x'.repeat(65537)}"))`), /resource limit/);
     i.load('(module (memory 1) (data "passive"))');
     assert.deepEqual(i.readMemory(0, 7), new Uint8Array(7));
-    for (const unsupported of ['(module (memory 0) (memory 0))',
-      '(module (global v128 (v128.const i32x4 0 0 0)))', '(module (global i32 (i32.add (i32.const 1) (i32.const 2))))']) {
-      assert.throws(() => i.load(unsupported), /syntax|unsupported/);
+    for (const unsupported of ['(module (memory $same 0) (memory $same 0))',
+      '(module (global v128 (v128.const i32x4 0 0 0)))', '(module (global i32 (i32.div_s (i32.const 1) (i32.const 2))))']) {
+      assert.throws(() => i.load(unsupported), /syntax|unsupported|reference/);
     }
   });
 

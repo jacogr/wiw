@@ -133,10 +133,10 @@ for (const binary of ['wiw-opt.wasm']) {
     for (const offset of [1, -1]) assert.throws(() => i.load(`(module (table 0 funcref) (elem (i32.const ${offset})))`), /element out of bounds/);
     assert.throws(() => i.load('(module (table 1 funcref) (func) (elem (i32.const 1) 0))'), /element out of bounds/);
     assert.throws(() => i.invoke('run'), /no loaded module/);
-    i.load(`(module ${'(type (func))'.repeat(256)} (table 4096 funcref) (func $f (type 255)) (elem (i32.const 4095) $f)
-      (func (export "run") i32.const 4095 call_indirect (type 255)))`);
+    i.load(`(module ${'(type (func))'.repeat(768)} (table 4096 funcref) (func $f (type 767)) (elem (i32.const 4095) $f)
+      (func (export "run") i32.const 4095 call_indirect (type 767)))`);
     assert.equal(i.invoke('run'), undefined);
-    assert.throws(() => i.load(`(module ${'(type (func))'.repeat(257)})`), /resource limit/);
+    assert.throws(() => i.load(`(module ${'(type (func))'.repeat(769)})`), /resource limit/);
     assert.throws(() => i.load('(module (table 4097 funcref))'), /resource limit/);
     assert.throws(() => i.load(`(module (type (func (param ${'i32 '.repeat(129)}))))`), /resource limit/);
     assert.throws(() => i.load(`(module (type (func (param i32))) (func (type 0) (local ${'i32 '.repeat(1088)})))`), /resource limit/);

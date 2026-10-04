@@ -65,7 +65,6 @@ for (const binary of ['wiw-opt.wasm']) {
         '0xgg', '4294967296', '-2147483649', '-0x80000001', '999999999999999999999999999999'].map(x => moduleFor(x)),
       '(module (func (export "x") (result i32) i32.const 1 i32.const 2))',
       '(module (func (export "x") (result v128) v128.const i32x4 0 0 0))',
-      '(module (memory i64 1))',
       moduleFor('42') + '(module)', moduleFor('4\0')];
     for (const source of malformed) {
       assert.throws(() => i.load(source), /syntax|unsupported|range|operand stack/, JSON.stringify(source));

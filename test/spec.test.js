@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { readFile, writeFile } from 'node:fs/promises';
 import { runSuite } from '../scripts/spec-runner.js';
 for (const binary of ['wiw-opt.wasm']) {
-  test(`${binary}: default self-hosted WebAssembly 2.0 core files (zero skips)`, async t => {
+  test(`${binary}: default self-hosted WebAssembly 3.0 core files (zero skips)`, async t => {
     const manifest = JSON.parse(await readFile(new URL('./spec/capabilities.json', import.meta.url), 'utf8'));
     const report = await runSuite(new URL(`../build/${binary}`, import.meta.url), undefined, {audit: true, profile: true});
     await writeFile(new URL(`../build/spec-selfhost-${binary}.json`, import.meta.url), JSON.stringify({...report, complete: true}, null, 2) + '\n');

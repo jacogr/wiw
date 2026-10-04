@@ -73,7 +73,7 @@ for (const binary of ['wiw-opt.wasm']) {
       assert.throws(() => engine.load(`(module (table 1 funcref) (func ${operands} table.copy))`), /operand stack/);
     }
     assert.throws(() => engine.load('(module (table 1 funcref) (func unreachable table.copy 0))'), /syntax/);
-    assert.throws(() => engine.load(`(module (table 1 funcref) (func ${'table.size drop '.repeat(8193)}))`), /resource limit/);
+    assert.throws(() => engine.load(`(module (table 1 funcref) (func ${'table.size drop '.repeat(32769)}))`), /resource limit/);
     // A minimal binary returns table.size with a legally padded unsigned table index.
     const moduleBytes = index => {
       const body = [0, 252, 16, ...index, 11];

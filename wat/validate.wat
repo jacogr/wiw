@@ -39,14 +39,17 @@
 				(return)
 			)
 		)
-		;; Each abstract operand has one type byte, independently from its runtime value width.
+		;; Each abstract operand has one type slot, independently from its runtime value width.
 		(if (i32.ge_u (global.get $depth) (i32.const CAP_OPERANDS))
 			(then
 				(call $fail (i32.const 6))
 				(return)
 			)
 		)
-		(i32.store8 (i32.add (global.get $type-stack-base) (global.get $depth)) (local.get $type))
+		(i32.store
+			(i32.add (global.get $type-stack-base) (i32.mul (global.get $depth) (i32.const 4)))
+			(local.get $type)
+		)
 		(global.set $depth (i32.add (global.get $depth) (i32.const 1)))
 	)
 
@@ -73,7 +76,9 @@
 		)
 		(global.set $depth (i32.sub (global.get $depth) (i32.const 1)))
 		(local.set $type
-			(i32.load8_u (i32.add (global.get $type-stack-base) (global.get $depth)))
+			(i32.load
+				(i32.add (global.get $type-stack-base) (i32.mul (global.get $depth) (i32.const 4)))
+			)
 		)
 		;; Known values remain typed after unreachable; unknown values satisfy either width.
 		(if
@@ -82,7 +87,7 @@
 					(i32.ne (local.get $expected) (i32.const 0))
 					(i32.ne (local.get $type) (i32.const 0))
 				)
-				(i32.ne (local.get $type) (local.get $expected))
+				(i32.eqz (call $type-compatible (local.get $type) (local.get $expected)))
 			)
 			(then
 				(call $fail (i32.const 7))
@@ -174,6 +179,7 @@
 				(return)
 			)
 		)
+		(call $reset-local-initialization)
 		(global.set $control-count (i32.sub (global.get $control-count) (i32.const 1)))
 		;; A typed result occupies one slot regardless of whether it is i32 or i64.
 		(if (local.get $type)
@@ -188,6 +194,7 @@
 		(local $frame i32)
 
 		(local.set $frame (call $control (i32.sub (global.get $control-count) (i32.const 1))))
+		(call $reset-local-initialization)
 		(call $validation-result (i32.load offset=8 (local.get $frame)))
 		;; The false arm inherits no operands produced by the true arm.
 		(if (i32.ne (global.get $depth) (i32.load offset=4 (local.get $frame)))
@@ -201,7 +208,7 @@
 		(call $validation-publish (i32.load offset=20 (local.get $frame)))
 	)
 
-	;; Validate normalized code using scalar type bytes, explicit control floors and unreachable polymorphism.
+	;; Validate normalized code using scalar type slots, explicit control floors and unreachable polymorphism.
 	(func $validate-function
 		(param $index i32)
 		(local $f i32)
@@ -221,6 +228,29 @@
 		(local.set $pc (i32.load offset=8 (local.get $f)))
 		(global.set $depth (i32.const 0))
 		(global.set $control-count (i32.const 0))
+		(local.set $j (i32.const 0))
+		;; Parameters and defaultable locals start initialized; non-null locals require an assignment.
+		(block $locals-ready
+			;; Preserve each local's initialization independently from operand-stack validation.
+			(loop $locals
+				(br_if $locals-ready (i32.eq (local.get $j) (i32.load offset=20 (local.get $f))))
+				(i32.store
+					(call $local-init-slot (local.get $j))
+					(select
+						(i32.const 1)
+						(i32.const 0)
+						(i32.or
+							(i32.lt_u (local.get $j) (i32.load offset=16 (local.get $f)))
+							(i32.eqz
+								(call $reference-nonnull (i32.load (call $local-type (local.get $index) (local.get $j))))
+							)
+						)
+					)
+				)
+				(local.set $j (i32.add (local.get $j) (i32.const 1)))
+				(br $locals)
+			)
+		)
 		(call $validation-push (i32.const 0) (i32.load offset=24 (local.get $f)))
 		;; Complete after the function's code range, or stop at the first failure.
 		(block $done
@@ -235,12 +265,16 @@
 				(global.set $tok (i32.load offset=8 (local.get $record)))
 				(local.set $pc (i32.add (local.get $pc) (i32.const 1)))
 				;; Structured entries save their floor after consuming an i32 if condition.
-				(if
-					(i32.and
-						(i32.ge_u (local.get $op) (i32.const 37))
-						(i32.le_u (local.get $op) (i32.const 39))
-					)
+				(if (call $control-op (local.get $op))
 					(then
+						;; Handler vectors are checked in the enclosing label context before entering try-table.
+						(if (i32.eq (local.get $op) (i32.const 495))
+							(then
+								(call $validate-try-handlers
+									(i32.load offset=24 (call $metadata (i32.sub (local.get $pc) (i32.const 1))))
+								)
+							)
+						)
 						;; If conditions remain i32 even when their arms produce i64.
 						(if (i32.eq (local.get $op) (i32.const 39))
 							(then
@@ -377,6 +411,100 @@
 						(br $code)
 					)
 				)
+				;; Throw instructions validate their payload and make the remaining path unreachable.
+				(if
+					(i32.or (i32.eq (local.get $op) (i32.const 496)) (i32.eq (local.get $op) (i32.const 497)))
+					(then
+						(call $validate-throw (local.get $op) (i32.load offset=4 (local.get $record)))
+						(call $validation-unreachable)
+						(br $code)
+					)
+				)
+				;; Cast branches validate target operands and refine the surviving reference type.
+				(if
+					(i32.or (i32.eq (local.get $op) (i32.const 493)) (i32.eq (local.get $op) (i32.const 494)))
+					(then
+						(call $validate-gc-branch (local.get $op) (i32.load offset=4 (local.get $record)))
+						(br $code)
+					)
+				)
+				;; Reference branches refine nullability without consuming earlier branch operands on fallthrough.
+				(if
+					(i32.or (i32.eq (local.get $op) (i32.const 463)) (i32.eq (local.get $op) (i32.const 464)))
+					(then
+						(local.set $type (call $validation-pop (i32.const 0)))
+						;; Concrete operands must belong to the reference hierarchy.
+						(if
+							(i32.and
+								(i32.ne (local.get $type) (i32.const 0))
+								(i32.eqz (call $is-reference (local.get $type)))
+							)
+							(then
+								(call $fail (i32.const 7))
+							)
+						)
+						(local.set $target (call $label-arity (i32.load offset=4 (local.get $record))))
+						;; Non-null branches transfer the refined reference as the final label operand.
+						(if (i32.eq (local.get $op) (i32.const 464))
+							(then
+								;; A non-null branch target must accept at least the transferred reference.
+								(if (i32.eqz (call $shape-count (local.get $target)))
+									(then
+										(call $fail (i32.const 7))
+									)
+								)
+								(call $validation-value
+									;; Known reference operands become non-null after a null branch.
+									(if (result i32) (local.get $type)
+										(then
+											(call $reference-nonnull-type (local.get $type))
+										)
+										;; Missing operands in unreachable code stay unknown.
+										(else
+											(i32.const 0)
+										)
+									)
+								)
+							)
+						)
+						(call $validation-result (local.get $target))
+						;; Fallthrough restores declared branch operand types, including their wider heap types.
+						(if (i32.eq (local.get $op) (i32.const 464))
+							(then
+								(local.set $j (i32.const 0))
+								;; Restore the branch prefix without the non-null reference transferred to the label.
+								(block $restored
+									;; Every surviving operand has the target label's declared type.
+									(loop $prefix
+										(br_if $restored
+											(i32.ge_u (i32.add (local.get $j) (i32.const 1)) (call $shape-count (local.get $target)))
+										)
+										(call $validation-value (call $shape-type (local.get $target) (local.get $j)))
+										(local.set $j (i32.add (local.get $j) (i32.const 1)))
+										(br $prefix)
+									)
+								)
+							)
+							;; A null-branch fallthrough retains the refined reference after restoring label operands.
+							(else
+								(call $validation-publish (local.get $target))
+								(call $validation-value
+									;; Known reference operands retain a precise non-null branch type.
+									(if (result i32) (local.get $type)
+										(then
+											(call $reference-nonnull-type (local.get $type))
+										)
+										;; Missing unreachable values remain polymorphic.
+										(else
+											(i32.const 0)
+										)
+									)
+								)
+							)
+						)
+						(br $code)
+					)
+				)
 				;; Locals resolve against this function's typed parameter/local table.
 				(if
 					(i32.and
@@ -406,8 +534,33 @@
 							)
 						)
 						(local.set $type
-							(i32.load8_u
-								(call $local-type (local.get $index) (i32.load offset=4 (local.get $record)))
+							(i32.load (call $local-type (local.get $index) (i32.load offset=4 (local.get $record))))
+						)
+						;; A non-defaultable local cannot be read before an assignment in its current scope.
+						(if (i32.eq (local.get $op) (i32.const 33))
+							(then
+								;; Initialized parameters and prior enclosing-scope assignments remain available.
+								(if
+									(i32.eqz (i32.load (call $local-init-slot (i32.load offset=4 (local.get $record)))))
+									(then
+										(call $fail (i32.const 7))
+									)
+								)
+							)
+						)
+						;; Writes initialize only previously uninitialized locals, preserving enclosing-scope assignments.
+						(if (i32.ne (local.get $op) (i32.const 33))
+							(then
+								;; The first assignment records its scope so an end or else can restore initialization state.
+								(if
+									(i32.eqz (i32.load (call $local-init-slot (i32.load offset=4 (local.get $record)))))
+									(then
+										(i32.store
+											(call $local-init-slot (i32.load offset=4 (local.get $record)))
+											(global.get $control-count)
+										)
+									)
+								)
 							)
 						)
 						;; Reads need no operand; writes and tee require the local's exact width.
@@ -426,7 +579,8 @@
 					)
 				)
 				;; Indirect calls consume an i32 selector and the declared structural parameter vector.
-				(if (i32.eq (local.get $op) (i32.const 105))
+				(if
+					(i32.or (i32.eq (local.get $op) (i32.const 105)) (i32.eq (local.get $op) (i32.const 439)))
 					(then
 						;; Even unreachable indirect calls require an existing default table.
 						(if (i32.eqz (global.get $guest-table-present))
@@ -435,7 +589,6 @@
 								(return)
 							)
 						)
-						(drop (call $validation-pop (i32.const 1)))
 						(local.set $callee (call $signature (i32.load offset=4 (local.get $record))))
 						(i32.store
 							(local.get $callee)
@@ -448,8 +601,9 @@
 						)
 						(i32.store offset=4 (local.get $callee) (i32.const 0))
 						(call $use-table (i32.load (local.get $callee)))
+						(drop (call $validation-pop (global.get $table-address-type)))
 						;; Only function reference tables can select callable entries.
-						(if (i32.ne (global.get $guest-table-type) (i32.const 5))
+						(if (i32.eqz (call $type-compatible (global.get $guest-table-type) (i32.const 5)))
 							(then
 								(call $fail (i32.const 7))
 							)
@@ -463,10 +617,29 @@
 								(local.set $j (i32.sub (local.get $j) (i32.const 1)))
 								(drop
 									(call $validation-pop
-										(i32.load8_u offset=32 (i32.add (local.get $callee) (local.get $j)))
+										(i32.load offset=32 (i32.add (local.get $callee) (i32.mul (local.get $j) (i32.const 4))))
 									)
 								)
 								(br $indirect-args)
+							)
+						)
+						;; A tail call must return exactly the enclosing function's result vector.
+						(if (i32.eq (local.get $op) (i32.const 439))
+							(then
+								;; An unreachable site still requires a compatible callee result signature.
+								(if
+									(i32.eqz
+										(call $shape-compatible
+											(i32.load offset=12 (local.get $callee))
+											(i32.load offset=24 (local.get $f))
+										)
+									)
+									(then
+										(call $fail (i32.const 7))
+									)
+								)
+								(call $validation-unreachable)
+								(br $code)
 							)
 						)
 						;; A void indirect signature publishes no abstract operand.
@@ -479,7 +652,8 @@
 					)
 				)
 				;; Calls consume parameters in reverse stack order and publish their typed result.
-				(if (i32.eq (local.get $op) (i32.const 36))
+				(if
+					(i32.or (i32.eq (local.get $op) (i32.const 36)) (i32.eq (local.get $op) (i32.const 438)))
 					(then
 						(local.set $target (i32.load offset=4 (local.get $record)))
 						(local.set $callee (call $function (local.get $target)))
@@ -491,12 +665,26 @@
 								(br_if $args-done (i32.eqz (local.get $j)))
 								(local.set $j (i32.sub (local.get $j) (i32.const 1)))
 								(drop
-									(call $validation-pop (i32.load8_u (call $local-type (local.get $target) (local.get $j))))
+									(call $validation-pop (i32.load (call $local-type (local.get $target) (local.get $j))))
 								)
 								(br $args)
 							)
 						)
 						(local.set $type (i32.load offset=24 (local.get $callee)))
+						;; Direct tail calls terminate this path after checking the enclosing result vector.
+						(if (i32.eq (local.get $op) (i32.const 438))
+							(then
+								;; Callee and caller result types must agree even when no result is consumed locally.
+								(if
+									(i32.eqz (call $shape-compatible (local.get $type) (i32.load offset=24 (local.get $f))))
+									(then
+										(call $fail (i32.const 7))
+									)
+								)
+								(call $validation-unreachable)
+								(br $code)
+							)
+						)
 						;; Void callees publish no value.
 						(if (local.get $type)
 							(then
@@ -551,6 +739,118 @@
 						)
 					)
 				)
+				;; Function references publish their precise, non-null declared function type.
+				(if (i32.eq (local.get $op) (i32.const 195))
+					(then
+						(call $validation-value (call $function-reference-type (local.get $target)))
+						(br $code)
+					)
+				)
+				;; Aggregate instructions have field-dependent operand vectors.
+				(if
+					(i32.and
+						(i32.ge_u (local.get $op) (i32.const 473))
+						(i32.le_u (local.get $op) (i32.const 492))
+					)
+					(then
+						(call $validate-gc-aggregate (local.get $op) (i32.load offset=4 (local.get $record)))
+						(br $code)
+					)
+				)
+				;; GC reference operators validate their hierarchy before publishing refined result types.
+				(if
+					(i32.and
+						(i32.ge_u (local.get $op) (i32.const 465))
+						(i32.le_u (local.get $op) (i32.const 472))
+					)
+					(then
+						(call $validate-gc-reference (local.get $op) (i32.load offset=4 (local.get $record)))
+						(br $code)
+					)
+				)
+				;; Asserted non-null references retain the operand's heap type.
+				(if (i32.eq (local.get $op) (i32.const 460))
+					(then
+						(local.set $type (call $validation-pop (i32.const 0)))
+						;; A concrete numeric value cannot be asserted non-null.
+						(if
+							(i32.and
+								(i32.ne (local.get $type) (i32.const 0))
+								(i32.eqz (call $is-reference (local.get $type)))
+							)
+							(then
+								(call $fail (i32.const 7))
+							)
+						)
+						(call $validation-value
+							;; Known operands become non-null after the explicit assertion.
+							(if (result i32) (local.get $type)
+								(then
+									(call $reference-nonnull-type (local.get $type))
+								)
+								;; Missing unreachable operands remain polymorphic.
+								(else
+									(i32.const 0)
+								)
+							)
+						)
+						(br $code)
+					)
+				)
+				;; Reference calls consume a typed function reference followed by the declared parameter vector.
+				(if
+					(i32.or (i32.eq (local.get $op) (i32.const 461)) (i32.eq (local.get $op) (i32.const 462)))
+					(then
+						(local.set $type (i32.load offset=4 (local.get $record)))
+						;; Reference call immediates must name a declared function type.
+						(if (i32.lt_u (local.get $type) (i32.const 64))
+							(then
+								(call $fail (i32.const 1))
+								(return)
+							)
+						)
+						(local.set $callee (call $signature (call $reference-heap (local.get $type))))
+						(drop (call $validation-pop (local.get $type)))
+						(local.set $j (i32.load offset=8 (local.get $callee)))
+						;; Finish after consuming every declared argument.
+						(block $args-done
+							;; Pop parameters from right to left, after the reference operand.
+							(loop $args
+								(br_if $args-done (i32.eqz (local.get $j)))
+								(local.set $j (i32.sub (local.get $j) (i32.const 1)))
+								(drop
+									(call $validation-pop
+										(i32.load offset=32 (i32.add (local.get $callee) (i32.mul (local.get $j) (i32.const 4))))
+									)
+								)
+								(br $args)
+							)
+						)
+						;; Tail reference calls finish the enclosing function with compatible results.
+						(if (i32.eq (local.get $op) (i32.const 462))
+							(then
+								;; Result arities and types must satisfy the enclosing function.
+								(if
+									(i32.eqz
+										(call $shape-compatible
+											(i32.load offset=12 (local.get $callee))
+											(i32.load offset=24 (local.get $f))
+										)
+									)
+									(then
+										(call $fail (i32.const 7))
+									)
+								)
+								(call $validation-unreachable)
+							)
+							;; Ordinary reference calls publish the callee's full result vector.
+							(else
+								(call $validation-publish (i32.load offset=12 (local.get $callee)))
+							)
+						)
+						(br $code)
+					)
+				)
 				;; Drop resolves its segment without requiring a table or a live element list.
 				(if (i32.eq (local.get $op) (i32.const 196))
 					(then
@@ -593,9 +893,11 @@
 						(i32.store offset=8 (local.get $table) (local.get $target))
 						;; Externref segments cannot initialize the currently supported funcref table.
 						(if
-							(i32.ne
-								(i32.load offset=48 (call $element-record (local.get $target)))
-								(global.get $guest-table-type)
+							(i32.eqz
+								(call $type-compatible
+									(i32.load offset=48 (call $element-record (local.get $target)))
+									(global.get $guest-table-type)
+								)
 							)
 							(then
 								(call $fail (i32.const 7))
@@ -618,10 +920,7 @@
 						(if
 							(i32.and
 								(i32.ne (local.get $type) (i32.const 0))
-								(i32.or
-									(i32.lt_u (local.get $type) (i32.const 5))
-									(i32.gt_u (local.get $type) (i32.const 6))
-								)
+								(i32.eqz (call $is-reference (local.get $type)))
 							)
 							(then
 								(call $fail (i32.const 7))
@@ -642,16 +941,7 @@
 						(if
 							(i32.and
 								(i32.eqz (local.get $target))
-								(i32.or
-									(i32.and
-										(i32.ge_u (local.get $type) (i32.const 5))
-										(i32.le_u (local.get $type) (i32.const 6))
-									)
-									(i32.and
-										(i32.ge_u (local.get $other) (i32.const 5))
-										(i32.le_u (local.get $other) (i32.const 6))
-									)
-								)
+								(i32.or (call $is-reference (local.get $type)) (call $is-reference (local.get $other)))
 							)
 							(then
 								(call $fail (i32.const 7))
@@ -664,7 +954,10 @@
 									(i32.ne (local.get $type) (i32.const 0))
 									(i32.ne (local.get $other) (i32.const 0))
 								)
-								(i32.ne (local.get $type) (local.get $other))
+								(i32.and
+									(i32.eqz (local.get $target))
+									(i32.eqz (call $type-equal (local.get $type) (local.get $other)))
+								)
 							)
 							(then
 								(call $fail (i32.const 7))
@@ -724,9 +1017,11 @@
 								(i32.store offset=12 (local.get $table) (i32.const 0))
 								;; Table copy requires matching reference types, including in dead code.
 								(if
-									(i32.ne
-										(global.get $guest-table-type)
-										(i32.load offset=16 (call $guest-table-record (i32.load offset=8 (local.get $table))))
+									(i32.eqz
+										(call $type-compatible
+											(i32.load offset=16 (call $guest-table-record (i32.load offset=8 (local.get $table))))
+											(global.get $guest-table-type)
+										)
 									)
 									(then
 										(call $fail (i32.const 7))
@@ -734,6 +1029,49 @@
 								)
 							)
 						)
+					)
+				)
+				;; Copy validation retains both logical table index types after independent resolution.
+				(if (i32.eq (local.get $op) (i32.const 192))
+					(then
+						(global.set $table-source-type
+							(select
+								(i32.const 2)
+								(i32.const 1)
+								(i32.eq
+									(i32.load offset=24
+										(call $canonical-table-record (i32.load offset=8 (i32.load offset=4 (local.get $record))))
+									)
+									(i32.const 2)
+								)
+							)
+						)
+					)
+				)
+				;; All memory operations resolve their independent selectors even in unreachable code.
+				(if
+					(i32.or
+						(call $memory-op (local.get $op))
+						(i32.or
+							(i32.or (i32.eq (local.get $op) (i32.const 51)) (i32.eq (local.get $op) (i32.const 52)))
+							(i32.and
+								(i32.ge_u (local.get $op) (i32.const 187))
+								(i32.le_u (local.get $op) (i32.const 189))
+							)
+						)
+					)
+					(then
+						(call $resolve-memory-immediate
+							(local.get $op)
+							(i32.load offset=4 (local.get $record))
+							(global.get $tok)
+						)
+					)
+				)
+				;; Invalid resource indices must never be dereferenced for operand typing.
+				(if (global.get $error)
+					(then
+						(return)
 					)
 				)
 				;; Bulk copy/fill require a declared memory even in unreachable code.
@@ -757,6 +1095,22 @@
 					)
 					(then
 						(call $validate-resource (local.get $op) (i32.const 0))
+					)
+				)
+				;; Memory32 offsets cannot exceed the architecture's unsigned thirty-two-bit immediate range.
+				(if
+					(i32.and
+						(call $memory-op (local.get $op))
+						(i32.eq (global.get $memory-type) (i32.const 1))
+					)
+					(then
+						;; The auxiliary immediate retains all bits until the memory declaration is known.
+						(if
+							(i64.gt_u (i64.load (i32.load offset=4 (local.get $record))) (i64.const 4294967295))
+							(then
+								(call $fail (i32.const 1))
+							)
+						)
 					)
 				)
 				(local.set $j (i32.const 0))

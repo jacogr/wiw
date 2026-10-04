@@ -30,7 +30,7 @@
 		;; Global descriptor access is bounded by the parsed index space.
 		(if (result i32) (i32.lt_u (local.get $index) (global.get $global-count))
 			(then
-				(call $global-record (local.get $index))
+				(call $canonical-global-record (local.get $index))
 			)
 			;; Missing globals never expose an unrelated record.
 			(else
@@ -74,7 +74,7 @@
 		(param $index i32)
 		(result i32)
 
-		(i32.load offset=16 (call $canonical-table-record (local.get $index)))
+		(call $value-kind (i32.load offset=16 (call $canonical-table-record (local.get $index))))
 	)
 
 	;; Expose one table's protected entry arena to the synchronous binding adapter.
@@ -149,15 +149,6 @@
 				(return (global.get $error))
 			)
 		)
-		(global.set $guest-min (local.get $pages))
-		(global.set $guest-max
-			(select
-				(i32.const 65536)
-				(local.get $maximum)
-				(i32.eq (local.get $maximum) (i32.const -1))
-			)
-		)
-		(global.set $memory-max-present (i32.ne (local.get $maximum) (i32.const -1)))
 		(call $allocate-table)
 		(call $allocate-resources)
 		(global.set $resource-phase (i32.const 2))
@@ -199,9 +190,9 @@
 			;; Mixed scalar signatures retain their declaration order.
 			(loop $params
 				(br_if $done (i32.eq (local.get $i) (local.get $count)))
-				(i32.store8
+				(i32.store
 					(call $local-type (local.get $index) (local.get $i))
-					(i32.load8_u (i32.add (local.get $types) (local.get $i)))
+					(i32.load (i32.add (local.get $types) (i32.mul (local.get $i) (i32.const 4))))
 				)
 				(local.set $i (i32.add (local.get $i) (i32.const 1)))
 				(br $params)
@@ -274,7 +265,7 @@
 					(i32.add (global.get $argument-base) (i32.mul (local.get $i) (i32.const 8)))
 					(call $canonical-value
 						(i64.load (i32.add (local.get $args) (i32.mul (local.get $i) (i32.const 8))))
-						(i32.load8_u (call $local-type (local.get $index) (local.get $i)))
+						(i32.load (call $local-type (local.get $index) (local.get $i)))
 					)
 				)
 				(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -309,7 +300,7 @@
 		)
 	)
 
-	;; Install a foreign function's ordered result vector from trusted host type bytes.
+	;; Install a foreign function's ordered result vector from trusted host type slots.
 	(func (export "foreign_results")
 		(param $index i32)
 		(param $types i32)
@@ -318,7 +309,7 @@
 		(local $i i32)
 		(local $shape i32)
 
-		;; Function and vector limits apply before reading the caller's type bytes.
+		;; Function and vector limits apply before reading the caller's type slots.
 		(if
 			(i32.or
 				(i32.ge_u (local.get $index) (global.get $function-count))
@@ -337,7 +328,7 @@
 				(local.set $shape
 					(call $shape-append
 						(local.get $shape)
-						(i32.load8_u (i32.add (local.get $types) (local.get $i)))
+						(i32.load (i32.add (local.get $types) (i32.mul (local.get $i) (i32.const 4))))
 					)
 				)
 				(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -346,4 +337,119 @@
 		)
 		(i32.store offset=24 (call $function (local.get $index)) (local.get $shape))
 		(global.get $error)
+	)
+
+	;; Expose logical address types for host import compatibility checks.
+	(func (export "memory_address_type")
+		(result i32)
+
+		(global.get $memory-type)
+	)
+
+	;; Read the address type from one table's own descriptor.
+	(func (export "table_address_type")
+		(param $index i32)
+		(result i32)
+
+		(i32.load offset=24 (call $canonical-table-record (local.get $index)))
+	)
+
+	;; Expose one memory's logical address type for import matching.
+	(func (export "memory_width")
+		(param $index i32)
+		(result i32)
+
+		(i32.load offset=24 (call $canonical-memory-record (local.get $index)))
+	)
+
+	;; Read a memory's declared physical minimum before allocation.
+	(func (export "memory_minimum")
+		(param $index i32)
+		(result i32)
+
+		(i32.load offset=8 (call $canonical-memory-record (local.get $index)))
+	)
+
+	;; Read a memory's narrowed physical maximum, preserving omission as minus one.
+	(func (export "memory_maximum")
+		(param $index i32)
+		(result i32)
+		(local $record i32)
+
+		(local.set $record (call $canonical-memory-record (local.get $index)))
+		(select
+			(i32.load offset=12 (local.get $record))
+			(i32.const -1)
+			(i32.load offset=28 (local.get $record))
+		)
+	)
+
+	;; Expose an indexed memory's current canonical backing address.
+	(func (export "memory_base")
+		(param $index i32)
+		(result i32)
+
+		(i32.load offset=20 (call $canonical-memory-record (local.get $index)))
+	)
+
+	;; Expose an indexed memory's current logical page count.
+	(func (export "memory_pages")
+		(param $index i32)
+		(result i32)
+
+		(i32.load offset=16 (call $canonical-memory-record (local.get $index)))
+	)
+
+	;; Bind actual imported memory limits before allocating their canonical byte regions.
+	(func (export "bind_guest_memory")
+		(param $index i32)
+		(param $pages i32)
+		(param $maximum i32)
+		(result i32)
+		(local $record i32)
+
+		;; Imported sizes remain bounded by the same physical page capacity as definitions.
+		(if (i32.gt_u (local.get $pages) (i32.const CAP_PAGES))
+			(then
+				(call $fail (i32.const 6))
+				(return (global.get $error))
+			)
+		)
+		(local.set $record (call $memory-record (local.get $index)))
+		(i32.store offset=8 (local.get $record) (local.get $pages))
+		(i32.store offset=12
+			(local.get $record)
+			(select (i32.const -1) (local.get $maximum) (i32.eq (local.get $maximum) (i32.const -1)))
+		)
+		(i32.store offset=28 (local.get $record) (i32.ne (local.get $maximum) (i32.const -1)))
+		(i32.const 0)
+	)
+
+	;; Associate duplicate imports of the same shared memory with their first canonical binding.
+	(func (export "alias_guest_memory")
+		(param $index i32)
+		(param $canonical i32)
+
+		(i32.store offset=52
+			(call $memory-record (local.get $index))
+			(i32.add (local.get $canonical) (i32.const 1))
+		)
+	)
+
+	;; Grow one indexed memory from the synchronous host adapter.
+	(func (export "grow_memory")
+		(param $index i32)
+		(param $delta i32)
+		(result i32)
+
+		(call $use-memory (local.get $index))
+		(call $guest-grow (local.get $delta))
+	)
+
+	;; Expose a table descriptor to the trusted host for complete reference import type checks.
+	(func (export "table_info")
+		(param $index i32)
+		(result i32)
+
+		(call $canonical-table-record (local.get $index))
 	)

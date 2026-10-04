@@ -52,7 +52,7 @@
 	(global $syntax-count (mut i32) (i32.const 0))
 	(global $control-count (mut i32) (i32.const 0))
 	(global $sp (mut i32) (i32.const 0))
-	(global $fuel-limit (mut i32) (i32.const 100000))
+	(global $fuel-limit (mut i64) (i64.const 100000))
 	(data (i32.const 0) "modulefunc exportresulti32i32.const")
 	(data (i32.const 64) "paramlocal")
 	(data (i32.const 112) "import")
@@ -82,7 +82,7 @@
 	(global $definitions-started (mut i32) (i32.const 0))
 	(global $saved-calls (mut i32) (i32.const 0))
 	(global $saved-frame (mut i32) (i32.const 0))
-	(global $saved-fuel (mut i32) (i32.const 0))
+	(global $saved-fuel (mut i64) (i64.const 0))
 	(global $pending-offset (mut i32) (i32.const 0))
 	(global $resuming (mut i32) (i32.const 0))
 	(global $local-type-base (mut i32) (i32.const 0))
@@ -187,14 +187,14 @@
 		(param $index i32)
 		(result i32)
 
-		(call $shape-type (global.get $last-results) (local.get $index))
+		(call $value-kind (call $shape-type (global.get $last-results) (local.get $index)))
 	)
 
 	;; Set the unsigned instruction budget used independently by each invocation.
 	(func (export "set_fuel")
 		(param $fuel i32)
 
-		(global.set $fuel-limit (local.get $fuel))
+		(global.set $fuel-limit (i64.extend_i32_u (local.get $fuel)))
 	)
 
 	;; Explicit types, anonymous indirect signatures and the sole guest function table have separate arenas.
@@ -240,3 +240,50 @@
 	;; SIMD literal spelling occupies the remaining reserved keyword bytes.
 	(data (i32.const 3984) "v128i8x16i16x8i32x4i64x2f32x4f64x2")
 	(global $initializer-high (mut i64) (i64.const 0))
+	;; Folded constant expressions have a separate bounded parsing depth.
+	(global $constant-depth (mut i32) (i32.const 0))
+	;; Validation-only loads retain declarations without allocating guest resources or running a start.
+	(global $validation-only (mut i32) (i32.const 0))
+	;; Logical memory address width and full declaration limits remain independent of backing capacity.
+	(global $memory-type (mut i32) (i32.const 1))
+	(global $memory-min64 (mut i64) (i64.const 0))
+	(global $memory-max64 (mut i64) (i64.const 65536))
+	;; The selected table has its own address width, independently of its reference element type.
+	(global $table-address-type (mut i32) (i32.const 1))
+	(global $table-source-type (mut i32) (i32.const 1))
+	(global $bin-memory-type (mut i32) (i32.const 1))
+	;; Independent memory descriptors cache the selected canonical memory during dispatch.
+	(global $memory-arena (mut i32) (i32.const 0))
+	(global $memory-index (mut i32) (i32.const 0))
+	(global $memory-source-type (mut i32) (i32.const 1))
+	;; Deferred heap-type uses retain their source identity until all declarations exist.
+	(global $reference-type-base (mut i32) (i32.const 0))
+	(global $reference-type-count (mut i32) (i32.const 0))
+	(global $type-comparison-depth (mut i32) (i32.const 0))
+	;; Active heap comparison pairs terminate recursive structural comparisons.
+	(global $type-comparison-base (mut i32) (i32.const 0))
+	;; Local initialization levels are validation state, independent from runtime frame values.
+	(global $local-init-base (mut i32) (i32.const 0))
+	;; Set a full-width instruction budget for trusted interpreter hosting, preserving bounded guest execution.
+	(func (export "set_fuel64")
+		(param $fuel i64)
+
+		(global.set $fuel-limit (local.get $fuel))
+	)
+
+	;; Composite type descriptors retain recursive groups, declared supertypes and aggregate fields.
+	(global $heap-type-base (mut i32) (i32.const 0))
+	(global $field-type-base (mut i32) (i32.const 0))
+	(global $field-type-count (mut i32) (i32.const 0))
+	(global $rec-active (mut i32) (i32.const 0))
+	(global $rec-start (mut i32) (i32.const 0))
+	;; Aggregate objects occupy a private arena independent from guest linear memories.
+	(global $gc-object-base (mut i32) (i32.const 0))
+	(global $gc-object-used (mut i32) (i32.const 0))
+	(global $gc-high (mut i64) (i64.const 0))
+	;; Tags have their own index namespace and imported identity independent from their parameter signature.
+	(global $tag-base (mut i32) (i32.const 0))
+	(global $tag-count (mut i32) (i32.const 0))
+	(global $exception-value (mut i64) (i64.const 0))
+	(global $exception-calls (mut i32) (i32.const 0))
+	(global $exception-pending (mut i32) (i32.const 0))

@@ -1,9 +1,9 @@
-	;; Locate a bounded 96-byte signature: name, parameter count/result type, reference metadata, 64 type bytes.
+	;; Locate a bounded 544-byte signature: name, parameter count/result shape, reference metadata, 128 type slots.
 	(func $signature
 		(param $index i32)
 		(result i32)
 
-		(i32.add (global.get $signature-base) (i32.mul (local.get $index) (i32.const 160)))
+		(i32.add (global.get $signature-base) (i32.mul (local.get $index) (i32.const 544)))
 	)
 
 	;; Locate one function's deferred type-use metadata, keeping its existing 32-byte function record unchanged.
@@ -155,14 +155,17 @@
 								(call $next)
 								(local.set $type (call $value-type))
 								(local.set $count (i32.load offset=8 (local.get $s)))
-								;; Enforce the parameter capacity before storing its type byte.
+								;; Enforce the parameter capacity before storing its type slot.
 								(if (i32.ge_u (local.get $count) (i32.const 128))
 									(then
 										(call $fail (i32.const 6))
 										(return)
 									)
 								)
-								(i32.store8 offset=32 (i32.add (local.get $s) (local.get $count)) (local.get $type))
+								(i32.store offset=32
+									(i32.add (local.get $s) (i32.mul (local.get $count) (i32.const 4)))
+									(local.get $type)
+								)
 								(i32.store offset=8 (local.get $s) (i32.add (local.get $count) (i32.const 1)))
 								(call $expect (i32.const 2))
 								(br $groups)
@@ -183,7 +186,10 @@
 									)
 								)
 								(local.set $type (call $value-type))
-								(i32.store8 offset=32 (i32.add (local.get $s) (local.get $count)) (local.get $type))
+								(i32.store offset=32
+									(i32.add (local.get $s) (i32.mul (local.get $count) (i32.const 4)))
+									(local.get $type)
+								)
 								(i32.store offset=8 (local.get $s) (i32.add (local.get $count) (i32.const 1)))
 								(br $params)
 							)
@@ -219,16 +225,18 @@
 		(local $s i32)
 		(local $p i32)
 		(local $n i32)
+		(local $index i32)
+		(local $sub i32)
 
 		;; Explicit types reserve the first 256 records; indirect signatures occupy the second prefix.
-		(if (i32.ge_u (global.get $signature-count) (i32.const 256))
+		(if (i32.ge_u (global.get $signature-count) (i32.const CAP_TYPES))
 			(then
 				(call $fail (i32.const 6))
 				(return)
 			)
 		)
 		(local.set $s (call $signature (global.get $signature-count)))
-		(call $zero-bytes (local.get $s) (i32.const 160))
+		(call $zero-bytes (local.get $s) (i32.const 544))
 		(i32.store offset=16 (local.get $s) (global.get $tok))
 		(call $next)
 		;; An optional identifier participates only in the explicit type namespace.
@@ -248,11 +256,40 @@
 				(call $next)
 			)
 		)
-		(global.set $signature-count (i32.add (global.get $signature-count) (i32.const 1)))
+		(local.set $index (global.get $signature-count))
+		(global.set $signature-count (i32.add (local.get $index) (i32.const 1)))
+		(call $initialize-heap-type (local.get $index))
 		(call $expect (i32.const 1))
-		(call $word (i32.const 6) (i32.const 4))
-		(call $signature-groups (local.get $s))
+		;; A subtype wrapper precedes the composite function, struct or array declaration.
+		(if (call $is-ref-word (i32.const 23))
+			(then
+				(call $next)
+				(local.set $sub (i32.const 1))
+				(i32.store offset=12 (call $heap-record (local.get $index)) (i32.const 0))
+				;; The optional final keyword prevents further declared subtyping.
+				(if (call $is-ref-word (i32.const 24))
+					(then
+						(call $next)
+						(i32.store offset=12 (call $heap-record (local.get $index)) (i32.const 1))
+					)
+				)
+				;; A subtype has at most one declared supertype.
+				(if (i32.or (call $named) (call $index-token))
+					(then
+						(i32.store offset=16 (call $heap-record (local.get $index)) (call $reference-type))
+					)
+				)
+				(call $expect (i32.const 1))
+			)
+		)
+		(call $parse-composite-type (local.get $index))
 		(call $expect (i32.const 2))
+		;; Wrapped subtypes have an additional close before the type declaration ends.
+		(if (local.get $sub)
+			(then
+				(call $expect (i32.const 2))
+			)
+		)
 		(call $expect (i32.const 2))
 	)
 
@@ -275,7 +312,7 @@
 			(i32.add (global.get $indirect-type-count) (i32.const 1))
 		)
 		(local.set $s (call $signature (local.get $index)))
-		(call $zero-bytes (local.get $s) (i32.const 160))
+		(call $zero-bytes (local.get $s) (i32.const 544))
 		;; Indirect signatures have no type name, so their first pair retains the optional table target.
 		(drop (call $table-reference (local.get $s)))
 		(i32.store offset=16 (local.get $s) (global.get $tok))
@@ -311,7 +348,7 @@
 		(local $j i32)
 
 		(local.set $f (call $function (local.get $index)))
-		;; Counts and the optional result must agree before reading parameter type bytes.
+		;; Counts and the optional result must agree before reading parameter type slots.
 		(if
 			(i32.or
 				(i32.ne (i32.load offset=16 (local.get $f)) (i32.load offset=8 (local.get $s)))
@@ -333,9 +370,11 @@
 				(br_if $done (i32.eq (local.get $j) (i32.load offset=8 (local.get $s))))
 				;; A single width mismatch invalidates the call signature.
 				(if
-					(i32.ne
-						(i32.load8_u (call $local-type (local.get $index) (local.get $j)))
-						(i32.load8_u offset=32 (i32.add (local.get $s) (local.get $j)))
+					(i32.eqz
+						(call $type-equal
+							(i32.load (call $local-type (local.get $index) (local.get $j)))
+							(i32.load offset=32 (i32.add (local.get $s) (i32.mul (local.get $j) (i32.const 4))))
+						)
 					)
 					(then
 						(return (i32.const 0))
@@ -346,6 +385,35 @@
 			)
 		)
 		(i32.const 1)
+	)
+
+	;; Check an indirect call against the selected function's complete declared recursive type.
+	(func $indirect-function-matches
+		(param $function i32)
+		(param $signature i32)
+		(result i32)
+
+		;; Explicit type uses preserve recursive-group identity and declared subtyping.
+		(if (i32.and (i32.load offset=28 (local.get $signature)) (i32.const 1))
+			(then
+				(return
+					(call $heap-type-subtype
+						(call $reference-heap (call $function-reference-type (local.get $function)))
+						(call $type-target
+							(i32.load offset=16 (local.get $signature))
+							(i32.load offset=20 (local.get $signature))
+							(i32.load offset=24 (local.get $signature))
+						)
+					)
+				)
+			)
+		)
+		(i32.and
+			(call $implicit-heap-type
+				(call $reference-heap (call $function-reference-type (local.get $function)))
+			)
+			(call $function-matches (local.get $function) (local.get $signature))
+		)
 	)
 
 	;; Expand inline function types after the explicit declarations, reusing equal ordered signatures.
@@ -370,7 +438,12 @@
 							;; Include previously expanded types when deduplicating later functions.
 							(loop $types
 								(br_if $found (i32.eq (local.get $j) (global.get $signature-count)))
-								(br_if $found (call $function-matches (local.get $i) (call $signature (local.get $j))))
+								(br_if $found
+									(i32.and
+										(call $implicit-heap-type (local.get $j))
+										(call $function-matches (local.get $i) (call $signature (local.get $j)))
+									)
+								)
 								(local.set $j (i32.add (local.get $j) (i32.const 1)))
 								(br $types)
 							)
@@ -387,6 +460,7 @@
 								)
 								(local.set $f (call $function (local.get $i)))
 								(local.set $s (call $signature (local.get $j)))
+								(call $initialize-heap-type (local.get $j))
 								(i32.store offset=8 (local.get $s) (i32.load offset=16 (local.get $f)))
 								(i32.store offset=12 (local.get $s) (i32.load offset=24 (local.get $f)))
 								(local.set $k (i32.const 0))
@@ -395,9 +469,9 @@
 									;; Preserve mixed scalar widths and their declaration order.
 									(loop $params
 										(br_if $copied (i32.eq (local.get $k) (i32.load offset=16 (local.get $f))))
-										(i32.store8 offset=32
-											(i32.add (local.get $s) (local.get $k))
-											(i32.load8_u (call $local-type (local.get $i) (local.get $k)))
+										(i32.store offset=32
+											(i32.add (local.get $s) (i32.mul (local.get $k) (i32.const 4)))
+											(i32.load (call $local-type (local.get $i) (local.get $k)))
 										)
 										(local.set $k (i32.add (local.get $k) (i32.const 1)))
 										(br $params)
@@ -473,7 +547,7 @@
 								(local.set $j (local.get $old))
 								;; End after shifting all old locals upward from the end to prevent overlap.
 								(block $shift-done
-									;; Copy names and type bytes together so named local references resolve at their final slots.
+									;; Copy names and type slots together so named local references resolve at their final slots.
 									(loop $shift
 										(br_if $shift-done (i32.eqz (local.get $j)))
 										(local.set $j (i32.sub (local.get $j) (i32.const 1)))
@@ -482,9 +556,9 @@
 											(call $local-name (local.get $to))
 											(i64.load (call $local-name (local.get $j)))
 										)
-										(i32.store8
+										(i32.store
 											(call $local-type (local.get $i) (local.get $to))
-											(i32.load8_u (call $local-type (local.get $i) (local.get $j)))
+											(i32.load (call $local-type (local.get $i) (local.get $j)))
 										)
 										(br $shift)
 									)
@@ -496,9 +570,9 @@
 									(loop $copy
 										(br_if $copy-done (i32.eq (local.get $j) (local.get $count)))
 										(i64.store (call $local-name (local.get $j)) (i64.const 0))
-										(i32.store8
+										(i32.store
 											(call $local-type (local.get $i) (local.get $j))
-											(i32.load8_u offset=32 (i32.add (local.get $s) (local.get $j)))
+											(i32.load offset=32 (i32.add (local.get $s) (i32.mul (local.get $j) (i32.const 4))))
 										)
 										(local.set $j (i32.add (local.get $j) (i32.const 1)))
 										(br $copy)
@@ -565,8 +639,8 @@
 										;; A known width mismatch is invalid even in unreachable code.
 										(if
 											(i32.ne
-												(i32.load8_u offset=32 (i32.add (local.get $s) (local.get $j)))
-												(i32.load8_u offset=32 (i32.add (local.get $t) (local.get $j)))
+												(i32.load offset=32 (i32.add (local.get $s) (i32.mul (local.get $j) (i32.const 4))))
+												(i32.load offset=32 (i32.add (local.get $t) (i32.mul (local.get $j) (i32.const 4))))
 											)
 											(then
 												(call $fail (i32.const 1))
@@ -588,9 +662,9 @@
 									;; Only declared parameter bytes are copied; names remain local to explicit declarations.
 									(loop $inherit
 										(br_if $inherit-done (i32.eq (local.get $j) (i32.load offset=8 (local.get $t))))
-										(i32.store8 offset=32
-											(i32.add (local.get $s) (local.get $j))
-											(i32.load8_u offset=32 (i32.add (local.get $t) (local.get $j)))
+										(i32.store offset=32
+											(i32.add (local.get $s) (i32.mul (local.get $j) (i32.const 4)))
+											(i32.load offset=32 (i32.add (local.get $t) (i32.mul (local.get $j) (i32.const 4))))
 										)
 										(local.set $j (i32.add (local.get $j) (i32.const 1)))
 										(br $inherit)

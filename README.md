@@ -2,7 +2,7 @@
 
 A WAT interpreter written in WAT. The CLI and API run guests through one
 interpreted copy by default. This runtime passes the entire pinned WebAssembly
-2.0 core suite, including SIMD. Additional regressions run wiw through two
+3.0 core suite, including SIMD. Additional regressions run wiw through two
 interpreted layers.
 
 Requires Git, Node, make, m4, wat2wasm (WABT), and wasm-opt (Binaryen).
@@ -29,7 +29,7 @@ automatically; `make check` switches back to release without requiring `make cle
 
 The engine implements scalar operations for i32, i64, f32 and f64, direct
 and structurally typed indirect calls, flat/folded control, stack-polymorphic
-validation, globals, active/passive data and active/passive/declarative element segments, one memory and multiple funcref/externref
+validation, globals, active/passive data and active/passive/declarative element segments, multiple 32-bit or 64-bit memories and typed reference
 tables, imports/exports, and start functions. Text supports UTF-8 names, escaped
 strings, multivalue functions and controls, inline abbreviations, decimal/hexadecimal literals, and nested comments.
 The 2.0 numeric additions include all five integer sign extensions and eight
@@ -39,6 +39,15 @@ including passive and named data segments, atomic bounds failures and overlap-sa
 copies. Active segments are dropped after initialization; passive bytes survive
 until dropped and reload restores them. Binary loading validates data-count
 sections and active/passive data encodings.
+The 3.0 additions include tail calls, typed function references, non-null locals,
+recursive types and declared subtyping, structs and arrays with packed fields,
+i31 references, reference casts and branches, exception tags and `try_table`,
+extended integer/GC constant expressions, multiple memories, memory64/table64,
+relaxed SIMD, quoted identifiers and annotations. Exception payloads and GC
+operations execute in WAT, including when wiw interprets itself. Binary loading
+uses the same type system and runtime; checked-in 3.0 wire fixtures are compared
+with independent native execution.
+
 Guest calls use explicit frames, so guest recursion does not recurse on the
 native Wasm stack. Failures carry status codes and source offsets.
 
@@ -59,7 +68,7 @@ Use it when exact NaN bits matter; JavaScript Number transport can quiet NaNs.
 `getGlobal`/`setGlobal`, `readMemory`/`writeMemory`, and `growMemory` provide
 checked resource access. Memory reads return copies and do not require a memory
 export. `exportFunction(name)` makes a typed forwarding callback;
-`exportNamespace()` also includes opaque memory, global and table bindings.
+`exportNamespace()` also includes opaque memory, global, table and tag bindings.
 Imported resources share mutations, growth and table function references across
 instances. Reload invalidates previous bindings.
 
@@ -103,18 +112,24 @@ initialization. Bounds failures write no prefix. Imports, forward references
 and explicit `call_indirect` table targets retain independent namespaces.
 
 Implementation bounds are 512 functions, 512 exports, 128 parameters and 1,088
-combined parameter/local slots per function, 65,536 normalized instructions,
-512 call frames, 4,096 operands/controls, 256 syntax frames, 32,768 auxiliary immediate slots (branch vectors and table targets), 128 globals/data/element segments, 64 KiB decoded data/names, 2,048
-memory pages (128 MiB), 32 tables with 4,096 entries each and 4,096 element references, 256 explicit types,
+combined parameter/local slots per function, 131,072 normalized instructions,
+512 call frames, 4,096 operands/controls, 256 syntax frames, 32,768 auxiliary
+immediate slots (branch vectors and table targets), 512 globals, 128 data/element
+segments, 64 KiB decoded data/names, 2,048 memory pages per memory (128 MiB),
+512 memory descriptors, 32 tables with 4,096 entries each, 4,096 element references
+and 768 explicit types,
 128 results per function/control, 4,096 result-shape records,
 768 total declared/interned types, 1,024 indirect/control signatures, 1,024 import
 descriptors, 8,192 bytes per float literal and 1 MiB binary text expansion.
+GC objects and exception payloads share a 16 MiB arena per loaded instance,
+reclaimed on reload; there are 256 tag descriptors and 32,768 field descriptors.
 Allocation and fuel exhaustion are explicit failures. Default invocation fuel
-is 100,000; the spec runner uses 10,000,000. Multiple memories are beyond this target.
+is 100,000; the spec runner uses 10,000,000. The interpreter uses bounded physical
+backing for wide logical addresses.
 
-The spec submodule is pinned to `wg-2.0`, commit
-`fffc6e12fa454e475455a7b58d3b5dc343980c10`. The optimized bootstrap passes
-**all 148 core WAST files, including SIMD: 54,006 commands,
+The spec submodule is pinned to `wg-3.0`, commit
+`9d36019973201a19f9c9ebb0f10828b2fe2374aa`. The optimized bootstrap passes
+**all 258 core WAST files, including SIMD: 65,199 commands,
 zero skips and zero failures**. `make check-spec` runs the complete pinned suite through the default interpreted
 runtime and harness tests; `make check` adds regression, native-Wasm differential and
 self-hosting tests through two interpreted copies.
@@ -128,7 +143,7 @@ matching totals and per-file counts. CI freezes all file counts in
 
 `make audit-selfhost` runs the complete pinned suite through a WAT copy of wiw
 on the optimized bootstrap. Every module, spectest instance and negative assertion
-uses a separate interpreted engine. It passes **54,006 commands with zero
+uses a separate interpreted engine. It passes **65,199 commands with zero
 skips and zero failures through this copy**, in addition to the bootstrap baseline.
 The completed snapshot is `test/spec/selfhost.json`. The report is
 `build/spec-selfhost-wiw-opt.wasm.json`; it records the engine source hash,

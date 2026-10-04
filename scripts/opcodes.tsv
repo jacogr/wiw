@@ -436,3 +436,63 @@
 435	v128.store16_lane	2	0	simd	7	0	601	1
 436	v128.store32_lane	2	0	simd	7	0	602	1
 437	v128.store64_lane	2	0	simd	7	0	603	1
+438	return_call	0	0	call	1	1	18
+439	return_call_indirect	0	0	call	1	1	19
+440	i8x16.relaxed_swizzle	2	1	simd	7	7	768	7
+441	i32x4.relaxed_trunc_f32x4_s	1	1	simd	7	7	769	7
+442	i32x4.relaxed_trunc_f32x4_u	1	1	simd	7	7	770	7
+443	i32x4.relaxed_trunc_f64x2_s_zero	1	1	simd	7	7	771	7
+444	i32x4.relaxed_trunc_f64x2_u_zero	1	1	simd	7	7	772	7
+445	f32x4.relaxed_madd	3	1	simd	7	7	773	7
+446	f32x4.relaxed_nmadd	3	1	simd	7	7	774	7
+447	f64x2.relaxed_madd	3	1	simd	7	7	775	7
+448	f64x2.relaxed_nmadd	3	1	simd	7	7	776	7
+449	i8x16.relaxed_laneselect	3	1	simd	7	7	777	7
+450	i16x8.relaxed_laneselect	3	1	simd	7	7	778	7
+451	i32x4.relaxed_laneselect	3	1	simd	7	7	779	7
+452	i64x2.relaxed_laneselect	3	1	simd	7	7	780	7
+453	f32x4.relaxed_min	2	1	simd	7	7	781	7
+454	f32x4.relaxed_max	2	1	simd	7	7	782	7
+455	f64x2.relaxed_min	2	1	simd	7	7	783	7
+456	f64x2.relaxed_max	2	1	simd	7	7	784	7
+457	i16x8.relaxed_q15mulr_s	2	1	simd	7	7	785	7
+458	i16x8.relaxed_dot_i8x16_i7x16_s	2	1	simd	7	7	786	7
+459	i32x4.relaxed_dot_i8x16_i7x16_add_s	3	1	simd	7	7	787	7
+460	ref.as_non_null	1	1	ref	0	0	212
+461	call_ref	0	0	control	0	0	20
+462	return_call_ref	0	0	control	0	0	21
+463	br_on_null	0	0	control	0	0	213
+464	br_on_non_null	0	0	control	0	0	214
+465	ref.eq	2	1	ref	0	1	211
+466	ref.test	1	1	ref	0	1	1044
+467	ref.cast	1	1	ref	0	0	1046
+468	any.convert_extern	1	1	ref	6	0	1050
+469	extern.convert_any	1	1	ref	0	6	1051
+470	ref.i31	1	1	ref	1	0	1052
+471	i31.get_s	1	1	ref	0	1	1053
+472	i31.get_u	1	1	ref	0	1	1054
+473	struct.new	0	1	gc	0	0	1024
+474	struct.new_default	0	1	gc	0	0	1025
+475	struct.get	0	1	gc	0	0	1026
+476	struct.get_s	0	1	gc	0	0	1027
+477	struct.get_u	0	1	gc	0	0	1028
+478	struct.set	0	0	gc	0	0	1029
+479	array.new	0	1	gc	0	0	1030
+480	array.new_default	0	1	gc	0	0	1031
+481	array.new_fixed	0	1	gc	0	0	1032
+482	array.new_data	0	1	gc	0	0	1033
+483	array.new_elem	0	1	gc	0	0	1034
+484	array.get	0	1	gc	0	0	1035
+485	array.get_s	0	1	gc	0	0	1036
+486	array.get_u	0	1	gc	0	0	1037
+487	array.set	0	0	gc	0	0	1038
+488	array.len	0	1	gc	0	0	1039
+489	array.fill	0	0	gc	0	0	1040
+490	array.copy	0	0	gc	0	0	1041
+491	array.init_data	0	0	gc	0	0	1042
+492	array.init_elem	0	0	gc	0	0	1043
+493	br_on_cast	0	0	control	0	0	1048
+494	br_on_cast_fail	0	0	control	0	0	1049
+495	try_table	0	0	control	0	0	31
+496	throw	0	0	control	0	0	8
+497	throw_ref	1	0	control	0	0	10

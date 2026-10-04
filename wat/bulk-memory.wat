@@ -1,12 +1,15 @@
 	;; Execute bulk copy/fill only after all unsigned guest ranges pass bounds checks.
 	(func $bulk-memory
 		(param $op i32)
+		(param $source-memory i32)
 		(param $destination i32)
 		(param $source i32)
 		(param $length i32)
 		(local $dest i32)
 		(local $src i32)
+		(local $destination-memory i32)
 
+		(local.set $destination-memory (global.get $memory-index))
 		(local.set $dest
 			(call $guest-address (local.get $destination) (i32.const 0) (local.get $length))
 		)
@@ -19,6 +22,7 @@
 		;; Copy also validates its entire source before publishing destination writes.
 		(if (i32.eq (local.get $op) (i32.const 187))
 			(then
+				(call $use-memory (local.get $source-memory))
 				(local.set $src
 					(call $guest-address (local.get $source) (i32.const 0) (local.get $length))
 				)
@@ -28,6 +32,7 @@
 						(return)
 					)
 				)
+				(call $use-memory (local.get $destination-memory))
 				(memory.copy (local.get $dest) (local.get $src) (local.get $length))
 				(return)
 			)

@@ -112,7 +112,7 @@ for (const binary of ['wiw-opt.wasm']) {
     const i = await createInterpreter(url);
     i.load(guest('nop '.repeat(16383) + 'i32.const 42'));
     assert.equal(i.invoke('run'), 42);
-    assert.throws(() => i.load(guest('nop '.repeat(65536) + 'i32.const 42')), /resource limit/);
+    assert.throws(() => i.load(guest('nop '.repeat(131072) + 'i32.const 42')), /resource limit/);
     const nested = depth => '(i32.eqz '.repeat(depth) + '(i32.const 0)' + ')'.repeat(depth);
     i.load(guest(nested(255))); // 256 frames including the constant
     assert.equal(i.invoke('run'), 1);

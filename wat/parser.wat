@@ -360,6 +360,13 @@
 	)
 
 	;; Parse definitions and exports, resolve references, validate code and initialize guest resources.
+	;; Select validation without instantiation for module definitions and script validation assertions.
+	(func (export "validation_only")
+		(param $enabled i32)
+
+		(global.set $validation-only (local.get $enabled))
+	)
+
 	;; Failed loads invalidate the previous module; source-backed names remain alive until reload.
 	(func $load (export "load")
 		(param $p i32)
@@ -419,10 +426,24 @@
 						(br $definitions)
 					)
 				)
+				;; Exception tags declare parameter signatures in an independent index namespace.
+				(if (call $is-exception-word (i32.const 0))
+					(then
+						(call $parse-tag)
+						(br $definitions)
+					)
+				)
 				;; A function definition supplies its own signature, local declarations and body.
 				(if (call $is-word (i32.const 6) (i32.const 4))
 					(then
 						(call $parse-function)
+						(br $definitions)
+					)
+				)
+				;; Recursive groups bind all member heap types within a single shared scope.
+				(if (call $is-ref-word (i32.const 22))
+					(then
+						(call $parse-rec-group)
 						(br $definitions)
 					)
 				)
@@ -507,7 +528,11 @@
 			)
 		)
 		;; Allocate and initialize guest memory only for a fully validated module.
-		(if (i32.and (i32.eqz (global.get $error)) (i32.eqz (global.get $resource-phase)))
+		(if
+			(i32.and
+				(i32.eqz (global.get $validation-only))
+				(i32.and (i32.eqz (global.get $error)) (i32.eqz (global.get $resource-phase)))
+			)
 			(then
 				(call $instantiate-table)
 				;; Failed table initialization cannot be followed by further guest resource writes.
@@ -648,7 +673,7 @@
 										;; Every compatibility argument must have declared type i32.
 										(if
 											(i32.ne
-												(i32.load8_u (call $local-type (i32.load offset=8 (local.get $record)) (local.get $j)))
+												(i32.load (call $local-type (i32.load offset=8 (local.get $record)) (local.get $j)))
 												(i32.const 1)
 											)
 											(then
@@ -666,7 +691,7 @@
 								(local.set $value
 									(call $canonical-value
 										(local.get $value)
-										(i32.load8_u (call $local-type (i32.load offset=8 (local.get $record)) (local.get $j)))
+										(i32.load (call $local-type (i32.load offset=8 (local.get $record)) (local.get $j)))
 									)
 								)
 								(i64.store

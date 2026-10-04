@@ -43,6 +43,7 @@
 		(i32.store offset=16 (local.get $frame) (local.get $mode))
 		(i32.store offset=20 (local.get $frame) (local.get $label))
 		(i32.store offset=24 (local.get $frame) (local.get $length))
+		(i32.store offset=28 (local.get $frame) (i32.const 0))
 		(global.set $syntax-count (i32.add (global.get $syntax-count) (i32.const 1)))
 	)
 
@@ -74,6 +75,7 @@
 		(i32.store offset=8 (local.get $meta) (i32.load offset=12 (local.get $frame)))
 		(i32.store offset=12 (local.get $meta) (i32.load offset=20 (local.get $frame)))
 		(i32.store offset=16 (local.get $meta) (i32.load offset=24 (local.get $frame)))
+		(i32.store offset=24 (local.get $meta) (i32.load offset=28 (local.get $frame)))
 	)
 
 	;; Emit an end marker and patch its opening control to the matching instruction index.
@@ -213,10 +215,7 @@
 				;; A pending folded-if condition runs outside that if's label scope.
 				(if
 					(i32.and
-						(i32.and
-							(i32.ge_u (i32.load (local.get $frame)) (i32.const 37))
-							(i32.le_u (i32.load (local.get $frame)) (i32.const 39))
-						)
+						(call $control-op (i32.load (local.get $frame)))
 						(i32.ne (i32.load offset=4 (local.get $frame)) (i32.const -1))
 					)
 					(then
@@ -292,6 +291,67 @@
 		(local $wide i64)
 
 		(global.set $immediate-length (i32.const 0))
+		;; Memory selectors precede folded operands and retain forward references until validation.
+		(if
+			(i32.or
+				(i32.or (i32.eq (local.get $op) (i32.const 51)) (i32.eq (local.get $op) (i32.const 52)))
+				(i32.or (i32.eq (local.get $op) (i32.const 187)) (i32.eq (local.get $op) (i32.const 188)))
+			)
+			(then
+				(return (call $memory-immediate (local.get $op)))
+			)
+		)
+		;; Data initialization retains separate memory and segment namespaces.
+		(if (i32.eq (local.get $op) (i32.const 189))
+			(then
+				(return (call $memory-init-immediate))
+			)
+		)
+		;; Throws preserve late-bound tag names in a private immediate descriptor.
+		(if (i32.eq (local.get $op) (i32.const 496))
+			(then
+				(local.set $value (call $new-memory-immediate))
+				(i32.store offset=8 (local.get $value) (global.get $tok))
+				(i32.store (local.get $value) (call $function-reference))
+				(i32.store offset=4 (local.get $value) (global.get $immediate-length))
+				(return (local.get $value))
+			)
+		)
+		;; Cast branches retain their resolved label and both explicit reference types.
+		(if
+			(i32.or (i32.eq (local.get $op) (i32.const 493)) (i32.eq (local.get $op) (i32.const 494)))
+			(then
+				(local.set $value (call $new-memory-immediate))
+				(i32.store (local.get $value) (call $label))
+				(i32.store offset=4 (local.get $value) (call $value-type))
+				(i32.store offset=8 (local.get $value) (call $value-type))
+				(return (local.get $value))
+			)
+		)
+		;; Aggregate operators preserve type and field or segment immediates for late resolution.
+		(if
+			(i32.and
+				(i32.ge_u (local.get $op) (i32.const 473))
+				(i32.le_u (local.get $op) (i32.const 492))
+			)
+			(then
+				(return (call $gc-immediate (local.get $op)))
+			)
+		)
+		;; Casts and tests retain the complete target reference type, including nullability.
+		(if
+			(i32.or (i32.eq (local.get $op) (i32.const 466)) (i32.eq (local.get $op) (i32.const 467)))
+			(then
+				(return (call $value-type))
+			)
+		)
+		;; Reference calls carry a heap type rather than a table selector.
+		(if
+			(i32.or (i32.eq (local.get $op) (i32.const 461)) (i32.eq (local.get $op) (i32.const 462)))
+			(then
+				(return (call $reference-type))
+			)
+		)
 		;; Function and element-drop references retain forward names in their immediate fields.
 		(if
 			(i32.or (i32.eq (local.get $op) (i32.const 195)) (i32.eq (local.get $op) (i32.const 196)))
@@ -392,9 +452,12 @@
 		)
 		;; Local accesses and direct calls carry an unsigned index or a named reference.
 		(if
-			(i32.and
-				(i32.ge_u (local.get $op) (i32.const 33))
-				(i32.le_u (local.get $op) (i32.const 36))
+			(i32.or
+				(i32.eq (local.get $op) (i32.const 438))
+				(i32.and
+					(i32.ge_u (local.get $op) (i32.const 33))
+					(i32.le_u (local.get $op) (i32.const 36))
+				)
 			)
 			(then
 				;; Named calls retain their source span until module-wide resolution.
@@ -412,7 +475,8 @@
 			)
 		)
 		;; Indirect calls retain a complete deferred signature without consuming their folded arguments.
-		(if (i32.eq (local.get $op) (i32.const 105))
+		(if
+			(i32.or (i32.eq (local.get $op) (i32.const 105)) (i32.eq (local.get $op) (i32.const 439)))
 			(then
 				(return (call $indirect-signature))
 			)
@@ -492,7 +556,10 @@
 		)
 		;; Direct and conditional branches resolve their target label in the current control context.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 42)) (i32.eq (local.get $op) (i32.const 43)))
+			(i32.or
+				(i32.or (i32.eq (local.get $op) (i32.const 42)) (i32.eq (local.get $op) (i32.const 43)))
+				(i32.or (i32.eq (local.get $op) (i32.const 463)) (i32.eq (local.get $op) (i32.const 464)))
+			)
 			(then
 				(return (call $label))
 			)
@@ -770,11 +837,7 @@
 				)
 			)
 			;; Block, loop and if introduce a new label scope and an optional result signature.
-			(if
-				(i32.and
-					(i32.ge_u (local.get $op) (i32.const 37))
-					(i32.le_u (local.get $op) (i32.const 39))
-				)
+			(if (call $control-op (local.get $op))
 				(then
 					(local.set $label (i32.const 0))
 					(local.set $length (i32.const 0))
@@ -787,6 +850,13 @@
 						)
 					)
 					(local.set $value (call $block-result))
+					(local.set $extra (i32.const 0))
+					;; Try-table catches target outer labels before the new try label enters scope.
+					(if (i32.eq (local.get $op) (i32.const 495))
+						(then
+							(local.set $extra (call $parse-try-handlers))
+						)
+					)
 					(local.set $mode (i32.const 1))
 					;; Folded blocks/loops close by parentheses; folded if must first parse its condition.
 					(if (local.get $folded)
@@ -808,6 +878,10 @@
 						(local.get $mode)
 						(local.get $label)
 						(local.get $length)
+					)
+					(i32.store offset=28
+						(call $syntax (i32.sub (global.get $syntax-count) (i32.const 1)))
+						(local.get $extra)
 					)
 					;; Emit all controls except a pending folded-if condition.
 					(if (i32.and (i32.eqz (global.get $error)) (i32.ne (local.get $mode) (i32.const 3)))

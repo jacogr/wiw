@@ -1,7 +1,7 @@
 # wiw design
 
 wiw implements an interpreter in WAT, advancing from its completed 1.0 baseline
-toward WebAssembly 2.0. m4 assembles readable
+for the pinned WebAssembly 3.0 suite. m4 assembles readable
 source modules; wat2wasm builds the bootstrap and wasm-opt optimizes it. Node
 transports bytes, binds synchronous callbacks and coordinates shared resources.
 The engine parses and validates guest text and binary modules itself.
@@ -293,11 +293,12 @@ must survive a later initialization or start trap.
 Function records are 32 bytes; instructions are 16 bytes with opcode, immediate,
 source offset and auxiliary metadata. Local names use pointer/length pairs and
 local types use bytes. Exports are 32-byte records with a name span, target,
-source offset and resource kind (function 0, memory 1, global 2, table 3).
+source offset and resource kind (function 0, memory 1, global 2, table 3, tag 4).
 Call frames reserve 8,736 bytes: header at 0, 1,088 eight-byte local slots at 16,
 and the implicit control index at 8,720. Syntax/control metadata use 32-byte
-records. Signature records are 96 bytes with 64 parameter type bytes. Declared
-and interned types occupy indices below 768; indirect signatures use 768..1023.
+records. Signature records are 544 bytes with 128 parameter i32 type IDs. Declared
+and interned types occupy indices below 768; indirect signatures use a separate
+1,024-record arena.
 Global/segment metadata retain imported-initializer references until binding.
 
 `wat/limits.m4` is the source of arena offsets. All regions are disjoint and
@@ -305,35 +306,43 @@ relative to the aligned end of the loaded source:
 
 | Region | Offset | Reserved bytes |
 | --- | ---: | ---: |
-| code | 0 | 1,048,576 |
-| frame | 1,048,576 | 8,192 |
-| stack | 1,056,768 | 32,768 |
-| function | 1,089,536 | 16,384 |
-| local name | 1,105,920 | 4,456,448 |
-| export | 5,562,368 | 16,384 |
-| call | 5,578,752 | 4,472,832 |
-| metadata | 10,051,584 | 2,097,152 |
-| control | 12,148,736 | 131,072 |
-| table | 12,279,808 | 131,072 |
-| global | 12,410,880 | 10,240 |
-| segment | 12,421,120 | 6,144 |
-| data | 12,427,264 | 65,536 |
-| import | 12,492,800 | 32,768 |
-| local type | 12,525,568 | 557,056 |
-| type stack | 13,082,624 | 4,096 |
-| argument | 13,086,720 | 1,024 |
-| signature | 13,087,744 | 286,720 |
-| function type | 13,374,464 | 16,384 |
-| guest table | 13,390,848 | 526,336 |
-| element | 13,917,184 | 8,192 |
-| element entry | 13,925,376 | 65,536 |
-| result shape | 13,990,912 | 540,672 |
-| stack high | 14,531,584 | 32,768 |
-| call high | 14,564,352 | 4,456,448 |
-| argument high | 19,020,800 | 1,024 |
-| fp a | 19,021,824 | 4,096 |
-| fp b | 19,025,920 | 4,096 |
-| fp t | 19,030,016 | 4,096 |
+| code | 0 | 2,097,152 |
+| frame | 2,097,152 | 8,192 |
+| stack | 2,105,344 | 32,768 |
+| function | 2,138,112 | 16,384 |
+| local name | 2,154,496 | 4,456,448 |
+| export | 6,610,944 | 16,384 |
+| call | 6,627,328 | 4,472,832 |
+| metadata | 11,100,160 | 4,194,304 |
+| control | 15,294,464 | 131,072 |
+| table | 15,425,536 | 524,288 |
+| global | 15,949,824 | 40,960 |
+| segment | 15,990,784 | 6,144 |
+| data | 15,996,928 | 65,536 |
+| import | 16,062,464 | 32,768 |
+| local type | 16,095,232 | 2,228,224 |
+| type stack | 18,323,456 | 16,384 |
+| argument | 18,339,840 | 1,024 |
+| signature | 18,340,864 | 1,146,880 |
+| function type | 19,487,744 | 16,384 |
+| guest table | 19,504,128 | 526,336 |
+| element | 20,030,464 | 8,192 |
+| element entry | 20,038,656 | 65,536 |
+| result shape | 20,104,192 | 2,162,688 |
+| stack high | 22,266,880 | 32,768 |
+| call high | 22,299,648 | 4,456,448 |
+| argument high | 26,756,096 | 1,024 |
+| fp a | 26,757,120 | 4,096 |
+| fp b | 26,761,216 | 4,096 |
+| fp t | 26,765,312 | 4,096 |
+| memory | 26,769,408 | 32,768 |
+| reference type | 26,802,176 | 131,072 |
+| type comparison | 26,933,248 | 8,192 |
+| local init | 26,941,440 | 4,352 |
+| heap type | 26,945,792 | 49,152 |
+| field type | 26,994,944 | 524,288 |
+| gc object | 27,519,232 | 16,777,216 |
+| tag | 44,296,448 | 16,384 |
 
 Guest memory begins on the next page boundary after these arenas. Host scratch
 follows logical guest memory and moves after growth; hosts must re-query
@@ -343,9 +352,9 @@ common loader's arenas. The loader clears optional metadata on every reload.
 ## Bounds and failures
 
 Capacities: 512 functions/exports, 128 parameters, 1,088 combined local slots,
-65,536 instructions, 512 calls, 4,096 operands/controls, 256 syntax frames,
-32,768 auxiliary immediate slots, 128 globals/data/element segments, 64 KiB decoded
-data/names, 2,048 memory pages, 4,096 table entries/element references, 256 explicit
+131,072 instructions, 512 calls, 4,096 operands/controls, 256 syntax frames,
+32,768 auxiliary immediate slots, 512 globals, 128 data/element segments, 64 KiB decoded
+data/names, 2,048 memory pages, 4,096 table entries/element references, 768 explicit
 types, 768 declared/interned types, 1,024 indirect/control signatures, 1,024 imports,
 8,192 bytes per float literal and 1 MiB binary text expansion. Memory maxima
 remain language-level limits; allocating/growing beyond engine bounds fails.
@@ -359,7 +368,8 @@ limits 15; immutable global write 16; export kind mismatch 18; invalid alignment
 19; host import failure 20; invalid resume 21; suspended invocation reentry 22; narrow host ABI type mismatch 23;
 undefined/null element 24; indirect signature mismatch 25; table limits 26;
 element initialization bounds 27; invalid float-to-integer conversion 28;
-instance awaiting initialization or failed start 29; table instruction bounds 30.
+instance awaiting initialization or failed start 29; table instruction bounds 30;
+null reference 31; failed reference cast 32; array bounds 33; uncaught exception 34.
 Status 17 is unused. These capacities are implementation limits, not WebAssembly
 language restrictions, and remain explicit bounds on self-hosted programs.
 
@@ -370,9 +380,9 @@ oracles and the complete spec suite through the default interpreted WAT copy,
 using the optimized bootstrap (`-O4 --converge`). Explicit low-level ABI tests
 inspect the bootstrap directly. Harness tests check exact scalar
 bits, trap classes, isolated negative assertions, linking, coverage accounting
-and revision/hash verification. The official `wg-2.0` submodule at
-`fffc6e12fa454e475455a7b58d3b5dc343980c10` contributes all 148 core files,
-including SIMD. All 148 files / 54,006 commands pass with zero
+and revision/hash verification. The official `wg-3.0` submodule at
+`fffc6e12fa454e475455a7b58d3b5dc343980c10` contributes all 258 core files,
+including GC, exceptions, memory64, relaxed SIMD and SIMD. All 258 files / 65,199 commands pass with zero
 skips and failures in CI and the independent full audit. Per-file counts are
 frozen in `test/spec/capabilities.json`; `test/spec/progress.json` records the
 matching successful reports. The completed previous `wg-1.0` milestone passed
@@ -403,9 +413,9 @@ translates opaque external handles and foreign function indices per instance.
 observe writes and growth immediately within a guest invocation.
 
 Multivalue shapes keep void as zero and singletons as scalar type IDs. Longer
-vectors use 132-byte records (count plus up to 128 ordered type bytes), with
-4096 records in a separate arena. Signature records are 160 bytes, including
-128 parameter type bytes. Structural comparisons inspect vector types rather
+vectors use 516-byte records (count plus up to 128 ordered i32 type IDs), with
+4096 records in a separate arena. Signature records are 544 bytes, including
+128 parameter i32 type IDs. Structural comparisons inspect vector types rather
 than comparing their arena pointers. Deferred control type uses share the bounded
 1024-record anonymous-signature space. Normalized control metadata offset 20
 stores the parameter shape; runtime and validation controls retain it for loop
@@ -485,3 +495,60 @@ making performance thresholds part of conformance. The guest retains the spec's
 10,000,000-instruction fuel budget; its parent receives the maximum unsigned
 32-bit budget per ABI invocation. The existing two-layer fixture tests continue
 to verify deeper inception.
+
+
+## WebAssembly 3.0 types and references
+
+`references.wat` interns nullable and non-null reference descriptors separately.
+Local and operand validation stores full i32 type IDs. Recursive heap groups keep
+ordered membership and distinguish bound references from external references;
+canonical equality compares the whole group. Declared subtyping walks parent
+links, checks finality, enforces mutable-field invariance, and applies function
+parameter contravariance and result covariance. Abstract function, external,
+any/eq/i31/struct/array and exception hierarchies remain distinct. Non-null locals
+track definite initialization across control exits.
+
+`heap-types.wat` owns 768 heap records and 32,768 field descriptors. `gc.wat`
+allocates structs and arrays in a disjoint 16 MiB arena. Each object carries its
+runtime heap type and count, followed by raw 16-byte value slots. Packed fields
+truncate on assignment and sign/zero extend on reads. Array bulk operations check
+complete ranges before writing; copies preserve overlap semantics. i31 values
+retain exactly 31 payload bits. Casts and cast branches check runtime heap
+identity and declared ancestry. Constant constructors are replayed after namespace
+resolution and import binding, including nested forward function references.
+The arena is reclaimed on reload; allocation exhaustion uses the existing explicit
+resource-limit failure.
+
+Tail calls replace the current guest frame. Typed reference calls reuse the same
+suspension and import-resume path as direct/indirect calls. Parent ABI dispatch has
+an independent i64 fuel counter so interpreter overhead does not consume guest
+instruction fuel. Public guest fuel limits remain bounded and deterministic.
+
+## Exception handling
+
+`exceptions.wat` maintains 256 independent tag descriptors. Host tag handles retain
+canonical parameter types and stable shared identities. A thrown exception stores
+its tag identity and raw payload in the GC arena. `try_table` stores an ordered
+catch vector in auxiliary metadata. Dispatch searches controls from the innermost
+region outward, unwinds guest frames, and forwards payloads plus an optional
+exception reference to the selected outer label. Null `throw_ref` traps. Uncaught
+exceptions use status 34 and become `WiwException` values in Node; forwarded
+exceptions retain their tag identity across imported calls.
+
+## Wide resources and 3.0 binary decoding
+
+Memory descriptors have independent names, 32/64-bit address widths, logical
+limits and physical offsets. Up to 512 memories share bounded, packed backing;
+growth relocates later regions while retaining their contents. Address checks
+use full-width values before conversion to physical i32 offsets. Mixed-width
+memory copies check each selected source/destination width independently. Tables
+retain independent address widths and typed element constraints. Global aliases
+share live low/high value slots while keeping their original declaration metadata.
+
+The binary reader expands recursive groups, composite storage types, tag sections,
+try-table catch vectors and GC immediates into ordinary text declarations. A bounded
+constant-expression stack rotates operand spans into equivalent folded syntax;
+the common parser/validator checks the resulting expressions. Guest binary loading
+does not compile or instantiate guest code natively. Binary fixtures cover recursive
+types, packed fields, array bulk operations, casts, extended constants and exceptions;
+Node is an independent oracle confined to tests.
