@@ -570,3 +570,25 @@ The benchmark records bootstrap and hosted results separately. The initial full
 `wg-3.0` hosted audit took 2,047,229 ms (34.12 minutes) on Node v24.11.1 with
 Binaryen 125. Before/after microbenchmarks for the dispatch change both use
 Binaryen 133, keeping the optimizer version consistent in that comparison.
+
+
+Defined tail calls retain the original argument address, reset the operand floor
+and control depth, and copy arguments straight into the reused frame. They avoid
+moving arguments down the operand stack first. Imported tail calls still move
+arguments to that floor before suspending, so host results resume at function end.
+Indirect calls keep their table bounds, null and recursive type checks.
+
+Frame entry still initializes every declared parameter and local slot in both
+halves on each entry, including self tail calls and transitions to a different
+function. Caller operands below the frame floor, vector bits and reference handles
+survive unchanged. The additional benchmark rotates four parameters and dirties a
+local on each iteration, checking that subsequent entries clear it. Focused
+regressions also cover parameterless callees, live caller operands, imported tail
+calls, vector high halves and exhausted fuel followed by recovery.
+
+An experiment using bulk parameter copies and local zero fills improved small
+hosted call benchmarks, but showed no clear full-suite advantage over direct
+argument transfer alone. It was discarded in favor of the simpler frame entry.
+A same-session full audit measured unchanged code at 534,556 ms and direct
+argument transfer at 522,360 ms (2.3% less time). The earlier 501,052 ms result
+remains the best historical measurement; timings are subject to run variation.

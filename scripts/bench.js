@@ -23,6 +23,15 @@ const cases = {
     (func $run (export "run") (type $t)
       (if (result i64) (i64.eqz (local.get 0)) (then (i64.const 0))
         (else (return_call_ref $t (i64.sub (local.get 0) (i64.const 1)) (ref.func $run))))))`,
+  parameters: `(module
+    (func $step (param i64 i64 i64 i64) (result i64) (local i64 i64 i64 i64)
+      (if (i64.ne (local.get 4) (i64.const 0)) (then unreachable))
+      (if (result i64) (i64.eqz (local.get 0))
+        (then (i64.sub (i64.add (i64.add (local.get 1) (local.get 2)) (local.get 3)) (i64.const 6)))
+        (else (local.set 4 (i64.const 99))
+          (return_call $step (i64.sub (local.get 0) (i64.const 1)) (local.get 2) (local.get 3) (local.get 1)))))
+    (func (export "run") (param i64) (result i64)
+      (call $step (local.get 0) (i64.const 1) (i64.const 2) (i64.const 3))))`,
   memory: `(module (memory 1) (func (export "run") (param i64) (result i64)
     (loop $again
       (i32.store (i32.const 0) (i32.add (i32.load (i32.const 0)) (i32.const 1)))

@@ -559,23 +559,22 @@
 							)
 						)
 					)
-					;; A tail call discards local operands and controls while retaining only its callee arguments.
-					(if (local.get $tail)
+					(local.set $meta (call $function (local.get $callee)))
+					;; Imported calls need their arguments on the operand stack while the host runs.
+					(if (i32.eq (i32.load offset=8 (local.get $meta)) (i32.const -1))
 						(then
-							(call $runtime-shift
-								(i32.load offset=8 (local.get $frame))
-								(i32.load offset=16 (call $function (local.get $callee)))
+							;; Imported tail calls discard controls and resume at function end after host results arrive.
+							(if (local.get $tail)
+								(then
+									(call $runtime-shift
+										(i32.load offset=8 (local.get $frame))
+										(i32.load offset=16 (local.get $meta))
+									)
+									(global.set $control-count (i32.load offset=CALL_ROOT_OFFSET (local.get $frame)))
+									(i32.store (local.get $frame) (i32.load offset=4 (local.get $frame)))
+								)
 							)
-							(global.set $control-count (i32.load offset=CALL_ROOT_OFFSET (local.get $frame)))
-							(i32.store (local.get $frame) (i32.load offset=4 (local.get $frame)))
-						)
-					)
-					;; Imported calls consume arguments and suspend at the already saved next instruction.
-					(if (i32.eq (i32.load offset=8 (call $function (local.get $callee))) (i32.const -1))
-						(then
-							(global.set $sp
-								(i32.sub (global.get $sp) (i32.load offset=16 (call $function (local.get $callee))))
-							)
+							(global.set $sp (i32.sub (global.get $sp) (i32.load offset=16 (local.get $meta))))
 							(call $suspend-import
 								(local.get $callee)
 								(local.get $calls)
@@ -585,9 +584,13 @@
 							(return (i64.const 0))
 						)
 					)
-					;; Reuse the current defined-function frame after imported tail calls have suspended above.
+					(global.set $sp (i32.sub (global.get $sp) (i32.load offset=16 (local.get $meta))))
+					(local.set $target (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
+					;; Defined tail calls copy directly from the old argument slots into the reused frame.
 					(if (local.get $tail)
 						(then
+							(global.set $sp (i32.load offset=8 (local.get $frame)))
+							(global.set $control-count (i32.load offset=CALL_ROOT_OFFSET (local.get $frame)))
 							(local.set $calls (i32.sub (local.get $calls) (i32.const 1)))
 						)
 					)
@@ -598,25 +601,17 @@
 							(return (i64.const 0))
 						)
 					)
-					(global.set $sp
-						(i32.sub (global.get $sp) (i32.load offset=16 (call $function (local.get $callee))))
-					)
 					(local.set $frame
 						(i32.add (global.get $call-base) (i32.mul (local.get $calls) (i32.const CALL_BYTES)))
 					)
-					(call $enter
-						(local.get $callee)
-						(local.get $frame)
-						(global.get $sp)
-						(i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8)))
-					)
+					(call $enter (local.get $callee) (local.get $frame) (global.get $sp) (local.get $target))
 					(i32.store offset=CALL_ROOT_OFFSET (local.get $frame) (global.get $control-count))
 					(call $runtime-control
 						(i32.const 0)
 						(i32.load (local.get $frame))
 						(i32.load offset=4 (local.get $frame))
 						(global.get $sp)
-						(i32.load offset=24 (call $function (local.get $callee)))
+						(i32.load offset=24 (local.get $meta))
 					)
 					;; Failed control allocation cannot be followed by dispatch in an incomplete callee frame.
 					(if (global.get $error)

@@ -173,8 +173,9 @@ execution and trap handling run inside the interpreted WAT copy; the shared
 Node frontend continues to handle synchronous callbacks and resource bindings.
 
 
-`make bench` measures direct, indirect and typed-reference tail calls, a scalar
-loop, and memory reads/writes on both the bootstrap and hosted runtime. It writes
+`make bench` measures direct, indirect and typed-reference tail calls, a call
+with multiple parameters and locals, a scalar loop, and memory reads/writes on
+both the bootstrap and hosted runtime. It writes
 sample timings, medians and source/binary hashes to `build/bench.json`.
 `BENCH_ITERATIONS=10000 BENCH_SAMPLES=7 make bench` adjusts the bounded workload.
 These timings are diagnostic measurements, not CI thresholds. The full pinned
