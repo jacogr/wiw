@@ -2297,6 +2297,876 @@
           }
         ]
       }
+    },
+    {
+      "label": "Early structured control dispatch with one opcode gate",
+      "node": "v24.11.1",
+      "binaryen": "wasm-opt version 133",
+      "tag": "wg-3.0",
+      "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
+      "runtime": "interpreted",
+      "interpreterDepth": 1,
+      "engineSourceSha256": "2b13ecf7dd2c2b49004d2076813079abaa4990368dd4b1c5da22d0e497949deb",
+      "binarySha256": "f631166152bb59be31335ca5a95765f5cf1ae8708a531abb321cf97ec0a34b67",
+      "fullSpec": {
+        "elapsedMs": 405924.370209,
+        "passed": 65199,
+        "skipped": 0,
+        "failed": 0,
+        "fileCount": 258,
+        "speedup": 5.043375086790021,
+        "reductionPercent": 80.17200817327124,
+        "previousElapsedMs": 417007.769041,
+        "speedupVsPrevious": 1.0273040981163397,
+        "reductionPercentVsPrevious": 2.657839890486613,
+        "slowestFiles": [
+          {
+            "file": "return_call_ref.wast",
+            "elapsedMs": 63756.866666999995
+          },
+          {
+            "file": "return_call.wast",
+            "elapsedMs": 56457.397875000024
+          },
+          {
+            "file": "simd/simd_const.wast",
+            "elapsedMs": 14801.037416999985
+          },
+          {
+            "file": "const.wast",
+            "elapsedMs": 13704.704458000007
+          },
+          {
+            "file": "memory_grow.wast",
+            "elapsedMs": 12755.254625000001
+          }
+        ]
+      },
+      "validation": {
+        "tests": 138,
+        "failed": 0,
+        "skipped": 0,
+        "bootstrapPassed": 65199,
+        "bootstrapFileCount": 258
+      },
+      "timingNote": "Hosted audit from make check; all tests and frozen full-spec coverage must pass before recording.",
+      "benchmarkBefore": {
+        "node": "v24.11.1",
+        "binaryen": "wasm-opt version 133",
+        "engineSourceSha256": "89295193ee80b590e8e01e1ba735c838392e9fe658356aaa6f6e9813f359e318",
+        "binarySha256": "66be04d9d9ac36775b0c39da6f18f92166c2786f902b7eab69a5123aeaf09a36",
+        "iterations": 5000,
+        "samples": 5,
+        "cases": [
+          {
+            "runtime": "bootstrap",
+            "name": "direct",
+            "medianMs": 0.41379099999999625,
+            "elapsedMs": [
+              0.5129169999999945,
+              0.4831670000000017,
+              0.41379099999999625,
+              0.4035420000000016,
+              0.36933299999999747
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "indirect",
+            "medianMs": 0.5333339999999964,
+            "elapsedMs": [
+              0.5983330000000038,
+              1.704625,
+              0.5333339999999964,
+              0.48408399999999574,
+              0.47408300000000025
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "indirectTypes",
+            "medianMs": 0.4752909999999986,
+            "elapsedMs": [
+              0.6727909999999966,
+              0.4887500000000031,
+              0.4752909999999986,
+              0.4563750000000013,
+              0.45087499999999636
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "reference",
+            "medianMs": 0.4335840000000033,
+            "elapsedMs": [
+              0.5048749999999984,
+              0.5025000000000048,
+              0.4335840000000033,
+              0.3860830000000064,
+              0.3940419999999989
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "globalReference",
+            "medianMs": 0.40212499999999807,
+            "elapsedMs": [
+              0.4169160000000005,
+              0.41158400000000483,
+              0.40212499999999807,
+              0.39862499999999557,
+              0.39858300000000213
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "parameters",
+            "medianMs": 0.817458000000002,
+            "elapsedMs": [
+              0.817458000000002,
+              0.7963330000000042,
+              0.8375000000000057,
+              0.8182500000000061,
+              0.7825830000000025
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "memory",
+            "medianMs": 1.200917000000004,
+            "elapsedMs": [
+              1.2191250000000053,
+              1.200917000000004,
+              1.1361670000000004,
+              1.211708999999999,
+              1.1470410000000015
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "conditions",
+            "medianMs": 0.434166999999988,
+            "elapsedMs": [
+              0.5414999999999992,
+              0.5663330000000002,
+              0.434166999999988,
+              0.433290999999997,
+              0.4270000000000067
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "loop",
+            "medianMs": 0.23000000000000398,
+            "elapsedMs": [
+              0.23000000000000398,
+              0.2201249999999959,
+              0.22050000000000125,
+              0.26724999999999,
+              0.23033399999999915
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "direct",
+            "medianMs": 65.34920899999997,
+            "elapsedMs": [
+              65.613333,
+              64.87241700000001,
+              66.152042,
+              65.34920899999997,
+              64.78479199999998
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "indirect",
+            "medianMs": 82.10508400000003,
+            "elapsedMs": [
+              81.68679199999997,
+              83.85016700000006,
+              94.92562499999997,
+              82.10508400000003,
+              82.02995899999996
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "indirectTypes",
+            "medianMs": 82.31287500000008,
+            "elapsedMs": [
+              81.31833299999994,
+              81.54212499999994,
+              83.99025000000006,
+              82.31287500000008,
+              90.7768329999999
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "reference",
+            "medianMs": 71.97000000000003,
+            "elapsedMs": [
+              71.97000000000003,
+              71.82162500000004,
+              75.32916599999999,
+              87.06050000000005,
+              71.23029200000019
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "globalReference",
+            "medianMs": 72.85133299999984,
+            "elapsedMs": [
+              73.133333,
+              72.52604199999996,
+              73.11450000000013,
+              72.85133299999984,
+              72.44374999999991
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "parameters",
+            "medianMs": 157.2430830000003,
+            "elapsedMs": [
+              157.50962500000014,
+              157.2430830000003,
+              171.6668340000001,
+              156.69916699999976,
+              156.3901249999999
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "memory",
+            "medianMs": 164.59358299999985,
+            "elapsedMs": [
+              164.59358299999985,
+              164.50199999999995,
+              165.2628340000001,
+              177.04054199999973,
+              163.3899580000002
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "conditions",
+            "medianMs": 117.19137499999943,
+            "elapsedMs": [
+              117.5260830000002,
+              116.86037499999975,
+              117.19137499999943,
+              117.44208400000025,
+              116.38104199999998
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "loop",
+            "medianMs": 62.783957999999984,
+            "elapsedMs": [
+              63.92779200000041,
+              72.54250000000047,
+              62.67441599999984,
+              62.783957999999984,
+              62.41920800000025
+            ]
+          }
+        ]
+      },
+      "benchmark": {
+        "node": "v24.11.1",
+        "binaryen": "wasm-opt version 133",
+        "engineSourceSha256": "2b13ecf7dd2c2b49004d2076813079abaa4990368dd4b1c5da22d0e497949deb",
+        "binarySha256": "f631166152bb59be31335ca5a95765f5cf1ae8708a531abb321cf97ec0a34b67",
+        "iterations": 5000,
+        "samples": 5,
+        "cases": [
+          {
+            "runtime": "bootstrap",
+            "name": "direct",
+            "medianMs": 0.42029099999999886,
+            "elapsedMs": [
+              0.5288339999999963,
+              0.4812910000000059,
+              0.42029099999999886,
+              0.4106250000000031,
+              0.36412500000000136
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "indirect",
+            "medianMs": 0.7859169999999978,
+            "elapsedMs": [
+              5.27225,
+              7.737583000000008,
+              0.5423329999999993,
+              0.4652499999999975,
+              0.7859169999999978
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "indirectTypes",
+            "medianMs": 0.48408399999999574,
+            "elapsedMs": [
+              1.2337500000000006,
+              0.5047079999999937,
+              0.48408399999999574,
+              0.4750410000000045,
+              0.44570800000001043
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "reference",
+            "medianMs": 0.39170799999999417,
+            "elapsedMs": [
+              0.4691669999999988,
+              0.44866700000000037,
+              0.39170799999999417,
+              0.3819160000000039,
+              0.3807910000000021
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "globalReference",
+            "medianMs": 0.3913749999999965,
+            "elapsedMs": [
+              0.4057499999999976,
+              0.3913749999999965,
+              0.39016699999999105,
+              0.38954200000000583,
+              0.39350000000000307
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "parameters",
+            "medianMs": 0.833625000000012,
+            "elapsedMs": [
+              0.833625000000012,
+              0.7591660000000076,
+              0.7617079999999987,
+              0.8382920000000098,
+              0.8580000000000041
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "memory",
+            "medianMs": 1.1251670000000047,
+            "elapsedMs": [
+              1.2107079999999968,
+              1.2004160000000041,
+              1.1251670000000047,
+              1.1013329999999968,
+              0.8582499999999982
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "conditions",
+            "medianMs": 0.46895800000000065,
+            "elapsedMs": [
+              0.46895800000000065,
+              0.6005419999999901,
+              0.5970829999999978,
+              0.462875000000011,
+              0.4054999999999893
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "loop",
+            "medianMs": 0.23104199999998798,
+            "elapsedMs": [
+              0.22929100000000346,
+              0.21825000000001182,
+              0.2433330000000069,
+              0.23104199999998798,
+              0.2585410000000081
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "direct",
+            "medianMs": 62.70625000000001,
+            "elapsedMs": [
+              63.393625000000014,
+              62.47545800000003,
+              62.67862500000001,
+              62.70625000000001,
+              63.28983299999999
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "indirect",
+            "medianMs": 79.95095800000001,
+            "elapsedMs": [
+              79.95095800000001,
+              79.14329099999998,
+              80.35562500000003,
+              93.76149999999996,
+              79.27041700000007
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "indirectTypes",
+            "medianMs": 79.4386669999999,
+            "elapsedMs": [
+              79.770084,
+              79.93008299999985,
+              79.4386669999999,
+              79.1048330000001,
+              79.04554200000007
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "reference",
+            "medianMs": 69.997791,
+            "elapsedMs": [
+              70.10387500000002,
+              71.309125,
+              69.97066699999982,
+              69.83333300000004,
+              69.997791
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "globalReference",
+            "medianMs": 71.36158299999988,
+            "elapsedMs": [
+              71.44933300000002,
+              71.61324999999988,
+              71.07212499999991,
+              71.24437499999999,
+              71.36158299999988
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "parameters",
+            "medianMs": 150.25070800000003,
+            "elapsedMs": [
+              158.136125,
+              149.1514589999997,
+              150.25070800000003,
+              161.02808300000015,
+              149.7621250000002
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "memory",
+            "medianMs": 155.82495800000015,
+            "elapsedMs": [
+              155.82495800000015,
+              155.6620829999997,
+              155.63379199999963,
+              157.85233300000027,
+              171.19545900000003
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "conditions",
+            "medianMs": 108.95329199999969,
+            "elapsedMs": [
+              108.95329199999969,
+              108.83124999999973,
+              108.97874999999976,
+              108.74625000000015,
+              109.30695899999955
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "loop",
+            "medianMs": 60.05629200000021,
+            "elapsedMs": [
+              59.88383299999987,
+              61.393708000000515,
+              62.40929199999937,
+              60.014000000000124,
+              60.05629200000021
+            ]
+          }
+        ]
+      },
+      "instructionProfile": {
+        "method": "Instrumented bootstrap instruction count between guest dispatch markers; includes fixed marker/resume overhead. Diagnostic counts, not timings.",
+        "beforeSourceSha256": "89295193ee80b590e8e01e1ba735c838392e9fe658356aaa6f6e9813f359e318",
+        "afterSourceSha256": "2b13ecf7dd2c2b49004d2076813079abaa4990368dd4b1c5da22d0e497949deb",
+        "before": [
+          {
+            "kind": "direct",
+            "file": "return_call.wast",
+            "export": "count",
+            "input": 100,
+            "rows": [
+              {
+                "opcode": 438,
+                "name": "return_call",
+                "count": 100,
+                "instructions": 38300,
+                "instructionsPerExecution": 383
+              },
+              {
+                "opcode": 33,
+                "name": "local.get",
+                "count": 202,
+                "instructions": 32522,
+                "instructionsPerExecution": 161
+              },
+              {
+                "opcode": 39,
+                "name": "if",
+                "count": 101,
+                "instructions": 27860,
+                "instructionsPerExecution": 275.84158415841586
+              },
+              {
+                "opcode": 63,
+                "name": "i64.sub",
+                "count": 100,
+                "instructions": 19600,
+                "instructionsPerExecution": 196
+              },
+              {
+                "opcode": 87,
+                "name": "i64.eqz",
+                "count": 101,
+                "instructions": 17877,
+                "instructionsPerExecution": 177
+              },
+              {
+                "opcode": 61,
+                "name": "i64.const",
+                "count": 100,
+                "instructions": 13700,
+                "instructionsPerExecution": 137
+              },
+              {
+                "opcode": 40,
+                "name": "else",
+                "count": 1,
+                "instructions": 175,
+                "instructionsPerExecution": 175
+              }
+            ]
+          },
+          {
+            "kind": "indirect",
+            "file": "return_call_indirect.wast",
+            "export": "even",
+            "input": 100,
+            "rows": [
+              {
+                "opcode": 439,
+                "name": "return_call_indirect",
+                "count": 100,
+                "instructions": 58000,
+                "instructionsPerExecution": 580
+              },
+              {
+                "opcode": 33,
+                "name": "local.get",
+                "count": 201,
+                "instructions": 32361,
+                "instructionsPerExecution": 161
+              },
+              {
+                "opcode": 39,
+                "name": "if",
+                "count": 101,
+                "instructions": 27860,
+                "instructionsPerExecution": 275.84158415841586
+              },
+              {
+                "opcode": 1,
+                "name": "i32.const",
+                "count": 201,
+                "instructions": 26532,
+                "instructionsPerExecution": 132
+              },
+              {
+                "opcode": 3,
+                "name": "i32.sub",
+                "count": 100,
+                "instructions": 20000,
+                "instructionsPerExecution": 200
+              },
+              {
+                "opcode": 27,
+                "name": "i32.eqz",
+                "count": 101,
+                "instructions": 18180,
+                "instructionsPerExecution": 180
+              },
+              {
+                "opcode": 40,
+                "name": "else",
+                "count": 1,
+                "instructions": 175,
+                "instructionsPerExecution": 175
+              }
+            ]
+          },
+          {
+            "kind": "reference",
+            "file": "return_call_ref.wast",
+            "export": "count",
+            "input": 100,
+            "rows": [
+              {
+                "opcode": 462,
+                "name": "return_call_ref",
+                "count": 100,
+                "instructions": 39600,
+                "instructionsPerExecution": 396
+              },
+              {
+                "opcode": 33,
+                "name": "local.get",
+                "count": 202,
+                "instructions": 32522,
+                "instructionsPerExecution": 161
+              },
+              {
+                "opcode": 39,
+                "name": "if",
+                "count": 101,
+                "instructions": 27860,
+                "instructionsPerExecution": 275.84158415841586
+              },
+              {
+                "opcode": 63,
+                "name": "i64.sub",
+                "count": 100,
+                "instructions": 19600,
+                "instructionsPerExecution": 196
+              },
+              {
+                "opcode": 87,
+                "name": "i64.eqz",
+                "count": 101,
+                "instructions": 17877,
+                "instructionsPerExecution": 177
+              },
+              {
+                "opcode": 49,
+                "name": "global.get",
+                "count": 100,
+                "instructions": 17800,
+                "instructionsPerExecution": 178
+              },
+              {
+                "opcode": 61,
+                "name": "i64.const",
+                "count": 100,
+                "instructions": 13700,
+                "instructionsPerExecution": 137
+              },
+              {
+                "opcode": 40,
+                "name": "else",
+                "count": 1,
+                "instructions": 175,
+                "instructionsPerExecution": 175
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "kind": "direct",
+            "file": "return_call.wast",
+            "export": "count",
+            "input": 100,
+            "rows": [
+              {
+                "opcode": 438,
+                "name": "return_call",
+                "count": 100,
+                "instructions": 39400,
+                "instructionsPerExecution": 394
+              },
+              {
+                "opcode": 33,
+                "name": "local.get",
+                "count": 202,
+                "instructions": 32522,
+                "instructionsPerExecution": 161
+              },
+              {
+                "opcode": 39,
+                "name": "if",
+                "count": 101,
+                "instructions": 23719,
+                "instructionsPerExecution": 234.84158415841586
+              },
+              {
+                "opcode": 63,
+                "name": "i64.sub",
+                "count": 100,
+                "instructions": 19600,
+                "instructionsPerExecution": 196
+              },
+              {
+                "opcode": 87,
+                "name": "i64.eqz",
+                "count": 101,
+                "instructions": 17877,
+                "instructionsPerExecution": 177
+              },
+              {
+                "opcode": 61,
+                "name": "i64.const",
+                "count": 100,
+                "instructions": 13700,
+                "instructionsPerExecution": 137
+              },
+              {
+                "opcode": 40,
+                "name": "else",
+                "count": 1,
+                "instructions": 123,
+                "instructionsPerExecution": 123
+              }
+            ]
+          },
+          {
+            "kind": "indirect",
+            "file": "return_call_indirect.wast",
+            "export": "even",
+            "input": 100,
+            "rows": [
+              {
+                "opcode": 439,
+                "name": "return_call_indirect",
+                "count": 100,
+                "instructions": 59100,
+                "instructionsPerExecution": 591
+              },
+              {
+                "opcode": 33,
+                "name": "local.get",
+                "count": 201,
+                "instructions": 32361,
+                "instructionsPerExecution": 161
+              },
+              {
+                "opcode": 1,
+                "name": "i32.const",
+                "count": 201,
+                "instructions": 26532,
+                "instructionsPerExecution": 132
+              },
+              {
+                "opcode": 39,
+                "name": "if",
+                "count": 101,
+                "instructions": 23719,
+                "instructionsPerExecution": 234.84158415841586
+              },
+              {
+                "opcode": 3,
+                "name": "i32.sub",
+                "count": 100,
+                "instructions": 20000,
+                "instructionsPerExecution": 200
+              },
+              {
+                "opcode": 27,
+                "name": "i32.eqz",
+                "count": 101,
+                "instructions": 18180,
+                "instructionsPerExecution": 180
+              },
+              {
+                "opcode": 40,
+                "name": "else",
+                "count": 1,
+                "instructions": 123,
+                "instructionsPerExecution": 123
+              }
+            ]
+          },
+          {
+            "kind": "reference",
+            "file": "return_call_ref.wast",
+            "export": "count",
+            "input": 100,
+            "rows": [
+              {
+                "opcode": 462,
+                "name": "return_call_ref",
+                "count": 100,
+                "instructions": 40700,
+                "instructionsPerExecution": 407
+              },
+              {
+                "opcode": 33,
+                "name": "local.get",
+                "count": 202,
+                "instructions": 32522,
+                "instructionsPerExecution": 161
+              },
+              {
+                "opcode": 39,
+                "name": "if",
+                "count": 101,
+                "instructions": 23719,
+                "instructionsPerExecution": 234.84158415841586
+              },
+              {
+                "opcode": 63,
+                "name": "i64.sub",
+                "count": 100,
+                "instructions": 19600,
+                "instructionsPerExecution": 196
+              },
+              {
+                "opcode": 49,
+                "name": "global.get",
+                "count": 100,
+                "instructions": 18900,
+                "instructionsPerExecution": 189
+              },
+              {
+                "opcode": 87,
+                "name": "i64.eqz",
+                "count": 101,
+                "instructions": 17877,
+                "instructionsPerExecution": 177
+              },
+              {
+                "opcode": 61,
+                "name": "i64.const",
+                "count": 100,
+                "instructions": 13700,
+                "instructionsPerExecution": 137
+              },
+              {
+                "opcode": 40,
+                "name": "else",
+                "count": 1,
+                "instructions": 123,
+                "instructionsPerExecution": 123
+              }
+            ]
+          }
+        ]
+      }
     }
   ],
   "experiments": [

@@ -52,6 +52,13 @@ const cases = {
       (i32.store (i32.const 0) (i32.add (i32.load (i32.const 0)) (i32.const 1)))
       (local.set 0 (i64.sub (local.get 0) (i64.const 1)))
       (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`,
+  conditions: `(module (func (export "run") (param i64) (result i64)
+    (loop $again
+      (local.set 0
+        (if (result i64) (i32.and (i32.wrap_i64 (local.get 0)) (i32.const 1))
+          (then (i64.sub (local.get 0) (i64.const 1)))
+          (else (i64.sub (local.get 0) (i64.const 1)))))
+      (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`,
   loop: `(module (func (export "run") (param i64) (result i64)
     (loop $again (local.set 0 (i64.sub (local.get 0) (i64.const 1)))
       (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`

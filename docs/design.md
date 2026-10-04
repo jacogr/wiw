@@ -648,3 +648,33 @@ The pinned indirect tail-call file takes 11.37 seconds versus 22.80 seconds.
 All 65,199 commands across 258 files pass with zero skips and failures in both
 runtimes, and all 136 regression tests pass. These measurements retain the
 original stress inputs; full-suite timings remain subject to run variation.
+
+
+Structured controls now finish after the existing constant/local and integer
+paths, before global/reference reads and call/resource dispatch. One opcode gate
+selects block, loop, if, else, end, and try-table. Else and end finish immediately;
+the remaining selected opcodes enter their control frame without another
+classification call. Entry still uses resolved metadata, preserves block inputs
+and result shapes, enforces label capacity, and uses the original branch targets.
+Fuel and the saved cursor advance once before this path, as for every instruction.
+
+Exact-fuel regressions exercise every instruction boundary in both conditional
+arms, including the else marker executed only by the true arm. They check that a
+write takes effect only after its instruction executes and that a subsequent
+invocation recovers. Existing multivalue, vector, exception, and control-capacity
+checks continue to exercise the shared control machinery.
+
+The paired alternating-arm benchmark takes 109 ms versus 117 ms in hosted mode.
+In diagnostic profiles of the pinned stress functions, if falls from about 276 to
+235 bootstrap instructions and else from 175 to 123. Calls and global reads each
+pay 11 additional instructions for the earlier gate, while constant/local and
+integer operations avoid it. The full audit measures the combined effect rather
+than accepting the reduced cost of individual control instructions alone.
+
+The complete hosted audit from `make check` takes 405,924 ms (6.77 minutes),
+compared with the preceding 417,008 ms measurement (2.7% less time). Direct
+and reference tail-call files take 56.46 and 63.76 seconds, compared with 59.29
+and 66.60 seconds previously. All 138 tests pass; both runtimes pass the frozen
+65,199 commands across 258 files with zero skips and failures. The history records
+the audit context, paired benchmarks, source/binary hashes and diagnostic profiles.
+These local timings remain subject to run variation and are not CI thresholds.

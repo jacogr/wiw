@@ -460,6 +460,79 @@
 					(br $dispatch)
 				)
 			)
+			;; Structured controls share an early opcode gate before resource and call dispatch.
+			(if
+				(i32.or
+					(i32.le_u (i32.sub (local.get $op) (i32.const 37)) (i32.const 4))
+					(i32.eq (local.get $op) (i32.const 495))
+				)
+				(then
+					;; Reaching else from the true arm skips the false body but still executes the end marker.
+					(if (i32.eq (local.get $op) (i32.const 40))
+						(then
+							(i32.store
+								(local.get $frame)
+								(i32.load (call $metadata (i32.load offset=4 (local.get $record))))
+							)
+							(br $dispatch)
+						)
+					)
+					;; Normal control completion leaves its validated results and removes one runtime label.
+					(if (i32.eq (local.get $op) (i32.const 41))
+						(then
+							(global.set $control-count (i32.sub (global.get $control-count) (i32.const 1)))
+							(br $dispatch)
+						)
+					)
+					;; Remaining gated opcodes enter a block, loop, if or try-table without another classification call.
+					(local.set $selector (i32.const 1))
+					;; If consumes its condition before saving the block's entry operand height.
+					(if (i32.eq (local.get $op) (i32.const 39))
+						(then
+							(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
+							(local.set $selector
+								(i32.wrap_i64
+									(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
+								)
+							)
+						)
+					)
+					(local.set $meta (call $metadata (local.get $pc)))
+					(call $runtime-control
+						(local.get $op)
+						(local.get $pc)
+						(i32.load (local.get $meta))
+						(i32.sub (global.get $sp) (call $shape-count (i32.load offset=20 (local.get $meta))))
+						(i32.load offset=4 (local.get $record))
+					)
+					(i32.store offset=20
+						(call $control (i32.sub (global.get $control-count) (i32.const 1)))
+						(i32.load offset=20 (local.get $meta))
+					)
+					;; Runtime control exhaustion ends this invocation before its body executes.
+					(if (global.get $error)
+						(then
+							(return (i64.const 0))
+						)
+					)
+					;; A false if chooses else's first instruction, or its end marker when else is absent.
+					(if (i32.eqz (local.get $selector))
+						(then
+							(i32.store (local.get $frame) (i32.load (local.get $meta)))
+							;; The else marker itself is skipped because it belongs to the true-arm exit path.
+							(if (i32.ne (i32.load offset=4 (local.get $meta)) (i32.const -1))
+								(then
+									(i32.store
+										(local.get $frame)
+										(i32.add (i32.load offset=4 (local.get $meta)) (i32.const 1))
+									)
+								)
+							)
+						)
+					)
+					(br $dispatch)
+				)
+			)
 			;; Globals and function references publish raw values before general resource dispatch.
 			(if
 				(i32.or (i32.eq (local.get $op) (i32.const 49)) (i32.eq (local.get $op) (i32.const 195)))
@@ -656,74 +729,6 @@
 						)
 					)
 					(local.set $calls (i32.add (local.get $calls) (i32.const 1)))
-					(br $dispatch)
-				)
-			)
-			;; Structured entry saves the operand floor and selects an if arm using its condition.
-			(if (call $control-op (local.get $op))
-				(then
-					(local.set $selector (i32.const 1))
-					;; If consumes its condition before saving the block's entry operand height.
-					(if (i32.eq (local.get $op) (i32.const 39))
-						(then
-							(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
-							(local.set $selector
-								(i32.wrap_i64
-									(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
-								)
-							)
-						)
-					)
-					(local.set $meta (call $metadata (local.get $pc)))
-					(call $runtime-control
-						(local.get $op)
-						(local.get $pc)
-						(i32.load (local.get $meta))
-						(i32.sub (global.get $sp) (call $shape-count (i32.load offset=20 (local.get $meta))))
-						(i32.load offset=4 (local.get $record))
-					)
-					(i32.store offset=20
-						(call $control (i32.sub (global.get $control-count) (i32.const 1)))
-						(i32.load offset=20 (local.get $meta))
-					)
-					;; Runtime control exhaustion ends this invocation before its body executes.
-					(if (global.get $error)
-						(then
-							(return (i64.const 0))
-						)
-					)
-					;; A false if chooses else's first instruction, or its end marker when else is absent.
-					(if (i32.eqz (local.get $selector))
-						(then
-							(i32.store (local.get $frame) (i32.load (local.get $meta)))
-							;; The else marker itself is skipped because it belongs to the true-arm exit path.
-							(if (i32.ne (i32.load offset=4 (local.get $meta)) (i32.const -1))
-								(then
-									(i32.store
-										(local.get $frame)
-										(i32.add (i32.load offset=4 (local.get $meta)) (i32.const 1))
-									)
-								)
-							)
-						)
-					)
-					(br $dispatch)
-				)
-			)
-			;; Reaching else from the true arm skips the false body but still executes the end marker.
-			(if (i32.eq (local.get $op) (i32.const 40))
-				(then
-					(i32.store
-						(local.get $frame)
-						(i32.load (call $metadata (i32.load offset=4 (local.get $record))))
-					)
-					(br $dispatch)
-				)
-			)
-			;; Normal control completion leaves its validated results and removes one runtime label.
-			(if (i32.eq (local.get $op) (i32.const 41))
-				(then
-					(global.set $control-count (i32.sub (global.get $control-count) (i32.const 1)))
 					(br $dispatch)
 				)
 			)
