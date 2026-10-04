@@ -442,23 +442,22 @@
 					)
 				)
 				(then
-					(local.set $inputs (call $inputs (local.get $op)))
-					(global.set $sp (i32.sub (global.get $sp) (local.get $inputs)))
-					(local.set $a
-						(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
+					;; These scalar opcodes use the existing compact table and consume at least one operand.
+					(local.set $inputs
+						(i32.shr_u
+							(i32.load8_u offset=3072 (i32.shl (local.get $op) (i32.const 1)))
+							(i32.const 4)
+						)
 					)
+					(global.set $sp (i32.sub (global.get $sp) (local.get $inputs)))
+					(local.set $meta (i32.shl (global.get $sp) (i32.const 3)))
+					(local.set $target (i32.add (global.get $stack-base) (local.get $meta)))
+					(local.set $a (i64.load (local.get $target)))
 					(local.set $b (i64.const 0))
 					;; Binary operators read their right operand from the adjacent consumed slot.
 					(if (i32.eq (local.get $inputs) (i32.const 2))
 						(then
-							(local.set $b
-								(i64.load
-									(i32.add
-										(global.get $stack-base)
-										(i32.mul (i32.add (global.get $sp) (i32.const 1)) (i32.const 8))
-									)
-								)
-							)
+							(local.set $b (i64.load offset=8 (local.get $target)))
 						)
 					)
 					;; I32 operations retain canonical signed extension of their low word.
@@ -475,13 +474,13 @@
 							(local.set $value (call $apply64 (local.get $op) (local.get $a) (local.get $b)))
 						)
 					)
-					(call $runtime-value (local.get $value))
-					;; A result cannot exceed the same operand capacity used by general dispatch.
-					(if (global.get $error)
-						(then
-							(return (i64.const 0))
-						)
+					;; Replace the consumed left slot; one result cannot grow this validated scalar stack.
+					(i64.store (local.get $target) (local.get $value))
+					(i64.store
+						(i32.add (global.get $stack-high-base) (local.get $meta))
+						(i64.const 0)
 					)
+					(global.set $sp (i32.add (global.get $sp) (i32.const 1)))
 					(br $dispatch)
 				)
 			)

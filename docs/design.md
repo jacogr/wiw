@@ -756,3 +756,34 @@ files take 51.05 and 59.44 seconds versus 52.94 and 60.05 seconds. The gain is
 modest and local timings remain subject to variation; the prior 387,228 ms result
 remains the best historical full audit. Both comparison timings, source/binary
 hashes, profiles and paired benchmarks are retained in `test/performance.json`.
+
+
+Non-trapping integer dispatch reads its unary or binary arity directly from the
+existing compact effect table. It scales the consumed stack index once, reads
+the left operand at that address, and reads binary right operands at offset 8.
+The existing i32/i64 arithmetic helpers retain wrapping, comparisons, bit
+operations, conversions and canonical signed extension of i32 results.
+
+The result replaces the consumed left slot, with its parallel high half cleared.
+These selected operations consume at least one scalar and produce exactly one,
+so even a full validated operand stack cannot grow. Division, remainder and
+trapping conversions retain their existing checked paths. Dispatch still charges
+fuel and advances the instruction pointer before evaluation.
+
+Boundary regressions exercise unary, binary and conversion operations at all
+4,096 operand slots, repeated invocation, exact fuel failure positions, wrapping
+at the i64 signed boundary and a live vector in the caller. Paired hosted
+benchmarks improve across all nine cases by roughly 2–6%. Diagnostic profiles
+reduce i64.sub from 196 to 169 bootstrap instructions and i64.eqz from 177 to 156;
+the executed guest opcode counts remain identical.
+
+
+All 152 tests pass, and both runtimes pass all 65,199 frozen commands across
+258 files with zero skips and failures. The hosted audit measures 383,891 ms
+(6.40 minutes), compared with the preceding 390,627 ms (6.51 minutes), a measured
+reduction of 1.7%. It also improves on the historical best 387,228 ms audit.
+This full comparison uses the preceding recorded run; it is not a same-session
+unchanged-code control. Local timings remain subject to variation. The paired
+benchmarks and instruction profiles support retaining the simpler operand and
+result path; source and binary hashes and all measurements are preserved in
+`test/performance.json`.
