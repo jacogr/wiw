@@ -151,13 +151,16 @@
 
 	;; Execute a selected function with explicit call frames and an eight-byte operand stack.
 	;; Guest calls use explicit frames; import resumes retain the invocation's remaining fuel.
-	;; Local high-half addressing retains the active frame base across dispatch iterations.
+	;; Byte cursor/end and local high-half addressing stay cached until a frame or label transition.
 	(func $run
 		(param $index i32)
 		(param $args i32)
 		(result i64)
 		(local $pc i32)
+		(local $next i32)
+		(local $finish i32)
 		(local $record i32)
+		(local $code i32)
 		(local $op i32)
 		(local $route i32)
 		(local $inputs i32)
@@ -220,6 +223,27 @@
 				(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const LOCAL_NAME_BYTES))
 			)
 		)
+		;; The immutable instruction arena keeps its origin across calls and memory growth.
+		(local.set $code (global.get $code-base))
+		;; Refresh the cached cursor/end when execution selects this frame.
+		(local.set $next
+			(i32.add
+				(local.get $code)
+				(i32.shl
+					(i32.load (local.get $frame))
+					(i32.const 4)
+				)
+			)
+		)
+		(local.set $finish
+			(i32.add
+				(local.get $code)
+				(i32.shl
+					(i32.load offset=4 (local.get $frame))
+					(i32.const 4)
+				)
+			)
+		)
 		;; Continue until the root frame returns or an explicit execution/resource error occurs.
 		(loop $dispatch
 			;; Imported exceptions resume into the same handler search as locally thrown exceptions.
@@ -246,11 +270,29 @@
 							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const LOCAL_NAME_BYTES))
 						)
 					)
+					;; Refresh the cached cursor/end when execution selects this frame.
+					(local.set $next
+						(i32.add
+							(local.get $code)
+							(i32.shl
+								(i32.load (local.get $frame))
+								(i32.const 4)
+							)
+						)
+					)
+					(local.set $finish
+						(i32.add
+							(local.get $code)
+							(i32.shl
+								(i32.load offset=4 (local.get $frame))
+								(i32.const 4)
+							)
+						)
+					)
 				)
 			)
-			(local.set $pc (i32.load (local.get $frame)))
 			;; Reaching a function's code end returns to its caller without consuming extra fuel.
-			(if (i32.eq (local.get $pc) (i32.load offset=4 (local.get $frame)))
+			(if (i32.eq (local.get $next) (local.get $finish))
 				(then
 					;; Function completion removes its implicit root and any remaining callee labels.
 					(global.set $control-count (i32.load offset=CALL_ROOT_OFFSET (local.get $frame)))
@@ -289,12 +331,30 @@
 							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const LOCAL_NAME_BYTES))
 						)
 					)
+					;; Refresh the cached cursor/end when execution selects this frame.
+					(local.set $next
+						(i32.add
+							(local.get $code)
+							(i32.shl
+								(i32.load (local.get $frame))
+								(i32.const 4)
+							)
+						)
+					)
+					(local.set $finish
+						(i32.add
+							(local.get $code)
+							(i32.shl
+								(i32.load offset=4 (local.get $frame))
+								(i32.const 4)
+							)
+						)
+					)
 					(br $dispatch)
 				)
 			)
-			(local.set $record
-				(i32.add (global.get $code-base) (i32.mul (local.get $pc) (i32.const 16)))
-			)
+			;; Straight-line dispatch advances directly through adjacent 16-byte records.
+			(local.set $record (local.get $next))
 			(local.set $op (i32.load (local.get $record)))
 			(global.set $tok (i32.load offset=8 (local.get $record)))
 			;; Fuel bounds dynamically repeated calls, even when module code itself is small.
@@ -305,7 +365,7 @@
 				)
 			)
 			(local.set $fuel (i64.sub (local.get $fuel) (i64.const 1)))
-			(i32.store (local.get $frame) (i32.add (local.get $pc) (i32.const 1)))
+			(local.set $next (i32.add (local.get $record) (i32.const 16)))
 			;; Decode the generated family once; the original opcode remains available inside each handler.
 			(local.set $route
 				(i32.and
@@ -469,9 +529,14 @@
 					;; Reaching else from the true arm skips the false body but still executes the end marker.
 					(if (i32.eq (local.get $op) (i32.const 40))
 						(then
-							(i32.store
-								(local.get $frame)
-								(i32.load (call $metadata (i32.load offset=4 (local.get $record))))
+							(local.set $next
+								(i32.add
+									(local.get $code)
+									(i32.shl
+										(i32.load (call $metadata (i32.load offset=4 (local.get $record))))
+										(i32.const 4)
+									)
+								)
 							)
 							(br $dispatch)
 						)
@@ -496,6 +561,10 @@
 							)
 						)
 					)
+					;; Scope metadata and labels retain their original logical instruction indices.
+					(local.set $pc
+						(i32.shr_u (i32.sub (local.get $record) (local.get $code)) (i32.const 4))
+					)
 					(local.set $meta (call $metadata (local.get $pc)))
 					(call $runtime-control
 						(local.get $op)
@@ -517,13 +586,26 @@
 					;; A false if chooses else's first instruction, or its end marker when else is absent.
 					(if (i32.eqz (local.get $selector))
 						(then
-							(i32.store (local.get $frame) (i32.load (local.get $meta)))
+							(local.set $next
+								(i32.add
+									(local.get $code)
+									(i32.shl
+										(i32.load (local.get $meta))
+										(i32.const 4)
+									)
+								)
+							)
 							;; The else marker itself is skipped because it belongs to the true-arm exit path.
 							(if (i32.ne (i32.load offset=4 (local.get $meta)) (i32.const -1))
 								(then
-									(i32.store
-										(local.get $frame)
-										(i32.add (i32.load offset=4 (local.get $meta)) (i32.const 1))
+									(local.set $next
+										(i32.add
+											(local.get $code)
+											(i32.shl
+												(i32.add (i32.load offset=4 (local.get $meta)) (i32.const 1))
+												(i32.const 4)
+											)
+										)
 									)
 								)
 							)
@@ -572,6 +654,11 @@
 			;; Direct and indirect calls copy arguments into a new frame and resume at the callee's first record.
 			(if (i32.eq (local.get $route) (i32.const 5))
 				(then
+					;; The caller continuation must survive defined calls and host suspension.
+					(i32.store
+						(local.get $frame)
+						(i32.shr_u (i32.sub (local.get $next) (local.get $code)) (i32.const 4))
+					)
 					(local.set $tail
 						(i32.or
 							(i32.or (i32.eq (local.get $op) (i32.const 438)) (i32.eq (local.get $op) (i32.const 439)))
@@ -718,6 +805,25 @@
 						)
 					)
 					(call $enter (local.get $callee) (local.get $frame) (global.get $sp) (local.get $target))
+					;; Both ordinary entry and tail replacement select the callee cursor and end.
+					(local.set $next
+						(i32.add
+							(local.get $code)
+							(i32.shl
+								(i32.load (local.get $frame))
+								(i32.const 4)
+							)
+						)
+					)
+					(local.set $finish
+						(i32.add
+							(local.get $code)
+							(i32.shl
+								(i32.load offset=4 (local.get $frame))
+								(i32.const 4)
+							)
+						)
+					)
 					(i32.store offset=CALL_ROOT_OFFSET (local.get $frame) (global.get $control-count))
 					(call $runtime-control
 						(i32.const 0)
@@ -753,6 +859,16 @@
 								(i32.load offset=CALL_ROOT_OFFSET (local.get $frame))
 								(local.get $frame)
 							)
+							;; Continue from the helper-resolved label target.
+							(local.set $next
+								(i32.add
+									(local.get $code)
+									(i32.shl
+										(i32.load (local.get $frame))
+										(i32.const 4)
+									)
+								)
+							)
 							(br $dispatch)
 						)
 					)
@@ -778,6 +894,11 @@
 									(return (i64.const 0))
 								)
 							)
+							;; Publish the throwing continuation before the handler selects a surviving frame.
+							(i32.store
+								(local.get $frame)
+								(i32.shr_u (i32.sub (local.get $next) (local.get $code)) (i32.const 4))
+							)
 							(local.set $calls (call $dispatch-exception (local.get $frame) (local.get $calls)))
 							;; An uncaught exception is reported through the host exception ABI.
 							(if (global.get $error)
@@ -796,6 +917,25 @@
 								(i32.add
 									(global.get $call-high-base)
 									(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const LOCAL_NAME_BYTES))
+								)
+							)
+							;; Refresh the cached cursor/end when execution selects this frame.
+							(local.set $next
+								(i32.add
+									(local.get $code)
+									(i32.shl
+										(i32.load (local.get $frame))
+										(i32.const 4)
+									)
+								)
+							)
+							(local.set $finish
+								(i32.add
+									(local.get $code)
+									(i32.shl
+										(i32.load offset=4 (local.get $frame))
+										(i32.const 4)
+									)
 								)
 							)
 							(br $dispatch)
@@ -828,6 +968,16 @@
 											(i32.load (i32.load offset=4 (local.get $record)))
 										)
 										(local.get $frame)
+									)
+									;; Continue from the helper-resolved label target.
+									(local.set $next
+										(i32.add
+											(local.get $code)
+											(i32.shl
+												(i32.load (local.get $frame))
+												(i32.const 4)
+											)
+										)
 									)
 								)
 							)
@@ -869,6 +1019,16 @@
 									(i32.load offset=4 (local.get $record))
 								)
 								(local.get $frame)
+							)
+							;; Continue from the helper-resolved label target.
+							(local.set $next
+								(i32.add
+									(local.get $code)
+									(i32.shl
+										(i32.load (local.get $frame))
+										(i32.const 4)
+									)
+								)
 							)
 							(br $dispatch)
 						)
@@ -918,6 +1078,16 @@
 							(call $runtime-jump
 								(i32.sub (i32.sub (global.get $control-count) (i32.const 1)) (local.get $target))
 								(local.get $frame)
+							)
+							;; Continue from the helper-resolved label target.
+							(local.set $next
+								(i32.add
+									(local.get $code)
+									(i32.shl
+										(i32.load (local.get $frame))
+										(i32.const 4)
+									)
+								)
 							)
 							(br $dispatch)
 						)

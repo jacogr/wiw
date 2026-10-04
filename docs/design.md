@@ -879,3 +879,46 @@ and 14.30 seconds to 11.21 and 11.58 seconds. The full comparison uses the
 preceding recorded run, without a same-session unchanged-code full control;
 local timings vary. Paired isolated load and invocation benchmarks, profiles,
 source and binary hashes are retained in `test/performance.json`.
+
+
+Dispatch caches the next instruction and the active function end as byte
+addresses in `$run` locals. Straight-line execution advances to the adjacent
+16-byte record without reloading or writing the frame cursor, reloading the
+function end, or multiplying a logical instruction index for every opcode.
+The instruction arena origin stays fixed throughout a protected invocation,
+including guest memory growth.
+
+Saved frames and structured metadata retain logical instruction indices. Calls
+publish the caller continuation before entering another function or suspending
+for an import. Throws publish their continuation before exception dispatch.
+Function entry, completion and exception unwinding refresh both cached byte
+addresses; branch helpers refresh the cursor from their resolved label target.
+Structured scopes convert the current record to a logical index only when
+creating a label. False arms and else markers translate their existing metadata
+targets directly to byte addresses. Fuel checks and source positions precede
+cursor advancement, and reaching a function end still consumes no fuel.
+
+New regressions exercise alternating branch-table targets, empty and differently
+sized callees, explicit returns, exact fuel boundaries, successful and failed
+memory growth, imported exception unwinding, tail-call suspension and repeated
+loads that move the instruction arena. Both runtimes check results, source
+positions and host callback sequences. Existing nested self-hosting, stack
+capacity, exception, reference-branch and tail-call checks remain in the suite.
+
+Paired isolated invocation benchmarks reduce hosted times by roughly 10–16%
+across all nine workloads. Diagnostic profiles reduce local.get from 125 to 116
+bootstrap instructions, i64.sub from 134 to 125, i64.eqz from 121 to 112, and
+global.get from 130 to 121. The conversions at frame boundaries increase direct
+tail-call counts from 341 to 353 and reference tail-call counts from 354 to 366;
+structured if counts rise from about 194 to 197. These profiles include fixed
+marker/resumption overhead, with unchanged guest opcode execution counts. The
+common dispatch savings outweigh these boundary costs in the paired workloads.
+
+All 162 tests pass, including nested self-hosting, and both runtimes pass all
+65,199 frozen commands across 258 files with zero skips and failures. The hosted
+audit takes 282,196 ms (4.70 minutes), down from the preceding recorded 294,967 ms
+(4.92 minutes), a measured 4.3% reduction. Direct and reference tail-call stress
+files fall from 37.41 and 42.01 seconds to 33.10 and 37.10 seconds. The full
+comparison uses the preceding recorded run, without a same-session unchanged
+full control; local timings vary. Paired isolated benchmarks, instruction
+profiles, source and binary hashes are retained in `test/performance.json`.
