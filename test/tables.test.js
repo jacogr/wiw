@@ -28,7 +28,7 @@ const source = `(module
   (func (export "matching") (param i32 i64 i32) (result i64)
     (call_indirect (type $wide) (param i32 i64) (result i64) (local.get 0) (local.get 1) (local.get 2))))`;
 
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: table calls match native, including structural equivalence, overlaps and traps`, async () => {
     const dir = await mkdtemp(join(tmpdir(), 'wiw-tables-'));

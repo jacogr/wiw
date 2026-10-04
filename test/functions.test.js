@@ -34,7 +34,7 @@ const fixture = `(module $example
     (call $sink (i32.const 9)) (call 0x1 (i32.const 100) (i32.const 58)))
 )`;
 
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: named/numeric calls, locals, exports and host arguments match native`, async () => {
     const i = await createInterpreter(url);

@@ -16,11 +16,11 @@ unnecessary. Tests need no network after initialization. The runner checks HEAD
 against the recorded revision and verifies file/license hashes. Missing or
 mismatched checkouts fail with an actionable diagnostic.
 
-The complete 2.0 core suite passes on both bootstrap builds:
+The complete 2.0 core suite passes on the optimized bootstrap (`-O4 --converge`):
 
 | Scope | Files | Passed | Skipped | Failed |
 | --- | ---: | ---: | ---: | ---: |
-| CI and full target audit, per build | 148 | 54,006 | 0 | 0 |
+| CI and full target audit, optimized bootstrap | 148 | 54,006 | 0 | 0 |
 
 Counts include module loads, registrations and assertions. `upstream.json`
 records every target file. `capabilities.json` includes the entire inventory in
@@ -31,18 +31,17 @@ Every SIMD wire opcode is also checked against a native-Wasm test oracle.
 Self-hosting executes guests through two interpreted layers, including vector
 parameters, results, arithmetic, conversion and memory access.
 
-Run `make audit-spec` to audit the entire target on both builds independently.
-It produces `build/spec-audit-wiw.wasm.json` and
-`build/spec-audit-wiw-opt.wasm.json`, including individual failure/skip entries,
+Run `make audit-spec` to audit the entire target on the optimized bootstrap independently.
+It produces `build/spec-audit-wiw-opt.wasm.json`, including individual failure/skip entries,
 and returns nonzero for any failure or skip. `progress.json` records the matching
 successful reports and per-file counts. The previous `wg-1.0` milestone passed
 all 73 files / 19,270 commands with zero skips.
 
 `make audit-selfhost` executes the same inventory and expectations through an
-interpreted WAT copy on each bootstrap build. Every script instance, including
+interpreted WAT copy on the optimized bootstrap. Every script instance, including
 spectest and negative assertions, runs inside its own copy. Partial and completed
 reports are written to `build/spec-selfhost-*.json`, with source hashes and
-per-file timings. Both builds complete all 54,006 commands with zero failures/skips.
+per-file timings. The optimized build completes all 54,006 commands with zero failures/skips.
 `selfhost.json` records the matching completion snapshot, engine source hash and
 measured timings; coverage remains frozen in `capabilities.json`. CI runs this audit after the ordinary regression suite.
 
@@ -65,8 +64,8 @@ remain documented in README.md.
 
 All files in this pin are verified. When advancing the target, retain every
 inventoried file, implement missing dependencies and fix failures before
-promoting new files. Refresh counts only from matching zero-failure, zero-skip
-reports on both builds. Never accept a failure as a pass.
+promoting new files. Refresh counts only from a complete zero-failure, zero-skip
+report on the optimized build. Never accept a failure as a pass.
 
 To advance the pin:
 
@@ -83,8 +82,8 @@ then updates tag, SHA and file/license hashes. When the new tag adds core files,
 recursively inventory all `.wast` files under `test/core` (including SIMD) in
 `upstream.json` before refreshing hashes. It does not accept
 new coverage automatically. Review reports, implement gaps and promote complete files into
-`capabilities.json` only after both builds pass their entire contents. Document the new tag/SHA here
-and in README.md. Stage the gitlink and metadata together:
+`capabilities.json` only after the optimized build passes their entire contents.
+Document the new tag/SHA here and in README.md. Stage the gitlink and metadata together:
 
 ```sh
 git add test/spec/upstream test/spec/upstream.json test/spec/capabilities.json test/spec/progress.json test/spec/README.md README.md
@@ -96,4 +95,4 @@ Multivalue functions and controls support ordered result vectors, block paramete
 loop inputs and explicit type uses. Node invocations and synchronous callbacks
 return arrays for multiple results; raw arrays preserve individual numeric bits
 and reference identity. Every non-SIMD file in the 2.0 pin now completes without
-skips or failures on both builds.
+skips or failures on the optimized build.

@@ -15,7 +15,7 @@ async function compile(text, run) {
     await run(new Uint8Array(await readFile(join(dir, 'guest.wasm'))));
   } finally {await rm(dir, {recursive: true, force: true});}
 }
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: reference text/binary guests match native nulls, identity, select and globals`, async () => {
     await compile(source, async bytes => {

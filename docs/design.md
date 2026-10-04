@@ -66,12 +66,36 @@ retain signaling NaNs; plain Number callbacks have JavaScript's Number boundary.
 
 Copy, fill and initialization consume destination, source/value and length as
 three i32 operands. Every range uses unsigned 64-bit arithmetic before the first
-write, including zero-length endpoints. Copy preserves memmove semantics with
-backward copying for later destinations and forward copying otherwise. Fill
-repeats the low byte. Helpers process eight-byte slots and a bounded byte tail
-using ordinary scalar instructions, so the engine remains self-hosting without
-native bulk instructions. Each bulk opcode consumes one guest fuel unit; its
-internal copying is bounded by guest-memory and decoded-data capacities.
+write, including zero-length endpoints. After validation, helpers use
+`memory.copy` for overlapping copies and data initialization, and `memory.fill`
+for low-byte fills and clearing newly grown memory. These primitives avoid
+interpreting per-slot loops when the engine runs itself: each parent dispatches
+the same supported bulk instructions until execution reaches the bootstrap.
+Each bulk opcode consumes one guest fuel unit; its internal copying is bounded
+by guest-memory and decoded-data capacities.
+
+
+With the earlier `-O2` build settings, the bulk helpers reduced a full
+interpreted `wg-2.0` audit from 297.1 to 258.8
+seconds on the plain bootstrap, and from 304.7 to 266.9 seconds on the optimized
+bootstrap. The same 54,006 commands passed in each run. All 215 regression tests
+passed in 52.6 seconds, compared with the preceding 156.6-second run of 214 tests.
+These are local measurements, not timing requirements.
+
+An isolated interpreted benchmark used a memory with one initial page and a
+64-page maximum. It grew by 63 pages, filled all 4 MiB with byte 171, then copied
+4 MiB minus one byte from offset 0 to offset 1 to exercise overlap. The median of
+three invocations per operation, excluding parsing and initialization, was:
+
+| Operation | Previous scalar helper | Bulk primitive helper |
+| --- | ---: | ---: |
+| Grow and clear 63 pages | 152.69 ms | 0.11 ms |
+| Fill 4 MiB | 195.13 ms | 0.14 ms |
+| Copy with one-byte overlap | 167.60 ms | 0.18 ms |
+
+The spec memory suites still spend much of their time executing guest byte-check
+loops. Those loops use ordinary interpreter dispatch, so their file timings
+improve much less than the isolated operations.
 
 Data records are 48 bytes. The existing active target/offset fields remain at
 0..28; name pointer/length are at 32/36, passive mode at 40, and remaining runtime
@@ -197,7 +221,7 @@ Imports suspend through pending argument slots and resume with a value or host
 failure. Callbacks must be synchronous. They can inspect/mutate resources and
 invoke another instance; active-instance invoke/reload is rejected. Nested host
 forwarding is bounded at 128 invocations. The WAT engine has no native Wasm imports. The bootstrap now uses native
-sign-extension and nontrapping float-conversion instructions; Binaryen receives
+bulk-memory, sign-extension and nontrapping float-conversion instructions; Binaryen receives
 explicit feature flags. These instructions are also supported by guest dispatch,
 so the expanded engine remains self-hosting.
 
@@ -341,12 +365,12 @@ language restrictions, and remain explicit bounds on self-hosted programs.
 
 ## Verification and self-hosting
 
-`make check` runs both bootstrap builds through regressions, negative/capacity
-cases and differential native-Wasm oracles. Harness tests check exact scalar
+`make check` runs the optimized bootstrap (`-O4 --converge`) through regressions,
+negative/capacity cases and differential native-Wasm oracles. Harness tests check exact scalar
 bits, trap classes, isolated negative assertions, linking, coverage accounting
 and revision/hash verification. The official `wg-2.0` submodule at
 `fffc6e12fa454e475455a7b58d3b5dc343980c10` contributes all 148 core files,
-including SIMD. All 148 files / 54,006 commands pass per build with zero
+including SIMD. All 148 files / 54,006 commands pass with zero
 skips and failures in CI and the independent full audit. Per-file counts are
 frozen in `test/spec/capabilities.json`; `test/spec/progress.json` records the
 matching successful reports. The completed previous `wg-1.0` milestone passed
@@ -440,7 +464,7 @@ and resumption. Low/high value slots, reference translation and shared resource
 synchronization reuse the ordinary frontend. Each script module and isolated
 negative assertion gets its own parent and WAT interpreter copy.
 
-`make audit-selfhost` runs all pinned commands on both bootstrap builds, freezes
+`make audit-selfhost` runs all pinned commands on the optimized bootstrap, freezes
 coverage against the same complete per-file manifest and records the interpreted
 engine source hash. Partial reports explicitly have `complete: false`; they do
 not count as a successful audit. Per-file timings identify expensive areas without

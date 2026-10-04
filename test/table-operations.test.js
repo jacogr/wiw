@@ -15,7 +15,7 @@ async function fixture(run) {
     await run(new Uint8Array(await readFile(join(dir, 'guest.wasm'))));
   } finally {await rm(dir, {recursive: true, force: true});}
 }
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: table size/copy match native overlap, null references and atomic unsigned bounds`, async () => {
     await fixture(async bytes => {

@@ -16,7 +16,7 @@ async function oracle(source, check) {
   } finally { await rm(dir, { recursive: true, force: true }); }
 }
 
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: every load/store width, signedness, offset and alignment matches native`, async () => {
     const i = await createInterpreter(url);

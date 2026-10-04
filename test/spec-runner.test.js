@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseScript, runSuite, unsupported } from '../scripts/spec-runner.js';
 import { specSource } from '../scripts/spec-source.js';
-const binary = new URL('../build/wiw.wasm', import.meta.url);
+const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
 
 // Small scripts check harness behavior independently of the submodule fixtures.
 async function run(source, mutate = () => {}, options = {}) {

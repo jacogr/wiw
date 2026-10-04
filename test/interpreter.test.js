@@ -9,7 +9,7 @@ import { createInterpreter } from '../wiw.js';
 const moduleFor = (literal, folded = true, name = 'answer') =>
   `(module (func (export "${name}") (result i32) ${folded ? `(i32.const ${literal})` : `i32.const ${literal}`}))`;
 
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: differential integer and syntax coverage`, async () => {
     const dir = await mkdtemp(join(tmpdir(), 'wiw-test-'));

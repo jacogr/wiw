@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { createInterpreter } from '../wiw.js';
 const guest = (body, result = 'i64') => `(module (func (export "run") (result ${result}) ${body}))`;
 const wide = [0n, 1n, -1n, -(1n << 63n), (1n << 63n) - 1n, 0x123456789abcdef0n];
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: every i64 numeric opcode and conversion matches native`, async () => {
     const i = await createInterpreter(url);

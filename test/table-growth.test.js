@@ -12,7 +12,7 @@ const source = `(module (table $t (export "table") 2 8 funcref)
   (func (export "fill") (param i32 funcref i32) local.get 0 local.get 1 local.get 2 table.fill $t)
   (func (export "size") (result i32) table.size $t)
   (func (export "get") (param i32) (result funcref) local.get 0 table.get $t))`;
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: table growth and fill match native limits, references and atomic traps`, async () => {
     const dir = await mkdtemp(join(tmpdir(), 'wiw-grow-'));

@@ -15,7 +15,7 @@ const source = `(module
   (func (export "branch") (param i32) (result i32 i64)
     block (result i32 i64) i32.const 42 i64.const 7 local.get 0 br_if 0 drop drop i32.const 3 i64.const 4 end)
   (func (export "return") (result i32 f32 f64) i32.const 42 f32.const -0 f64.const nan:0x1 return))`;
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: multivalue calls and branches preserve ordered raw results`, async () => {
     const dir = await mkdtemp(join(tmpdir(), 'wiw-multi-'));
@@ -52,7 +52,7 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
     assert.equal(engine.invoke('f', ...Array.from({length:128},(_,i)=>i)),127);
   });
 }
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   test(`${binary}: control parameters, loop inputs and implicit else match native`, async () => {
     const dir = await mkdtemp(join(tmpdir(), 'wiw-control-inputs-'));
     const source = `(module

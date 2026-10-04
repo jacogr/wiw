@@ -505,26 +505,6 @@
 	(func $zero-bytes
 		(param $p i32)
 		(param $n i32)
-		(local $i i32)
 
-		;; Clear full slots first; unaligned MVP stores are safe for arbitrary ranges.
-		(block $slots-done
-			;; Stop before the last partial slot to keep every write within the range.
-			(loop $slots
-				(br_if $slots-done (i32.lt_u (i32.sub (local.get $n) (local.get $i)) (i32.const 8)))
-				(i64.store (i32.add (local.get $p) (local.get $i)) (i64.const 0))
-				(local.set $i (i32.add (local.get $i) (i32.const 8)))
-				(br $slots)
-			)
-		)
-		;; Stop at exactly the requested length, including an empty range.
-		(block $done
-			;; Clear the remaining zero to seven bytes without touching adjacent memory.
-			(loop $bytes
-				(br_if $done (i32.eq (local.get $i) (local.get $n)))
-				(i32.store8 (i32.add (local.get $p) (local.get $i)) (i32.const 0))
-				(local.set $i (i32.add (local.get $i) (i32.const 1)))
-				(br $bytes)
-			)
-		)
+		(memory.fill (local.get $p) (i32.const 0) (local.get $n))
 	)

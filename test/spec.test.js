@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile, writeFile } from 'node:fs/promises';
 import { runSuite } from '../scripts/spec-runner.js';
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   test(`${binary}: verified WebAssembly 2.0 core files (zero skips)`, async t => {
     const manifest = JSON.parse(await readFile(new URL('./spec/capabilities.json', import.meta.url), 'utf8'));
     const report = await runSuite(new URL(`../build/${binary}`, import.meta.url), undefined, {files: manifest.verifiedFiles});

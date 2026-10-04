@@ -16,7 +16,11 @@ node wiw.js test/float.wat double 1.25
 These examples print `42`, `120`, and `2.5`. `make` produces expanded WAT and
 unoptimized/optimized bootstrap binaries in `build/`. Guest text and binary
 modules are parsed, validated and executed by the WAT engine. wat2wasm builds
-the bootstrap and serves as a differential test oracle.
+the bootstrap and serves as a differential test oracle. The optimized bootstrap
+uses `wasm-opt -O4 --converge`; all tests and audits run only `wiw-opt.wasm`.
+`make DEBUG=1 check` selects `-O0` for that same artifact instead. The m4 defines
+are `RELEASE` by default and `DEBUG` with `DEBUG=1`. Switching modes rebuilds
+automatically; `make check` switches back to release without requiring `make clean`.
 
 The engine implements scalar operations for i32, i64, f32 and f64, direct
 and structurally typed indirect calls, flat/folded control, stack-polymorphic
@@ -104,25 +108,25 @@ Allocation and fuel exhaustion are explicit failures. Default invocation fuel
 is 100,000; the spec runner uses 10,000,000. Multiple memories are beyond this target.
 
 The spec submodule is pinned to `wg-2.0`, commit
-`fffc6e12fa454e475455a7b58d3b5dc343980c10`. Both bootstrap builds pass
-**all 148 core WAST files, including SIMD: 54,006 commands per build,
+`fffc6e12fa454e475455a7b58d3b5dc343980c10`. The optimized bootstrap passes
+**all 148 core WAST files, including SIMD: 54,006 commands,
 zero skips and zero failures**. `make check-spec` runs the complete pinned suite
 and harness tests; `make check` adds regression, native-Wasm differential and
 self-hosting tests through two interpreted copies.
 
 `make audit-spec` independently executes the entire inventory and returns
-nonzero for any failure or skip. Reports are `build/spec-audit-wiw.wasm.json`
-and `build/spec-audit-wiw-opt.wasm.json`; `test/spec/progress.json` records the
+nonzero for any failure or skip. The report is `build/spec-audit-wiw-opt.wasm.json`;
+`test/spec/progress.json` records the
 matching totals and per-file counts. CI freezes all file counts in
 `test/spec/capabilities.json` and checks the pin, source hashes and license.
 
 `make audit-selfhost` runs the complete pinned suite through a WAT copy of wiw
-on each bootstrap build. Every module, spectest instance and negative assertion
-uses a separate interpreted engine. Both builds pass **54,006 commands with zero
+on the optimized bootstrap. Every module, spectest instance and negative assertion
+uses a separate interpreted engine. It passes **54,006 commands with zero
 skips and zero failures through this copy**, in addition to the bootstrap baseline.
-The completed snapshot is `test/spec/selfhost.json`. Reports are
-`build/spec-selfhost-wiw.wasm.json` and `build/spec-selfhost-wiw-opt.wasm.json`;
-they record the engine source hash, per-file timings and completion status.
+The completed snapshot is `test/spec/selfhost.json`. The report is
+`build/spec-selfhost-wiw-opt.wasm.json`; it records the engine source hash,
+per-file timings and completion status.
 CI runs this audit in addition to `make check` and rejects any failure, skip
 or mismatch against the frozen coverage counts.
 

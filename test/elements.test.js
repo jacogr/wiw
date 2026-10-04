@@ -20,7 +20,7 @@ function snapshot(engine) {
     const reference = engine.invoke('get', index); return reference === null ? null : reference();
   });
 }
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: reference elements match native initialization, drop lifetime and atomic bounds`, async () => {
     await compiled(async bytes => {

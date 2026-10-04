@@ -8,7 +8,7 @@ import { createInterpreter } from '../wiw.js';
 import { floatValue } from '../scripts/scalar-values.js';
 const names = [null, 'i32', 'i64', 'f32', 'f64'];
 const sourceFor = (body, type) => `(module (func (export "run") (result ${type}) ${body}))`;
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: every floating numeric opcode matches native, including conversion traps`, async () => {
     const engine = await createInterpreter(url), dir = await mkdtemp(join(tmpdir(), 'wiw-float-'));

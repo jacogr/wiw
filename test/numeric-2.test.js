@@ -8,7 +8,7 @@ import {createInterpreter} from '../wiw.js';
 
 const extensions = [['i32', 8], ['i32', 16], ['i64', 8], ['i64', 16], ['i64', 32]];
 const conversions = ['i32', 'i64'].flatMap(out => ['f32', 'f64'].flatMap(input => ['s', 'u'].map(sign => [out, input, sign])));
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   test(`${binary}: 2.0 numeric instructions match native execution through text and binary loading`, async () => {
     const dir = await mkdtemp(join(tmpdir(), 'wiw-numeric-2-'));
     const engine = await createInterpreter(new URL(`../build/${binary}`, import.meta.url));

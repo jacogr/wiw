@@ -5,7 +5,7 @@ import {mkdtemp, readFile, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createInterpreter} from '../wiw.js';
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: vector storage preserves both halves across locals, control, globals and calls`, async () => {
     const source = `(module
@@ -52,7 +52,7 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
 
 // Exercise every SIMD wire opcode through both text and binary loading. Native SIMD
 // serves only as the independent test oracle; wiw executes scalar WAT lane operations.
-for (const binary of ['wiw.wasm','wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   test(`${binary}: every SIMD opcode matches native memory results through text and binary decoding`, async () => {
     const rows = (await readFile(new URL('../scripts/opcodes.tsv',import.meta.url),'utf8')).trim().split('\n')
       .filter(row=>!row.startsWith('#')).map(row=>row.split(/\s+/)).filter(row=>Number(row[0])>=202);

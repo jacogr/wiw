@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {createInterpreter,createInterpretedInterpreter} from '../wiw.js';
-for(const binary of ['wiw.wasm','wiw-opt.wasm']) {
+for(const binary of ['wiw-opt.wasm']) {
   const url=new URL(`../build/${binary}`,import.meta.url);
   test(`${binary}: interpreted frontend preserves raw values, host suspension and reload isolation`,async()=>{
     const engine=await createInterpretedInterpreter(url);

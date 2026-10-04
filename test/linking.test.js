@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {createInterpreter} from '../wiw.js';
 
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: resource aliases share growth, global mutations, and unexported table functions`, async () => {
     const provider = await createInterpreter(url), consumer = await createInterpreter(url);
@@ -69,7 +69,7 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
   });
 }
 
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   test(`${binary}: function and resource imports fit together at their independent limits`, async () => {
     const provider = await createInterpreter(new URL(`../build/${binary}`, import.meta.url));
     const consumer = await createInterpreter(new URL(`../build/${binary}`, import.meta.url));

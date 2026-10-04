@@ -13,8 +13,7 @@ async function saveReport(output, report) {
 }
 
 let incomplete = false;
-let engineSourceSha256;
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const output = new URL(`../build/spec-selfhost-${binary}.json`, import.meta.url);
   const report = await runSuite(new URL(`../build/${binary}`, import.meta.url), undefined, {
     audit: true,
@@ -29,8 +28,6 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
   await saveReport(output, {...report, complete: true});
   console.log(`${report.tag}/${binary}/interpreted: ${report.passed} passed, ${report.skipped} skipped, ${report.failed} failed across ${report.files.length} files in ${(report.elapsedMs / 1000).toFixed(1)}s`);
   incomplete ||= report.failed !== 0 || report.skipped !== 0;
-  engineSourceSha256 ??= report.engineSourceSha256;
-  assert.equal(report.engineSourceSha256, engineSourceSha256, 'interpreted engine source changed between bootstrap audits');
   assert.deepEqual(report.files.map(({file, passed, skipped, failed}) => ({file, commands: passed + skipped + failed})),
     coverage.expectedCoverage.map(({file, passed}) => ({file, commands: passed})),
     'self-hosted audit did not execute the complete frozen command inventory');

@@ -12,7 +12,7 @@ const record = (op, a, b, folded) => {
   return folded ? `(${op} ${args.join(' ')})` : `${args.join(' ')} ${op}`;
 };
 
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: all numeric opcodes match native execution`, async () => {
     const i = await createInterpreter(url);

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterpreter } from '../wiw.js';
 const basic = '(module (func (export "run") (result i32) i32.const 42))';
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: start executes once after resources and supports forward and inherited targets`, async () => {
     const engine = await createInterpreter(url), dir = await mkdtemp(join(tmpdir(), 'wiw-start-'));

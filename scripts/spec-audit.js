@@ -3,7 +3,7 @@ import {runSuite} from './spec-runner.js';
 
 // Audit the entire pin, independently of the verified subset used for CI regressions.
 let incomplete = false;
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const report = await runSuite(new URL(`../build/${binary}`, import.meta.url), undefined, {audit: true});
   const output = new URL(`../build/spec-audit-${binary}.json`, import.meta.url);
   await writeFile(output, JSON.stringify(report, null, 2) + '\n');

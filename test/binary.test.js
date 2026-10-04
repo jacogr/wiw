@@ -17,7 +17,7 @@ async function compiled(source, run) {
     await run(bytes, instance.exports);
   } finally {await rm(dir, {recursive: true, force: true});}
 }
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: decoded binary fixtures match native numeric, control, memory, table and start behavior`, async () => {
     const engine = await createInterpreter(url);
@@ -75,7 +75,7 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
   });
 }
 
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   test(`${binary}: malformed binary invalidates native internal table invocation state`, async () => {
     const {instance} = await WebAssembly.instantiate(await readFile(new URL(`../build/${binary}`, import.meta.url)));
     const e = instance.exports, source = new TextEncoder().encode('(module (func (result i32) i32.const 42))');

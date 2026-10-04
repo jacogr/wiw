@@ -29,7 +29,7 @@ const factorial = `(module
       (else (i32.mul (local.get $n)
         (call $factorial (i32.sub (local.get $n) (i32.const 1))))))))`;
 
-for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
+for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);
   test(`${binary}: blocks, conditionals, loop results and label shadowing match native`, async () => {
     const i = await createInterpreter(url);
