@@ -1,7 +1,9 @@
 # wiw
 
-A WAT interpreter written in WAT. It runs itself through two interpreted layers
-with the entire pinned WebAssembly 2.0 core suite passing, including SIMD.
+A WAT interpreter written in WAT. The CLI and API run guests through one
+interpreted copy by default. This runtime passes the entire pinned WebAssembly
+2.0 core suite, including SIMD. Additional regressions run wiw through two
+interpreted layers.
 
 Requires Git, Node, make, m4, wat2wasm (WABT), and wasm-opt (Binaryen).
 
@@ -13,7 +15,10 @@ node wiw.js test/control.wat factorial 5
 node wiw.js test/float.wat double 1.25
 ```
 
-These examples print `42`, `120`, and `2.5`. `make` produces expanded WAT and
+These examples print `42`, `120`, and `2.5`. Use
+`node wiw.js --bootstrap test/constant.wat answer` for the bootstrap diagnostic
+runtime. Runtime selection is independent of `DEBUG`.
+`make` produces expanded WAT and
 unoptimized/optimized bootstrap binaries in `build/`. Guest text and binary
 modules are parsed, validated and executed by the WAT engine. wat2wasm builds
 the bootstrap and serves as a differential test oracle. The optimized bootstrap
@@ -110,11 +115,12 @@ is 100,000; the spec runner uses 10,000,000. Multiple memories are beyond this t
 The spec submodule is pinned to `wg-2.0`, commit
 `fffc6e12fa454e475455a7b58d3b5dc343980c10`. The optimized bootstrap passes
 **all 148 core WAST files, including SIMD: 54,006 commands,
-zero skips and zero failures**. `make check-spec` runs the complete pinned suite
-and harness tests; `make check` adds regression, native-Wasm differential and
+zero skips and zero failures**. `make check-spec` runs the complete pinned suite through the default interpreted
+runtime and harness tests; `make check` adds regression, native-Wasm differential and
 self-hosting tests through two interpreted copies.
 
-`make audit-spec` independently executes the entire inventory and returns
+`make audit-spec` independently executes the entire inventory on the explicit
+bootstrap diagnostic runtime and returns
 nonzero for any failure or skip. The report is `build/spec-audit-wiw-opt.wasm.json`;
 `test/spec/progress.json` records the
 matching totals and per-file counts. CI freezes all file counts in
@@ -127,8 +133,10 @@ skips and zero failures through this copy**, in addition to the bootstrap baseli
 The completed snapshot is `test/spec/selfhost.json`. The report is
 `build/spec-selfhost-wiw-opt.wasm.json`; it records the engine source hash,
 per-file timings and completion status.
-CI runs this audit in addition to `make check` and rejects any failure, skip
-or mismatch against the frozen coverage counts.
+CI runs `make check`, which includes this full interpreted inventory once and
+rejects any failure, skip or mismatch against the frozen coverage counts.
+`make audit-selfhost` is available separately for diagnostics and partial progress
+reports.
 
 The previous `wg-1.0` milestone passed all 73 files / 19,270 commands per build
 with zero skips. See `test/spec/README.md` for the upgrade workflow and
@@ -141,7 +149,9 @@ and reference identity. SIMD supports all pinned lane, arithmetic, comparison, s
 memory instructions. Its runtime uses scalar WAT operations and parallel 64-bit
 halves, so vector execution also works when wiw interprets itself.
 
-`createInterpretedInterpreter()` exposes the same Node API as `createInterpreter()`.
+`createInterpreter()` creates the default self-hosted runtime.
+`createInterpretedInterpreter()` remains an explicit equivalent, while
+`createBootstrapInterpreter()` selects the bootstrap diagnostic runtime.
 It loads expanded `build/wiw.wat` into a bootstrap interpreter, then executes the
 copy's exported ABI through that parent. Text/binary guest loading, validation,
 execution and trap handling run inside the interpreted WAT copy; the shared

@@ -14,17 +14,26 @@ const maxInvocationDepth = 128;
 const engineBackends = new WeakMap();
 
 /** Load the native interpreter. Guest source is never handed to WebAssembly. */
-export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm', import.meta.url)) {
+export async function createBootstrapInterpreter(binary = new URL('./build/wiw-opt.wasm', import.meta.url)) {
   const { instance } = await WebAssembly.instantiate(await readFile(binary));
   return wrapInterpreter(instance.exports);
 }
 
+/** Create the default runtime: one interpreted WAT copy of wiw above the bootstrap. */
+export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm', import.meta.url), options = {}) {
+  return createInterpretedInterpreter(binary, options);
+}
+
 /** Run a WAT copy of wiw inside a bootstrap interpreter using the same host ABI. */
 export async function createInterpretedInterpreter(binary = new URL('./build/wiw-opt.wasm', import.meta.url), options = {}) {
-  const parent = await createInterpreter(binary);
+  const parent = await createBootstrapInterpreter(binary);
+  const backend = engineBackends.get(parent);
+  // Parent ABI calls are implementation work, not guest-to-guest forwarding.
+  backend.countsForwardingDepth = false;
   parent.load(options.source ?? await readFile(new URL('./build/wiw.wat', import.meta.url), 'utf8'));
   parent.setFuel(options.parentFuel ?? 4294967295);
-  const backend = engineBackends.get(parent);
+  // The parent holds child arenas as well as the child's full guest-memory capacity.
+  backend.exports.enable_interpreter_backing();
   const memoryOffset = backend.memoryOffset + backend.exports.guest_memory_base();
   const exports = {memory: backend.exports.memory};
   for (const [name, value] of Object.entries(backend.exports)) {
@@ -43,6 +52,7 @@ export async function createInterpretedInterpreter(binary = new URL('./build/wiw
 // Numeric pointers remain relative to the engine's own memory at every depth.
 function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
   const e = /** @type {{memory: WebAssembly.Memory, load: (p: number, n: number) => number, initialize: () => number, invoke: (p: number, n: number, args: number, count: number) => number, error_code: () => number, error_offset: () => number, host_base: () => number, result_count: () => number, set_fuel: (fuel: number) => void, guest_memory_base: () => number, guest_memory_pages: () => number, guest_memory_present: () => number, get_global: (p: number, n: number) => number, set_global: (p: number, n: number, value: number) => number, import_count: () => number, import_info: (index: number) => number, function_params: (index: number) => number, function_results: (index: number) => number, export_function: (p: number, n: number) => number, pending_import: () => number, pending_args: () => number, resume: (value: number, failed: number) => number, grow_guest_memory: (delta: number) => number, invoke64: (p: number, n: number, args: number, count: number) => bigint, resume64: (value: bigint, failed: number) => bigint, result_type: (slot: number) => number, function_param_type: (index: number, slot: number) => number, function_result_type: (index: number, slot: number) => number, global_type: (p: number, n: number) => number, argument_high_base: () => number, pending_high_args: () => number, result_high_base: () => number, result_base: () => number, global_high: (p: number, n: number) => bigint, set_global_high: (p: number, n: number, value: bigint) => number, get_global64: (p: number, n: number) => bigint, set_global64: (p: number, n: number, value: bigint) => number}} */ (exports);
+  const backend = {exports: e, memoryOffset, countsForwardingDepth: true};
   let loaded = false;
   let invoking = false;
   let generation = 0;
@@ -229,14 +239,14 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     const callback = (...args) => {
       requireIdle();
       if (!valid()) throw new Error('stale forwarded function');
-      if (invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
+      if (backend.countsForwardingDepth && invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
       if (args.length !== signature.params.length) throw new Error('argument mismatch');
       return invokeValues('', args.map((value, slot) => typedValue(value, signature.params[slot])), false, index);
     };
     const raw = args => {
       requireIdle();
       if (!valid()) throw new Error('stale forwarded function');
-      if (invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
+      if (backend.countsForwardingDepth && invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
       return invokeValues('', args.map((arg, slot) => rawSlot(arg, signature.params[slot])), true, index);
     };
     functionTypes.set(callback, {...signature, valid, raw, reference: () => reference});
@@ -330,7 +340,8 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
           }
         }
       } catch (error) { failure = error; failed = true; }
-      value = e.resume64(result, failed ? 1 : 0);
+      // The scalar ABI carries only the low 64 bits; vector high bits live in their separate slots.
+      value = e.resume64(BigInt.asIntN(64, result), failed ? 1 : 0);
       if (failed) {
         const error = new Error(`host import ${binding.module}.${binding.name} failed at byte ${Math.max(0, e.error_offset() - 4096)}`);
         Object.defineProperty(error, 'cause', { value: failure });
@@ -364,15 +375,18 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
         view.setBigInt64(e.argument_high_base() + index * 8, value > 0n ? BigInt.asIntN(64, value >> 64n) : 0n, true);
       });
       invoking = true;
-      invocationDepth++;
+      if (backend.countsForwardingDepth) invocationDepth++;
       try {
         return drive(index === undefined ? e.invoke64(at, n, argumentsAt, values.length) : e.invoke_index64(index, argumentsAt, values.length), raw);
       } finally {
         // An interrupted host operation must not strand protected execution state.
-        if (e.pending_import() >= 0) e.resume64(0n, 1);
-        synchronizeOut();
-        invocationDepth--;
-        invoking = false;
+        try {
+          if (e.pending_import() >= 0) e.resume64(0n, 1);
+          synchronizeOut();
+        } finally {
+          if (backend.countsForwardingDepth) invocationDepth--;
+          invoking = false;
+        }
       }
   }
   const api = {
@@ -431,11 +445,11 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       }
       check(e.prepare_resource_imports(pages, maximum, entries, tableMaximum));
       synchronizeIn();
-      if (invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
+      if (backend.countsForwardingDepth && invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
       // Start callbacks may inspect initialized resources while invocation/reload remain guarded.
       loaded = true;
       invoking = true;
-      invocationDepth++;
+      if (backend.countsForwardingDepth) invocationDepth++;
       try {
         check(e.initialize());
         drive(0n);
@@ -445,9 +459,12 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
         loaded = false;
         throw error;
       } finally {
-        if (e.pending_import() >= 0) e.resume64(0n, 1);
-        invocationDepth--;
-        invoking = false;
+        try {
+          if (e.pending_import() >= 0) e.resume64(0n, 1);
+        } finally {
+          if (backend.countsForwardingDepth) invocationDepth--;
+          invoking = false;
+        }
       }
     },
     loadBinary(bytes, imports = {}) {
@@ -457,7 +474,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     invoke(/** @type {string} */ name, /** @type {(number | bigint)[]} */ ...args) {
       requireIdle();
       requireLoaded();
-      if (invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
+      if (backend.countsForwardingDepth && invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
       if (args.length > 128) throw new Error('too many arguments (maximum 128)');
       const signature = functionSignature(name);
       if (args.length !== signature.params.length) throw new Error('argument mismatch');
@@ -474,7 +491,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     invokeRaw(name, ...args) {
       requireIdle();
       requireLoaded();
-      if (invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
+      if (backend.countsForwardingDepth && invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
       const signature = functionSignature(name);
       if (args.length !== signature.params.length) throw new Error('argument mismatch');
       const values = args.map((arg, index) => {
@@ -578,19 +595,21 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     }
 
   };
-  engineBackends.set(api, {exports: e, memoryOffset});
+  engineBackends.set(api, backend);
   return api;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const file = process.argv[2];
-    const name = process.argv[3];
-    if (!file || name === undefined) throw new Error('Usage: node wiw.js <file.wat> <export> [scalar arguments...]');
-    const interpreter = await createInterpreter();
+    const arguments_ = process.argv.slice(2);
+    const bootstrap = arguments_[0] === '--bootstrap';
+    if (bootstrap) arguments_.shift();
+    const [file, name, ...values] = arguments_;
+    if (!file || name === undefined) throw new Error('Usage: node wiw.js [--bootstrap] <file.wat> <export> [scalar arguments...]');
+    const interpreter = await (bootstrap ? createBootstrapInterpreter() : createInterpreter());
     interpreter.load(await readFile(file, 'utf8'));
     const signature = interpreter.signature(name);
-    const args = process.argv.slice(4).map((arg, index) => signature.params[index] === 'i64' ? BigInt(arg.endsWith('n') ? arg.slice(0, -1) : arg) : arg === 'inf' || arg === '+inf' ? Infinity : arg === '-inf' ? -Infinity : Number(arg));
+    const args = values.map((arg, index) => signature.params[index] === 'i64' ? BigInt(arg.endsWith('n') ? arg.slice(0, -1) : arg) : arg === 'inf' || arg === '+inf' ? Infinity : arg === '-inf' ? -Infinity : Number(arg));
     const value = interpreter.invoke(name, ...args);
     if (value !== undefined) console.log(String(value));
   } catch (error) {

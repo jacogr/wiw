@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { createInterpreter } from '../wiw.js';
+import { createBootstrapInterpreter } from '../wiw.js';
 const encode = text => new TextEncoder().encode(text);
 // Hand-encoded MVP module exporting answer() -> 42; no guest compilation is involved.
 const constantBinary = Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0,
@@ -76,7 +76,7 @@ function interpreted(parent) {
 }
 for (const binary of ['wiw-opt.wasm']) {
   test(`${binary}: interpreter executes fixtures through its own WAT`, async () => {
-    const outer = await createInterpreter(new URL(`../build/${binary}`, import.meta.url));
+    const outer = await createBootstrapInterpreter(new URL(`../build/${binary}`, import.meta.url));
     const source = await readFile(new URL('../build/wiw.wat', import.meta.url), 'utf8');
     outer.load(source); outer.setFuel(1000000000);
     const inner = interpreted(outer);

@@ -16,11 +16,12 @@ unnecessary. Tests need no network after initialization. The runner checks HEAD
 against the recorded revision and verifies file/license hashes. Missing or
 mismatched checkouts fail with an actionable diagnostic.
 
-The complete 2.0 core suite passes on the optimized bootstrap (`-O4 --converge`):
+The complete 2.0 core suite passes through the default interpreted WAT copy
+on the optimized bootstrap (`-O4 --converge`):
 
 | Scope | Files | Passed | Skipped | Failed |
 | --- | ---: | ---: | ---: | ---: |
-| CI and full target audit, optimized bootstrap | 148 | 54,006 | 0 | 0 |
+| CI and full interpreted target audit | 148 | 54,006 | 0 | 0 |
 
 Counts include module loads, registrations and assertions. `upstream.json`
 records every target file. `capabilities.json` includes the entire inventory in
@@ -31,7 +32,8 @@ Every SIMD wire opcode is also checked against a native-Wasm test oracle.
 Self-hosting executes guests through two interpreted layers, including vector
 parameters, results, arithmetic, conversion and memory access.
 
-Run `make audit-spec` to audit the entire target on the optimized bootstrap independently.
+Run `make audit-spec` to audit the entire target on the explicit optimized
+bootstrap diagnostic runtime independently.
 It produces `build/spec-audit-wiw-opt.wasm.json`, including individual failure/skip entries,
 and returns nonzero for any failure or skip. `progress.json` records the matching
 successful reports and per-file counts. The previous `wg-1.0` milestone passed
@@ -43,7 +45,10 @@ spectest and negative assertions, runs inside its own copy. Partial and complete
 reports are written to `build/spec-selfhost-*.json`, with source hashes and
 per-file timings. The optimized build completes all 54,006 commands with zero failures/skips.
 `selfhost.json` records the matching completion snapshot, engine source hash and
-measured timings; coverage remains frozen in `capabilities.json`. CI runs this audit after the ordinary regression suite.
+measured timings; coverage remains frozen in `capabilities.json`. CI runs
+`make check`, whose spec test executes this complete interpreted inventory once
+and writes the completed self-hosted report. The standalone audit adds partial
+progress reports for diagnostic runs.
 
 Text modules reach the interpreter with their comments and whitespace intact.
 Quoted modules concatenate decoded script bytes before WAT parsing. Binary

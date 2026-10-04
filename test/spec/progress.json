@@ -1,7 +1,7 @@
 {
   "tag": "wg-2.0",
   "revision": "fffc6e12fa454e475455a7b58d3b5dc343980c10",
-  "scope": "Entire recursively inventoried core suite, including SIMD; optimized bootstrap report passes and all files are verified in CI.",
+  "scope": "Entire recursively inventoried core suite, including SIMD; optimized bootstrap diagnostic report passes and the default interpreted runtime verifies all files in CI.",
   "passed": 54006,
   "skipped": 0,
   "failed": 0,

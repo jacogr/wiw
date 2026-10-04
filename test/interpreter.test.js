@@ -99,5 +99,6 @@ for (const binary of ['wiw-opt.wasm']) {
 test('CLI prints results and fails for invalid input', () => {
   const cwd = new URL('../', import.meta.url);
   assert.equal(execFileSync(process.execPath, ['wiw.js', 'test/constant.wat', 'answer'], { cwd, encoding: 'utf8' }).trim(), '42');
+  assert.equal(execFileSync(process.execPath, ['wiw.js', '--bootstrap', 'test/constant.wat', 'answer'], { cwd, encoding: 'utf8' }).trim(), '42');
   assert.throws(() => execFileSync(process.execPath, ['wiw.js', 'test/constant.wat', 'missing'], { cwd, stdio: 'pipe' }), e => e.status === 1 && e.stderr.toString().includes('unknown export'));
 });

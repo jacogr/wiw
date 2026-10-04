@@ -46,9 +46,6 @@ jobs:
           command -v wasm-opt
           wasm-opt --version
 
-      - name: Run optimized bootstrap tests
+      - name: Run self-hosted tests and full spec on the optimized bootstrap
         run: |
           make check
-
-      - name: Audit full spec through an interpreted copy on the optimized bootstrap
-        run: make audit-selfhost

@@ -3,7 +3,7 @@ import { floatValue, floatBits } from './scalar-values.js';
 import { specSource } from './spec-source.js';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { createInterpreter, createInterpretedInterpreter } from '../wiw.js';
+import { createInterpreter, createBootstrapInterpreter } from '../wiw.js';
 
 // Read script structure only; guest modules retain their original text and comments.
 export function parseScript(source) {
@@ -204,8 +204,9 @@ const trapMessages = {
 
 export async function runSuite(binary, root = new URL('../test/spec/', import.meta.url), options = {}) {
   const started = performance.now();
-  const engineSource = options.interpreted ? await readFile(new URL('../build/wiw.wat', import.meta.url), 'utf8') : undefined;
-  const createEngine = () => options.interpreted ? createInterpretedInterpreter(binary, {source: engineSource}) : createInterpreter(binary);
+  const interpreted = options.interpreted ?? true;
+  const engineSource = interpreted ? await readFile(new URL('../build/wiw.wat', import.meta.url), 'utf8') : undefined;
+  const createEngine = () => interpreted ? createInterpreter(binary, {source: engineSource}) : createBootstrapInterpreter(binary);
   const provenance = JSON.parse(await readFile(new URL('upstream.json', root), 'utf8'));
   const fixtures = await specSource(provenance, root);
   if (provenance.license) {
@@ -216,7 +217,7 @@ export async function runSuite(binary, root = new URL('../test/spec/', import.me
   const table = await readFile(new URL('./opcodes.tsv', import.meta.url), 'utf8');
   const opcodes = new Set(table.split('\n').filter(s => s && !s.startsWith('#')).map(s => s.split(/\s+/)[1]));
   const report = { tag: provenance.tag ?? null, revision: provenance.revision, binary: new URL(binary).pathname.split('/').at(-1), passed: 0, skipped: 0, files: [], skips: [], failed: 0, failures: [] };
-  if (options.interpreted) Object.assign(report, {runtime: 'interpreted', interpreterDepth: 1, engineSourceSha256: createHash('sha256').update(engineSource).digest('hex')});
+  if (interpreted) Object.assign(report, {runtime: 'interpreted', interpreterDepth: 1, engineSourceSha256: createHash('sha256').update(engineSource).digest('hex')});
   if (options.profile) report.timings = [];
   for (const entry of provenance.files) {
     if (options.files && !options.files.includes(entry.file)) continue;

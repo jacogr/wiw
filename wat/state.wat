@@ -72,6 +72,8 @@
 	(global $guest-pages (mut i32) (i32.const 0))
 	(global $guest-min (mut i32) (i32.const 0))
 	(global $guest-max (mut i32) (i32.const 0))
+	;; Ordinary guests retain the implementation cap; a trusted parent can back a full interpreter.
+	(global $guest-capacity (mut i32) (i32.const CAP_PAGES))
 	(global $memory-offset (mut i32) (i32.const 0))
 	;; Import calls suspend explicit execution state until the host supplies a result.
 	(global $import-base (mut i32) (i32.const 0))

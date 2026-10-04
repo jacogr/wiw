@@ -365,8 +365,10 @@ language restrictions, and remain explicit bounds on self-hosted programs.
 
 ## Verification and self-hosting
 
-`make check` runs the optimized bootstrap (`-O4 --converge`) through regressions,
-negative/capacity cases and differential native-Wasm oracles. Harness tests check exact scalar
+`make check` runs regressions, negative/capacity cases, differential native-Wasm
+oracles and the complete spec suite through the default interpreted WAT copy,
+using the optimized bootstrap (`-O4 --converge`). Explicit low-level ABI tests
+inspect the bootstrap directly. Harness tests check exact scalar
 bits, trap classes, isolated negative assertions, linking, coverage accounting
 and revision/hash verification. The official `wg-2.0` submodule at
 `fffc6e12fa454e475455a7b58d3b5dc343980c10` contributes all 148 core files,
@@ -457,14 +459,25 @@ engine's guest-memory base. Backing growth updates the parent's logical guest
 pages before host writes. Neither the parent engine's code nor its metadata is
 inside the child engine's memory views.
 
-`createInterpretedInterpreter` loads expanded WAT into a bootstrap instance and
+`createInterpreter` defaults to `createInterpretedInterpreter`, which loads
+expanded WAT into an explicit `createBootstrapInterpreter` instance and
 proxies every exported ABI function through the parent's `invoke`. This includes
 metadata queries, parsing, validation, initialization, dispatch, host suspension
 and resumption. Low/high value slots, reference translation and shared resource
 synchronization reuse the ordinary frontend. Each script module and isolated
 negative assertion gets its own parent and WAT interpreter copy.
 
-`make audit-selfhost` runs all pinned commands on the optimized bootstrap, freezes
+Parent ABI calls do not consume the 128-invocation guest forwarding budget.
+Cleanup restores invocation state even if a parent ABI query fails. After loading
+its engine copy, the trusted bootstrap parent enables `enable_interpreter_backing`
+to permit backing growth beyond the ordinary 2,048-page guest capacity. This leaves
+room for the child's private arenas plus its full guest memory. The child retains
+the ordinary capacity; declared maxima and unsigned address checks still apply
+to parent growth. The public Node frontend does not expose this backing switch.
+
+The spec test in `make check` runs the complete interpreted inventory once in CI
+and writes `build/spec-selfhost-wiw-opt.wasm.json`. The standalone
+`make audit-selfhost` runs the same commands with incremental progress, freezes
 coverage against the same complete per-file manifest and records the interpreted
 engine source hash. Partial reports explicitly have `complete: false`; they do
 not count as a successful audit. Per-file timings identify expensive areas without

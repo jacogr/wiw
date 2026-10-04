@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createInterpreter,createInterpretedInterpreter} from '../wiw.js';
+import {createInterpreter,createInterpretedInterpreter,createBootstrapInterpreter} from '../wiw.js';
 for(const binary of ['wiw-opt.wasm']) {
   const url=new URL(`../build/${binary}`,import.meta.url);
   test(`${binary}: interpreted frontend preserves raw values, host suspension and reload isolation`,async()=>{
@@ -23,7 +23,7 @@ for(const binary of ['wiw-opt.wasm']) {
     assert.equal(engine.invoke('f'),7);
   });
   test(`${binary}: interpreted instances share resources and typed references across bootstrap and interpreted owners`,async()=>{
-    const provider=await createInterpretedInterpreter(url),consumer=await createInterpretedInterpreter(url),native=await createInterpreter(url);
+    const provider=await createInterpretedInterpreter(url),consumer=await createInterpretedInterpreter(url),native=await createBootstrapInterpreter(url);
     provider.load(`(module (memory (export "m") 1 3) (table (export "t") 1 3 funcref)
       (global (export "v") (mut v128) (v128.const i64x2 7 0x1000000000))
       (func $f (export "f") (param externref) (result externref i64) local.get 0 i64.const 42)
@@ -46,3 +46,12 @@ for(const binary of ['wiw-opt.wasm']) {
     assert.equal(consumer.invoke('grow'),1);assert.equal(provider.readMemory(131072,0).length,0);
   });
 }
+
+// A zero parent budget distinguishes the default interpreted ABI from the bootstrap ABI.
+test('default API executes through an interpreted parent and keeps bootstrap creation explicit', async () => {
+  const engine = await createInterpreter(undefined, {parentFuel: 0});
+  assert.throws(() => engine.load('(module)'), /exhausted fuel/);
+  const bootstrap = await createBootstrapInterpreter();
+  bootstrap.load('(module (func (export "answer") (result i32) i32.const 42))');
+  assert.equal(bootstrap.invoke('answer'), 42);
+});

@@ -249,6 +249,11 @@
 		(i32.add (global.get $guest-base) (i32.wrap_i64 (local.get $effective)))
 	)
 
+	;; Let a trusted bootstrap parent hold interpreter arenas plus its child's complete guest memory.
+	(func (export "enable_interpreter_backing")
+		(global.set $guest-capacity (i32.const 65536))
+	)
+
 	;; Grow logical guest memory, zero new bytes, and move scratch beyond it; failure returns -1.
 	(func $guest-grow
 		(param $delta i32)
@@ -265,7 +270,7 @@
 		(if
 			(i32.or
 				(i64.gt_u (local.get $pages) (i64.extend_i32_u (global.get $guest-max)))
-				(i64.gt_u (local.get $pages) (i64.const CAP_PAGES))
+				(i64.gt_u (local.get $pages) (i64.extend_i32_u (global.get $guest-capacity)))
 			)
 			(then
 				(return (i32.const -1))
