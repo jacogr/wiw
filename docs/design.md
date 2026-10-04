@@ -726,3 +726,33 @@ parameters and 1,088 total slots, cleared locals at both ends of the remaining
 range, repeated invocations, ordinary calls and tail replacement, and a live
 caller operand. Both candidate and unchanged audits pass all 65,199 commands
 across 258 files with zero skips and failures.
+
+
+Local dispatch retains the active frame's parallel high-half base. Fresh calls
+and import resumption derive it from the active call count. Ordinary calls select
+the next frame region; returns and guest/imported exception unwinds refresh it
+for the selected caller or handler. Tail replacement retains the same region.
+Frame entry and its clearing rules remain unchanged. Each local instruction
+scales its validated index once for both arrays; low-half loads and stores use
+the memory instruction's offset for the 16-byte frame header.
+
+Regressions preserve vector halves and opaque references through nested calls,
+tail replacement, import suspension/resumption, and both guest and imported
+exception unwinding. Existing maximum-slot, vector, zero-local, fuel and reload
+checks continue to run. The cache is dispatch-local and is rederived on resume,
+so the saved suspension ABI does not need an additional field.
+
+Paired profiles reduce local.get from 147 to 132 diagnostic bootstrap
+instructions. Tail calls pay four additional instructions to retain their region
+while ordinary calls select a new one. Paired hosted benchmarks improve across
+all nine cases by about 1–4%. An unchanged full audit in the same session provides
+the comparison for the candidate full test run.
+
+The final candidate passes all 148 tests and all 65,199 frozen commands across
+258 files with zero skips and failures in both runtimes. Its hosted audit takes
+390,627 ms (6.51 minutes), compared with the same-session unchanged 393,719 ms
+(6.56 minutes), a small measured reduction of 0.8%. Direct and reference stress
+files take 51.05 and 59.44 seconds versus 52.94 and 60.05 seconds. The gain is
+modest and local timings remain subject to variation; the prior 387,228 ms result
+remains the best historical full audit. Both comparison timings, source/binary
+hashes, profiles and paired benchmarks are retained in `test/performance.json`.

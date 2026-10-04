@@ -151,6 +151,7 @@
 
 	;; Execute a selected function with explicit call frames and an eight-byte operand stack.
 	;; Guest calls use explicit frames; import resumes retain the invocation's remaining fuel.
+	;; Local high-half addressing retains the active frame base across dispatch iterations.
 	(func $run
 		(param $index i32)
 		(param $args i32)
@@ -170,6 +171,7 @@
 		(local $tail i32)
 		(local $calls i32)
 		(local $frame i32)
+		(local $frame-high i32)
 		(local $callee i32)
 		(local $fuel i64)
 		(local $meta i32)
@@ -210,6 +212,13 @@
 				)
 			)
 		)
+		;; Derive the active frame high-half base after fresh entry or import resumption.
+		(local.set $frame-high
+			(i32.add
+				(global.get $call-high-base)
+				(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const LOCAL_NAME_BYTES))
+			)
+		)
 		;; Continue until the root frame returns or an explicit execution/resource error occurs.
 		(loop $dispatch
 			;; Imported exceptions resume into the same handler search as locally thrown exceptions.
@@ -227,6 +236,13 @@
 						(i32.add
 							(global.get $call-base)
 							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const CALL_BYTES))
+						)
+					)
+					;; Imported exception unwinding selects the handler frame high-half region.
+					(local.set $frame-high
+						(i32.add
+							(global.get $call-high-base)
+							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const LOCAL_NAME_BYTES))
 						)
 					)
 				)
@@ -263,6 +279,13 @@
 						(i32.add
 							(global.get $call-base)
 							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const CALL_BYTES))
+						)
+					)
+					;; Returning to the caller restores its corresponding high-half region.
+					(local.set $frame-high
+						(i32.add
+							(global.get $call-high-base)
+							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const LOCAL_NAME_BYTES))
 						)
 					)
 					(br $dispatch)
@@ -316,19 +339,19 @@
 							(i32.le_u (local.get $op) (i32.const 35))
 						)
 						(then
-							(local.set $meta (i32.load offset=4 (local.get $record)))
+							;; Scale the validated local index once for both parallel slot arrays.
+							(local.set $meta
+								(i32.mul (i32.load offset=4 (local.get $record)) (i32.const 8))
+							)
 							(local.set $target
-								(i32.add
-									(local.get $frame)
-									(i32.add (i32.const 16) (i32.mul (local.get $meta) (i32.const 8)))
-								)
+								(i32.add (local.get $frame) (local.get $meta))
 							)
 							;; Local reads preserve vector high halves as well as scalar and reference bits.
 							(if (i32.eq (local.get $op) (i32.const 33))
 								(then
-									(local.set $value (i64.load (local.get $target)))
+									(local.set $value (i64.load offset=16 (local.get $target)))
 									(local.set $value-high
-										(i64.load (call $local-high-address (local.get $frame) (local.get $meta)))
+										(i64.load (i32.add (local.get $frame-high) (local.get $meta)))
 									)
 								)
 								;; Set and tee move the complete top operand into this local slot.
@@ -342,9 +365,9 @@
 											(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
 										)
 									)
-									(i64.store (local.get $target) (local.get $value))
+									(i64.store offset=16 (local.get $target) (local.get $value))
 									(i64.store
-										(call $local-high-address (local.get $frame) (local.get $meta))
+										(i32.add (local.get $frame-high) (local.get $meta))
 										(local.get $value-high)
 									)
 									;; Set produces no result; tee republishes the same value below.
@@ -717,6 +740,14 @@
 					(local.set $frame
 						(i32.add (global.get $call-base) (i32.mul (local.get $calls) (i32.const CALL_BYTES)))
 					)
+					;; Tail replacement keeps the same frame; ordinary calls select the next high-half region.
+					(if (i32.eqz (local.get $tail))
+						(then
+							(local.set $frame-high
+								(i32.add (global.get $call-high-base) (i32.mul (local.get $calls) (i32.const LOCAL_NAME_BYTES)))
+							)
+						)
+					)
 					(call $enter (local.get $callee) (local.get $frame) (global.get $sp) (local.get $target))
 					(i32.store offset=CALL_ROOT_OFFSET (local.get $frame) (global.get $control-count))
 					(call $runtime-control
@@ -787,6 +818,13 @@
 						(i32.add
 							(global.get $call-base)
 							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const CALL_BYTES))
+						)
+					)
+					;; Guest exception unwinding selects the handler frame high-half region.
+					(local.set $frame-high
+						(i32.add
+							(global.get $call-high-base)
+							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const LOCAL_NAME_BYTES))
 						)
 					)
 					(br $dispatch)
