@@ -20,6 +20,39 @@ function decoded(type, arg) {
   if (type == 4) return "(f64.reinterpret_i64 (local.get $" arg "))"
   return "(local.get $" arg ")"
 }
+# Runtime families are exclusive; zero retains general numeric/resource execution.
+# The packed route table fits between the scalar effects and reserved keywords.
+function runtime_route(i) {
+  # 1: scalar constants, locals and simple stack instructions.
+  if (operation[i] == "const" || operation[i] == "const64" ||
+      operation[i] == "floatconst" || operation[i] == "local" ||
+      operation[i] == "drop" || operation[i] == "nop") return 1
+  # 2: integer operations whose validated scalar result cannot trap or grow the stack.
+  if ((i >= 2 && i <= 4) || (i >= 9 && i <= 30) ||
+      (i >= 62 && i <= 64) || (i >= 69 && i <= 93)) return 2
+  # 3/4: structured scope markers, and raw global/function reference reads.
+  if ((i >= 37 && i <= 41) || i == 495) return 3
+  if (i == 49 || i == 195) return 4
+  # 5: all direct, indirect and reference calls, including their tail variants.
+  if (operation[i] == "call" || operation[i] == "indirect" || i == 461 || i == 462) return 5
+  # 6 through 12: traps, returns, exceptions, specialized branches and select.
+  if (i == 45) return 6
+  if (i == 44) return 7
+  if (i == 496 || i == 497) return 8
+  if (i == 493 || i == 494) return 9
+  if (i == 463 || i == 464) return 10
+  if (i == 42 || i == 43 || i == 46) return 11
+  if (i == 47) return 12
+  # 13/14: variable-arity aggregates, and table selection before general execution.
+  if (i >= 473 && i <= 492) return 13
+  if (i == 191 || i == 192 || (i >= 197 && i <= 201)) return 14
+  # 15: select canonical memory before scalar, bulk or vector access checks.
+  if ((i >= 416 && i <= 437) || (i >= 51 && i <= 60) ||
+      (i >= 94 && i <= 104) || (i >= 148 && i <= 151) ||
+      (i >= 187 && i <= 189)) return 15
+  return 0
+}
+
 END {
   if (invalid) exit 1
   print "\t;; Opcode keyword bytes occupy reserved memory below the host source buffers."
@@ -36,6 +69,15 @@ END {
   print "\t(data (i32.const 3074)"
   for (i = 1; i <= count && i <= 202; i++) {
     printf "\t\t\"\\%02x\\%02x\"\n", inputs[i] * 16 + outputs[i], inputtype[i] * 16 + outputtype[i]
+  }
+  print "\t)"
+  if (3480 + int(count / 2) + 1 > 3840) exit 1
+  print "\n\t;; Runtime routes use one nibble per opcode; opcode zero selects the general path."
+  print "\t(data (i32.const 3480)"
+  for (i = 0; i <= count; i += 2) {
+    low = i ? runtime_route(i) : 0
+    high = i + 1 <= count ? runtime_route(i + 1) : 0
+    printf "\t\t\"\\%02x\" ;; %d/%d: %s / %s\n", low + high * 16, i, i + 1, (i ? name[i] : "unsupported"), (i + 1 <= count ? name[i + 1] : "padding")
   }
   print "\t)"
   print "\n\t;; Resolve the current atom to an opcode; zero means unsupported."

@@ -17,8 +17,9 @@ not change the declared type namespace. `scripts/opcodes.tsv` defines numeric
 operations and binary opcode mappings; awk generates lookup helpers. Each opcode
 uses two metadata bytes: operand/result counts occupy the high/low nibbles of
 the first, and operand/result types the second. Opcode one starts at byte 3074;
-256 records fit below the keyword region at 3840. Generated count/type fields
-are limited to four bits.
+the 202 compact scalar records end at byte 3478. A separate packed runtime-route
+table starts at 3480 and stays below the keyword region at 3840, including at
+the 512-opcode generator limit. Counts, types and routes are limited to four bits.
 
 Validation models operands and structured scopes for four numeric and two reference types.
 Functions and blocks return zero or one value; blocks have no parameters.
@@ -787,3 +788,49 @@ unchanged-code control. Local timings remain subject to variation. The paired
 benchmarks and instruction profiles support retaining the simpler operand and
 result path; source and binary hashes and all measurements are preserved in
 `test/performance.json`.
+
+
+Runtime dispatch now decodes one generated family nibble for each instruction.
+The opcode remains unchanged for each family's individual operations; direct and
+indirect tail-call normalization still occurs only inside the call family. The
+route table is emitted from `scripts/opcodes.tsv` by `scripts/opcodes.awk`, with
+both neighboring opcode names beside each packed byte. Even opcodes occupy the
+low nibble and odd opcodes the high nibble. The 497-opcode pin uses 249 bytes at
+3480–3728, leaving the fixed keyword and source-buffer regions unchanged.
+
+Routes select scalar constants/locals/simple stack operations, non-trapping
+integers, structured scopes, global/function reads, calls, traps, returns,
+exceptions, cast branches, null branches, ordinary branches, select, aggregates,
+tables or memory. Route zero retains general numeric/resource execution.
+General numeric and memory instructions skip the remaining specialized control,
+aggregate and table gates; table operations still select their canonical live
+descriptor before general execution. Memory selection uses the same family for
+scalar, bulk and SIMD accesses. Existing capacity, bounds, null, subtype, trap,
+fuel, source-position, exception and import-suspension rules stay in their
+handlers.
+
+Regressions mix direct calls, indirect tail replacement, reference tail
+replacement, local/global values, branches, select, memory, trapping division,
+floating operations and SIMD in one invocation, comparing exact raw results.
+A separate repeated-load check catches and rethrows exception references while
+preserving i64 payloads, and recovers after null throw-ref traps. The existing
+all-opcode numeric and SIMD comparisons, full-capacity stacks, exact fuel tests,
+import cases and nested self-hosting checks remain part of the full suite.
+
+
+Paired hosted benchmarks improve by 23–27% across all nine workloads. Diagnostic
+profiles reduce local.get from 132 to 125 bootstrap instructions, i64.sub from
+169 to 134, i64.eqz from 156 to 121, and global.get from 175 to 130. Structured
+if dispatch falls from about 235 to 194, direct tail calls from 398 to 341, and
+reference tail calls from 411 to 354. These counts include fixed profiling
+marker/resumption overhead; guest opcode execution counts remain identical.
+
+All 156 tests pass, including nested self-hosting, and both runtimes pass all
+65,199 frozen commands across 258 files with zero skips and failures. The hosted
+audit takes 339,476 ms (5.66 minutes), versus the preceding recorded 383,891 ms
+(6.40 minutes), a measured 11.6% reduction. Direct and reference million-call
+stress files take 37.26 and 41.91 seconds, down from 49.66 and 56.49 seconds.
+The full timing uses the preceding recorded run as its comparison, without a
+same-session unchanged-code full control; local timings vary. Paired isolated
+benchmarks and instruction profiles support the gain. Measurements, source and
+binary hashes are retained in `test/performance.json`.

@@ -159,6 +159,7 @@
 		(local $pc i32)
 		(local $record i32)
 		(local $op i32)
+		(local $route i32)
 		(local $inputs i32)
 		(local $a i64)
 		(local $b i64)
@@ -305,18 +306,18 @@
 			)
 			(local.set $fuel (i64.sub (local.get $fuel) (i64.const 1)))
 			(i32.store (local.get $frame) (i32.add (local.get $pc) (i32.const 1)))
-			;; Constants and local operations finish here without scanning unrelated numeric/resource dispatch.
-			(if
-				(i32.or
-					(i32.or (i32.eq (local.get $op) (i32.const 1)) (i32.eq (local.get $op) (i32.const 61)))
-					(i32.or
-						(i32.or (i32.eq (local.get $op) (i32.const 106)) (i32.eq (local.get $op) (i32.const 127)))
-						(i32.and
-							(i32.ge_u (local.get $op) (i32.const 31))
-							(i32.le_u (local.get $op) (i32.const 35))
-						)
+			;; Decode the generated family once; the original opcode remains available inside each handler.
+			(local.set $route
+				(i32.and
+					(i32.shr_u
+						(i32.load8_u offset=3480 (i32.shr_u (local.get $op) (i32.const 1)))
+						(i32.shl (i32.and (local.get $op) (i32.const 1)) (i32.const 2))
 					)
+					(i32.const 15)
 				)
+			)
+			;; Constants and local operations finish here without scanning unrelated numeric/resource dispatch.
+			(if (i32.eq (local.get $route) (i32.const 1))
 				(then
 					;; Nop preserves the operand stack and still consumes its normal instruction fuel.
 					(if (i32.eq (local.get $op) (i32.const 32))
@@ -418,29 +419,7 @@
 				)
 			)
 			;; Non-trapping integer operations consume scalar slots and finish before resource/SIMD dispatch.
-			(if
-				(i32.or
-					(i32.or
-						(i32.and
-							(i32.ge_u (local.get $op) (i32.const 2))
-							(i32.le_u (local.get $op) (i32.const 4))
-						)
-						(i32.and
-							(i32.ge_u (local.get $op) (i32.const 9))
-							(i32.le_u (local.get $op) (i32.const 30))
-						)
-					)
-					(i32.or
-						(i32.and
-							(i32.ge_u (local.get $op) (i32.const 62))
-							(i32.le_u (local.get $op) (i32.const 64))
-						)
-						(i32.and
-							(i32.ge_u (local.get $op) (i32.const 69))
-							(i32.le_u (local.get $op) (i32.const 93))
-						)
-					)
-				)
+			(if (i32.eq (local.get $route) (i32.const 2))
 				(then
 					;; These scalar opcodes use the existing compact table and consume at least one operand.
 					(local.set $inputs
@@ -485,11 +464,7 @@
 				)
 			)
 			;; Structured controls share an early opcode gate before resource and call dispatch.
-			(if
-				(i32.or
-					(i32.le_u (i32.sub (local.get $op) (i32.const 37)) (i32.const 4))
-					(i32.eq (local.get $op) (i32.const 495))
-				)
+			(if (i32.eq (local.get $route) (i32.const 3))
 				(then
 					;; Reaching else from the true arm skips the false body but still executes the end marker.
 					(if (i32.eq (local.get $op) (i32.const 40))
@@ -558,8 +533,7 @@
 				)
 			)
 			;; Globals and function references publish raw values before general resource dispatch.
-			(if
-				(i32.or (i32.eq (local.get $op) (i32.const 49)) (i32.eq (local.get $op) (i32.const 195)))
+			(if (i32.eq (local.get $route) (i32.const 4))
 				(then
 					(local.set $value-high (i64.const 0))
 					;; Global aliases resolve to live canonical storage on every read, including vector high halves.
@@ -595,28 +569,24 @@
 					(br $dispatch)
 				)
 			)
-			(local.set $tail
-				(i32.or
-					(i32.or (i32.eq (local.get $op) (i32.const 438)) (i32.eq (local.get $op) (i32.const 439)))
-					(i32.eq (local.get $op) (i32.const 462))
-				)
-			)
-			;; Tail instructions share call resolution but replace the current frame rather than nesting.
-			(if
-				(i32.or (i32.eq (local.get $op) (i32.const 438)) (i32.eq (local.get $op) (i32.const 439)))
-				(then
-					(local.set $op
-						(select (i32.const 36) (i32.const 105) (i32.eq (local.get $op) (i32.const 438)))
-					)
-				)
-			)
 			;; Direct and indirect calls copy arguments into a new frame and resume at the callee's first record.
-			(if
-				(i32.or
-					(i32.or (i32.eq (local.get $op) (i32.const 36)) (i32.eq (local.get $op) (i32.const 105)))
-					(i32.or (i32.eq (local.get $op) (i32.const 461)) (i32.eq (local.get $op) (i32.const 462)))
-				)
+			(if (i32.eq (local.get $route) (i32.const 5))
 				(then
+					(local.set $tail
+						(i32.or
+							(i32.or (i32.eq (local.get $op) (i32.const 438)) (i32.eq (local.get $op) (i32.const 439)))
+							(i32.eq (local.get $op) (i32.const 462))
+						)
+					)
+					;; Tail instructions share call resolution but replace the current frame rather than nesting.
+					(if
+						(i32.or (i32.eq (local.get $op) (i32.const 438)) (i32.eq (local.get $op) (i32.const 439)))
+						(then
+							(local.set $op
+								(select (i32.const 36) (i32.const 105) (i32.eq (local.get $op) (i32.const 438)))
+							)
+						)
+					)
 					(local.set $callee (i32.load offset=4 (local.get $record)))
 					;; Reference calls select a non-null function directly from the operand stack.
 					(if
@@ -766,153 +736,194 @@
 					(br $dispatch)
 				)
 			)
-			;; Executed unreachable is a guest trap with the original instruction's source offset.
-			(if (i32.eq (local.get $op) (i32.const 45))
+			;; Only the remaining control, aggregate and table families need these specialized handlers.
+			(if (i32.le_u (i32.sub (local.get $route) (i32.const 6)) (i32.const 8))
 				(then
-					(call $fail (i32.const 13))
-					(return (i64.const 0))
-				)
-			)
-			;; Return targets this call's implicit function label, discarding every inner scope.
-			(if (i32.eq (local.get $op) (i32.const 44))
-				(then
-					(call $runtime-jump
-						(i32.load offset=CALL_ROOT_OFFSET (local.get $frame))
-						(local.get $frame)
-					)
-					(br $dispatch)
-				)
-			)
-			;; Throws allocate or reuse an exception reference, then unwind to its nearest matching handler.
-			(if
-				(i32.or (i32.eq (local.get $op) (i32.const 496)) (i32.eq (local.get $op) (i32.const 497)))
-				(then
-					;; A fresh throw captures the tag identity and its complete raw payload.
-					(if (i32.eq (local.get $op) (i32.const 496))
+					;; Executed unreachable is a guest trap with the original instruction's source offset.
+					(if (i32.eq (local.get $route) (i32.const 6))
 						(then
-							(global.set $exception-value
-								(call $create-exception (i32.load (i32.load offset=4 (local.get $record))))
-							)
-						)
-						;; Throw-ref preserves the caught exception's original identity and payload.
-						(else
-							(global.set $exception-value (call $gc-pop))
-						)
-					)
-					;; Null exception references trap before looking for a handler.
-					(if (i64.eqz (global.get $exception-value))
-						(then
-							(call $fail (i32.const 31))
+							(call $fail (i32.const 13))
 							(return (i64.const 0))
 						)
 					)
-					(local.set $calls (call $dispatch-exception (local.get $frame) (local.get $calls)))
-					;; An uncaught exception is reported through the host exception ABI.
-					(if (global.get $error)
+					;; Return targets this call's implicit function label, discarding every inner scope.
+					(if (i32.eq (local.get $route) (i32.const 7))
 						(then
-							(return (i64.const 0))
-						)
-					)
-					(local.set $frame
-						(i32.add
-							(global.get $call-base)
-							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const CALL_BYTES))
-						)
-					)
-					;; Guest exception unwinding selects the handler frame high-half region.
-					(local.set $frame-high
-						(i32.add
-							(global.get $call-high-base)
-							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const LOCAL_NAME_BYTES))
-						)
-					)
-					(br $dispatch)
-				)
-			)
-			;; Cast branches transfer their retained reference only when the dynamic cast predicate agrees.
-			(if
-				(i32.or (i32.eq (local.get $op) (i32.const 493)) (i32.eq (local.get $op) (i32.const 494)))
-				(then
-					(local.set $a
-						(i64.load
-							(i32.add
-								(global.get $stack-base)
-								(i32.mul (i32.sub (global.get $sp) (i32.const 1)) (i32.const 8))
+							(call $runtime-jump
+								(i32.load offset=CALL_ROOT_OFFSET (local.get $frame))
+								(local.get $frame)
 							)
+							(br $dispatch)
 						)
 					)
-					;; A failed-cast branch takes the inverse of the same heap and nullability predicate.
-					(if
-						(i32.ne
-							(call $runtime-reference-matches
-								(local.get $a)
-								(i32.load offset=8 (i32.load offset=4 (local.get $record)))
-							)
-							(i32.eq (local.get $op) (i32.const 494))
-						)
+					;; Throws allocate or reuse an exception reference, then unwind to its nearest matching handler.
+					(if (i32.eq (local.get $route) (i32.const 8))
 						(then
+							;; A fresh throw captures the tag identity and its complete raw payload.
+							(if (i32.eq (local.get $op) (i32.const 496))
+								(then
+									(global.set $exception-value
+										(call $create-exception (i32.load (i32.load offset=4 (local.get $record))))
+									)
+								)
+								;; Throw-ref preserves the caught exception's original identity and payload.
+								(else
+									(global.set $exception-value (call $gc-pop))
+								)
+							)
+							;; Null exception references trap before looking for a handler.
+							(if (i64.eqz (global.get $exception-value))
+								(then
+									(call $fail (i32.const 31))
+									(return (i64.const 0))
+								)
+							)
+							(local.set $calls (call $dispatch-exception (local.get $frame) (local.get $calls)))
+							;; An uncaught exception is reported through the host exception ABI.
+							(if (global.get $error)
+								(then
+									(return (i64.const 0))
+								)
+							)
+							(local.set $frame
+								(i32.add
+									(global.get $call-base)
+									(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const CALL_BYTES))
+								)
+							)
+							;; Guest exception unwinding selects the handler frame high-half region.
+							(local.set $frame-high
+								(i32.add
+									(global.get $call-high-base)
+									(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const LOCAL_NAME_BYTES))
+								)
+							)
+							(br $dispatch)
+						)
+					)
+					;; Cast branches transfer their retained reference only when the dynamic cast predicate agrees.
+					(if (i32.eq (local.get $route) (i32.const 9))
+						(then
+							(local.set $a
+								(i64.load
+									(i32.add
+										(global.get $stack-base)
+										(i32.mul (i32.sub (global.get $sp) (i32.const 1)) (i32.const 8))
+									)
+								)
+							)
+							;; A failed-cast branch takes the inverse of the same heap and nullability predicate.
+							(if
+								(i32.ne
+									(call $runtime-reference-matches
+										(local.get $a)
+										(i32.load offset=8 (i32.load offset=4 (local.get $record)))
+									)
+									(i32.eq (local.get $op) (i32.const 494))
+								)
+								(then
+									(call $runtime-jump
+										(i32.sub
+											(i32.sub (global.get $control-count) (i32.const 1))
+											(i32.load (i32.load offset=4 (local.get $record)))
+										)
+										(local.get $frame)
+									)
+								)
+							)
+							(br $dispatch)
+						)
+					)
+					;; Null branches select a label using a reference value rather than an integer condition.
+					(if (i32.eq (local.get $route) (i32.const 10))
+						(then
+							(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
+							(local.set $a
+								(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
+							)
+							;; A null branch retains the tested reference only on non-null fallthrough.
+							(if (i32.eq (local.get $op) (i32.const 463))
+								(then
+									;; Non-null values remain as the instruction's fallthrough result.
+									(if (i64.ne (local.get $a) (i64.const 0))
+										(then
+											(global.set $sp (i32.add (global.get $sp) (i32.const 1)))
+											(br $dispatch)
+										)
+									)
+								)
+								;; A non-null branch transfers its tested reference to the target label.
+								(else
+									;; Null values are consumed on fallthrough without taking the branch.
+									(if (i64.eqz (local.get $a))
+										(then
+											(br $dispatch)
+										)
+									)
+									(global.set $sp (i32.add (global.get $sp) (i32.const 1)))
+								)
+							)
 							(call $runtime-jump
 								(i32.sub
 									(i32.sub (global.get $control-count) (i32.const 1))
-									(i32.load (i32.load offset=4 (local.get $record)))
+									(i32.load offset=4 (local.get $record))
 								)
 								(local.get $frame)
 							)
+							(br $dispatch)
 						)
 					)
-					(br $dispatch)
-				)
-			)
-			;; Null branches select a label using a reference value rather than an integer condition.
-			(if
-				(i32.or (i32.eq (local.get $op) (i32.const 463)) (i32.eq (local.get $op) (i32.const 464)))
-				(then
-					(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
-					(local.set $a
-						(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
-					)
-					;; A null branch retains the tested reference only on non-null fallthrough.
-					(if (i32.eq (local.get $op) (i32.const 463))
+					;; Branches unwind to a resolved depth; br_if keeps branch values when its condition is false.
+					(if (i32.eq (local.get $route) (i32.const 11))
 						(then
-							;; Non-null values remain as the instruction's fallthrough result.
-							(if (i64.ne (local.get $a) (i64.const 0))
+							(local.set $target (i32.load offset=4 (local.get $record)))
+							;; Conditional and table branches consume their selector before choosing a target.
+							(if (i32.ne (local.get $op) (i32.const 42))
 								(then
-									(global.set $sp (i32.add (global.get $sp) (i32.const 1)))
-									(br $dispatch)
+									(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
+									(local.set $selector
+										(i32.wrap_i64
+											(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
+										)
+									)
+									;; A false br_if falls through with its branch result still on the stack.
+									(if
+										(i32.and (i32.eq (local.get $op) (i32.const 43)) (i32.eqz (local.get $selector)))
+										(then
+											(br $dispatch)
+										)
+									)
 								)
 							)
-						)
-						;; A non-null branch transfers its tested reference to the target label.
-						(else
-							;; Null values are consumed on fallthrough without taking the branch.
-							(if (i64.eqz (local.get $a))
+							;; Out-of-range unsigned selectors, including negative i32 values, choose the table default.
+							(if (i32.eq (local.get $op) (i32.const 46))
 								(then
-									(br $dispatch)
+									(local.set $count (i32.load offset=12 (local.get $record)))
+									;; The last entry is the default, not an explicit selector case.
+									(if (i32.ge_u (local.get $selector) (i32.sub (local.get $count) (i32.const 1)))
+										(then
+											(local.set $selector (i32.sub (local.get $count) (i32.const 1)))
+										)
+									)
+									(local.set $target
+										(i32.load
+											(i32.add
+												(global.get $table-base)
+												(i32.mul (i32.add (local.get $target) (local.get $selector)) (i32.const 4))
+											)
+										)
+									)
 								)
 							)
-							(global.set $sp (i32.add (global.get $sp) (i32.const 1)))
+							(call $runtime-jump
+								(i32.sub (i32.sub (global.get $control-count) (i32.const 1)) (local.get $target))
+								(local.get $frame)
+							)
+							(br $dispatch)
 						)
 					)
-					(call $runtime-jump
-						(i32.sub
-							(i32.sub (global.get $control-count) (i32.const 1))
-							(i32.load offset=4 (local.get $record))
-						)
-						(local.get $frame)
-					)
-					(br $dispatch)
-				)
-			)
-			;; Branches unwind to a resolved depth; br_if keeps branch values when its condition is false.
-			(if
-				(i32.or
-					(i32.eq (local.get $op) (i32.const 42))
-					(i32.or (i32.eq (local.get $op) (i32.const 43)) (i32.eq (local.get $op) (i32.const 46)))
-				)
-				(then
-					(local.set $target (i32.load offset=4 (local.get $record)))
-					;; Conditional and table branches consume their selector before choosing a target.
-					(if (i32.ne (local.get $op) (i32.const 42))
+					;; Select consumes condition, right value and left value, then pushes exactly one chosen integer.
+					(if (i32.eq (local.get $route) (i32.const 12))
 						(then
 							(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
 							(local.set $selector
@@ -920,123 +931,69 @@
 									(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
 								)
 							)
-							;; A false br_if falls through with its branch result still on the stack.
-							(if
-								(i32.and (i32.eq (local.get $op) (i32.const 43)) (i32.eqz (local.get $selector)))
-								(then
-									(br $dispatch)
+							(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
+							(local.set $b-high
+								(i64.load
+									(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
 								)
 							)
-						)
-					)
-					;; Out-of-range unsigned selectors, including negative i32 values, choose the table default.
-					(if (i32.eq (local.get $op) (i32.const 46))
-						(then
-							(local.set $count (i32.load offset=12 (local.get $record)))
-							;; The last entry is the default, not an explicit selector case.
-							(if (i32.ge_u (local.get $selector) (i32.sub (local.get $count) (i32.const 1)))
-								(then
-									(local.set $selector (i32.sub (local.get $count) (i32.const 1)))
+							(local.set $b
+								(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
+							)
+							(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
+							(local.set $a-high
+								(i64.load
+									(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
 								)
 							)
-							(local.set $target
-								(i32.load
-									(i32.add
-										(global.get $table-base)
-										(i32.mul (i32.add (local.get $target) (local.get $selector)) (i32.const 4))
-									)
-								)
+							(local.set $a
+								(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
 							)
-						)
-					)
-					(call $runtime-jump
-						(i32.sub (i32.sub (global.get $control-count) (i32.const 1)) (local.get $target))
-						(local.get $frame)
-					)
-					(br $dispatch)
-				)
-			)
-			;; Select consumes condition, right value and left value, then pushes exactly one chosen integer.
-			(if (i32.eq (local.get $op) (i32.const 47))
-				(then
-					(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
-					(local.set $selector
-						(i32.wrap_i64
-							(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
-						)
-					)
-					(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
-					(local.set $b-high
-						(i64.load
-							(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
-						)
-					)
-					(local.set $b
-						(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
-					)
-					(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
-					(local.set $a-high
-						(i64.load
-							(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
-						)
-					)
-					(local.set $a
-						(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
-					)
-					(call $runtime-value (select (local.get $a) (local.get $b) (local.get $selector)))
-					(i64.store
-						(i32.add
-							(global.get $stack-high-base)
-							(i32.mul (i32.sub (global.get $sp) (i32.const 1)) (i32.const 8))
-						)
-						(select (local.get $a-high) (local.get $b-high) (local.get $selector))
-					)
-					;; Preserve the same capacity/error handling as every other result-producing opcode.
-					(if (global.get $error)
-						(then
-							(return (i64.const 0))
-						)
-					)
-					(br $dispatch)
-				)
-			)
-			;; Table instructions execute against their validated destination descriptor.
-			(if
-				(i32.or
-					(i32.or (i32.eq (local.get $op) (i32.const 191)) (i32.eq (local.get $op) (i32.const 192)))
-					(i32.and
-						(i32.ge_u (local.get $op) (i32.const 197))
-						(i32.le_u (local.get $op) (i32.const 201))
-					)
-				)
-				(then
-					(call $use-table (i32.load (i32.load offset=4 (local.get $record))))
-				)
-			)
-			;; Aggregate instructions consume variable field vectors directly from the operand stack.
-			(if
-				(i32.and
-					(i32.ge_u (local.get $op) (i32.const 473))
-					(i32.le_u (local.get $op) (i32.const 492))
-				)
-				(then
-					(local.set $value
-						(call $gc-aggregate-apply (local.get $op) (i32.load offset=4 (local.get $record)))
-					)
-					;; Value-producing aggregate instructions publish both halves of vector fields.
-					(if (call $outputs (local.get $op))
-						(then
-							(call $runtime-value (local.get $value))
+							(call $runtime-value (select (local.get $a) (local.get $b) (local.get $selector)))
 							(i64.store
 								(i32.add
 									(global.get $stack-high-base)
 									(i32.mul (i32.sub (global.get $sp) (i32.const 1)) (i32.const 8))
 								)
-								(global.get $gc-high)
+								(select (local.get $a-high) (local.get $b-high) (local.get $selector))
 							)
+							;; Preserve the same capacity/error handling as every other result-producing opcode.
+							(if (global.get $error)
+								(then
+									(return (i64.const 0))
+								)
+							)
+							(br $dispatch)
 						)
 					)
-					(br $dispatch)
+					;; Table instructions execute against their validated destination descriptor.
+					(if (i32.eq (local.get $route) (i32.const 14))
+						(then
+							(call $use-table (i32.load (i32.load offset=4 (local.get $record))))
+						)
+					)
+					;; Aggregate instructions consume variable field vectors directly from the operand stack.
+					(if (i32.eq (local.get $route) (i32.const 13))
+						(then
+							(local.set $value
+								(call $gc-aggregate-apply (local.get $op) (i32.load offset=4 (local.get $record)))
+							)
+							;; Value-producing aggregate instructions publish both halves of vector fields.
+							(if (call $outputs (local.get $op))
+								(then
+									(call $runtime-value (local.get $value))
+									(i64.store
+										(i32.add
+											(global.get $stack-high-base)
+											(i32.mul (i32.sub (global.get $sp) (i32.const 1)) (i32.const 8))
+										)
+										(global.get $gc-high)
+									)
+								)
+							)
+							(br $dispatch)
+						)
+					)
 				)
 			)
 			(local.set $inputs (call $inputs (local.get $op)))
@@ -1195,17 +1152,7 @@
 				)
 			)
 			;; Validated memory immediates select their canonical destination before address checks.
-			(if
-				(i32.or
-					(call $memory-op (local.get $op))
-					(i32.or
-						(i32.or (i32.eq (local.get $op) (i32.const 51)) (i32.eq (local.get $op) (i32.const 52)))
-						(i32.and
-							(i32.ge_u (local.get $op) (i32.const 187))
-							(i32.le_u (local.get $op) (i32.const 189))
-						)
-					)
-				)
+			(if (i32.eq (local.get $route) (i32.const 15))
 				(then
 					(call $use-memory (i32.load offset=8 (i32.load offset=4 (local.get $record))))
 				)
