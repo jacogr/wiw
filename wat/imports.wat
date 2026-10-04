@@ -113,13 +113,13 @@
 					)
 				)
 				;; Keep every import category within the shared descriptor arena.
-		(if (i32.ge_u (global.get $import-count) (i32.const CAP_IMPORTS))
-			(then
-				(call $fail (i32.const 6))
-				(return)
-			)
-		)
-		(local.set $record (call $import-record (global.get $import-count)))
+				(if (i32.ge_u (global.get $import-count) (i32.const CAP_IMPORTS))
+					(then
+						(call $fail (i32.const 6))
+						(return)
+					)
+				)
+				(local.set $record (call $import-record (global.get $import-count)))
 				(i32.store (local.get $record) (local.get $index))
 				(i32.store offset=24 (local.get $record) (local.get $kind))
 				(global.set $import-count (i32.add (global.get $import-count) (i32.const 1)))
@@ -176,6 +176,12 @@
 				(i64.store
 					(i32.add (global.get $stack-base) (i32.mul (local.get $i) (i32.const 8)))
 					(i64.load (i32.add (local.get $args) (i32.mul (local.get $i) (i32.const 8))))
+				)
+				(i64.store
+					(i32.add (global.get $stack-high-base) (i32.mul (local.get $i) (i32.const 8)))
+					(i64.load
+						(i32.add (global.get $argument-high-base) (i32.mul (local.get $i) (i32.const 8)))
+					)
 				)
 				(local.set $i (i32.add (local.get $i) (i32.const 1)))
 				(br $args)
@@ -236,7 +242,7 @@
 				(return (i32.const -1))
 			)
 		)
-		(i32.ne (i32.load offset=24 (call $function (local.get $index))) (i32.const 0))
+		(call $shape-count (i32.load offset=24 (call $function (local.get $index))))
 	)
 
 	;; Resolve an exported function to its numeric index so a host can forward its declared signature.
@@ -276,6 +282,9 @@
 		(param $failed i32)
 		(result i64)
 		(local $index i32)
+		(local $shape i32)
+		(local $count i32)
+		(local $high i64)
 
 		(global.set $error (i32.const 0))
 		;; A result is only meaningful while an imported call is suspended.
@@ -295,10 +304,25 @@
 				(return (call $finish-start (i64.const 0)))
 			)
 		)
+		(local.set $shape (i32.load offset=24 (call $function (local.get $index))))
+		(local.set $count (call $shape-count (local.get $shape)))
+		;; Multivalue adapters place the complete vector at pending_args before resumption.
+		(if (i32.gt_u (local.get $count) (i32.const 1))
+			(then
+				(local.set $value
+					(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
+				)
+			)
+		)
 		(local.set $value
 			(call $canonical-value
 				(local.get $value)
-				(i32.load offset=24 (call $function (local.get $index)))
+				(call $shape-type (local.get $shape) (i32.const 0))
+			)
+		)
+		(local.set $high
+			(i64.load
+				(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
 			)
 		)
 		;; Directly exported imports have no guest continuation and return immediately.
@@ -309,10 +333,33 @@
 				)
 			)
 		)
-		;; Void imports preserve the saved operand height; scalar imports push one result above it.
-		(if (i32.load offset=24 (call $function (local.get $index)))
+		;; Void imports leave the operand cursor unchanged; singleton imports use the compatibility value.
+		(if (i32.eq (local.get $count) (i32.const 1))
 			(then
 				(call $runtime-value (local.get $value))
+				(i64.store
+					(i32.add
+						(global.get $stack-high-base)
+						(i32.mul (i32.sub (global.get $sp) (i32.const 1)) (i32.const 8))
+					)
+					(local.get $high)
+				)
+			)
+		)
+		;; Multivalue results already occupy the protected slots above the saved cursor.
+		(if (i32.gt_u (local.get $count) (i32.const 1))
+			(then
+				;; Check capacity before publishing the new cursor to dispatch.
+				(if
+					(i32.gt_u (i32.add (global.get $sp) (local.get $count)) (i32.const CAP_OPERANDS))
+					(then
+						(call $fail (i32.const 6))
+					)
+					;; The host validates every type and canonicalizes scalar result slots.
+					(else
+						(global.set $sp (i32.add (global.get $sp) (local.get $count)))
+					)
+				)
 			)
 		)
 		;; A result allocation failure ends the invocation without restoring dispatch.

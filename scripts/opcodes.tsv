@@ -1,4 +1,4 @@
-# id mnemonic inputs outputs operation operandType resultType binaryOpcode
+# id mnemonic inputs outputs operation poppedType resultType binaryOpcode [earlierPoppedType]
 1	i32.const	0	1	const	1	1	65
 2	i32.add	2	1	i32.add	1	1	106
 3	i32.sub	2	1	i32.sub	1	1	107
@@ -46,7 +46,7 @@
 45	unreachable	0	0	control	1	1	0
 46	br_table	1	0	control	1	1	14
 47	select	3	1	control	1	1	27
-48	then	0	0	control	1	1	256
+48	then	0	0	control	1	1	-1
 49	global.get	0	1	resource	1	1	35
 50	global.set	1	0	resource	1	1	36
 51	memory.size	0	1	resource	1	1	63
@@ -172,3 +172,267 @@
 171	i64.reinterpret_f64	1	1	floatconvert	4	2	189
 172	f32.reinterpret_i32	1	1	floatconvert	1	3	190
 173	f64.reinterpret_i64	1	1	floatconvert	2	4	191
+174	i32.extend8_s	1	1	integerextend	1	1	192
+175	i32.extend16_s	1	1	integerextend	1	1	193
+176	i64.extend8_s	1	1	integerextend	2	2	194
+177	i64.extend16_s	1	1	integerextend	2	2	195
+178	i64.extend32_s	1	1	integerextend	2	2	196
+179	i32.trunc_sat_f32_s	1	1	floatconvert	3	1	256
+180	i32.trunc_sat_f32_u	1	1	floatconvert	3	1	257
+181	i32.trunc_sat_f64_s	1	1	floatconvert	4	1	258
+182	i32.trunc_sat_f64_u	1	1	floatconvert	4	1	259
+183	i64.trunc_sat_f32_s	1	1	floatconvert	3	2	260
+184	i64.trunc_sat_f32_u	1	1	floatconvert	3	2	261
+185	i64.trunc_sat_f64_s	1	1	floatconvert	4	2	262
+186	i64.trunc_sat_f64_u	1	1	floatconvert	4	2	263
+187	memory.copy	3	0	bulk	1	0	266
+188	memory.fill	3	0	bulk	1	0	267
+189	memory.init	3	0	bulk	1	0	264
+190	data.drop	0	0	bulk	0	0	265
+191 table.size 0 1 resource 0 1 272
+192 table.copy 3 0 resource 1 0 270
+193 ref.null 0 1 resource 0 0 208
+194 ref.is_null 1 1 resource 0 1 209
+195 ref.func 0 1 resource 0 5 210
+196 elem.drop 0 0 resource 0 0 269
+197 table.init 3 0 resource 1 0 268
+198 table.get 1 1 resource 1 5 37
+199 table.set 2 0 resource 5 0 38
+200 table.grow 2 1 resource 1 1 271
+201 table.fill 3 0 resource 1 0 273
+202 v128.const 0 1 resource 0 7 524
+203	i32x4.add	2	1	simd	7	7	686
+204	i64x2.add	2	1	simd	7	7	718
+205	i8x16.eq	2	1	simd	7	7	547	7
+206	i8x16.ne	2	1	simd	7	7	548	7
+207	i8x16.lt_s	2	1	simd	7	7	549	7
+208	i8x16.lt_u	2	1	simd	7	7	550	7
+209	i8x16.gt_s	2	1	simd	7	7	551	7
+210	i8x16.gt_u	2	1	simd	7	7	552	7
+211	i8x16.le_s	2	1	simd	7	7	553	7
+212	i8x16.le_u	2	1	simd	7	7	554	7
+213	i8x16.ge_s	2	1	simd	7	7	555	7
+214	i8x16.ge_u	2	1	simd	7	7	556	7
+215	i16x8.eq	2	1	simd	7	7	557	7
+216	i16x8.ne	2	1	simd	7	7	558	7
+217	i16x8.lt_s	2	1	simd	7	7	559	7
+218	i16x8.lt_u	2	1	simd	7	7	560	7
+219	i16x8.gt_s	2	1	simd	7	7	561	7
+220	i16x8.gt_u	2	1	simd	7	7	562	7
+221	i16x8.le_s	2	1	simd	7	7	563	7
+222	i16x8.le_u	2	1	simd	7	7	564	7
+223	i16x8.ge_s	2	1	simd	7	7	565	7
+224	i16x8.ge_u	2	1	simd	7	7	566	7
+225	i32x4.eq	2	1	simd	7	7	567	7
+226	i32x4.ne	2	1	simd	7	7	568	7
+227	i32x4.lt_s	2	1	simd	7	7	569	7
+228	i32x4.lt_u	2	1	simd	7	7	570	7
+229	i32x4.gt_s	2	1	simd	7	7	571	7
+230	i32x4.gt_u	2	1	simd	7	7	572	7
+231	i32x4.le_s	2	1	simd	7	7	573	7
+232	i32x4.le_u	2	1	simd	7	7	574	7
+233	i32x4.ge_s	2	1	simd	7	7	575	7
+234	i32x4.ge_u	2	1	simd	7	7	576	7
+235	f32x4.eq	2	1	simd	7	7	577	7
+236	f32x4.ne	2	1	simd	7	7	578	7
+237	f32x4.lt	2	1	simd	7	7	579	7
+238	f32x4.gt	2	1	simd	7	7	580	7
+239	f32x4.le	2	1	simd	7	7	581	7
+240	f32x4.ge	2	1	simd	7	7	582	7
+241	f64x2.eq	2	1	simd	7	7	583	7
+242	f64x2.ne	2	1	simd	7	7	584	7
+243	f64x2.lt	2	1	simd	7	7	585	7
+244	f64x2.gt	2	1	simd	7	7	586	7
+245	f64x2.le	2	1	simd	7	7	587	7
+246	f64x2.ge	2	1	simd	7	7	588	7
+247	i8x16.abs	1	1	simd	7	7	608	7
+248	i8x16.neg	1	1	simd	7	7	609	7
+249	i8x16.popcnt	1	1	simd	7	7	610	7
+250	f32x4.ceil	1	1	simd	7	7	615	7
+251	f32x4.floor	1	1	simd	7	7	616	7
+252	f32x4.trunc	1	1	simd	7	7	617	7
+253	f32x4.nearest	1	1	simd	7	7	618	7
+254	i8x16.shl	2	1	simd	1	7	619	7
+255	i8x16.shr_s	2	1	simd	1	7	620	7
+256	i8x16.shr_u	2	1	simd	1	7	621	7
+257	i8x16.add	2	1	simd	7	7	622	7
+258	i8x16.add_sat_s	2	1	simd	7	7	623	7
+259	i8x16.add_sat_u	2	1	simd	7	7	624	7
+260	i8x16.sub	2	1	simd	7	7	625	7
+261	i8x16.sub_sat_s	2	1	simd	7	7	626	7
+262	i8x16.sub_sat_u	2	1	simd	7	7	627	7
+263	f64x2.ceil	1	1	simd	7	7	628	7
+264	f64x2.floor	1	1	simd	7	7	629	7
+265	i8x16.min_s	2	1	simd	7	7	630	7
+266	i8x16.min_u	2	1	simd	7	7	631	7
+267	i8x16.max_s	2	1	simd	7	7	632	7
+268	i8x16.max_u	2	1	simd	7	7	633	7
+269	f64x2.trunc	1	1	simd	7	7	634	7
+270	i8x16.avgr_u	2	1	simd	7	7	635	7
+271	i16x8.abs	1	1	simd	7	7	640	7
+272	i16x8.neg	1	1	simd	7	7	641	7
+273	i16x8.shl	2	1	simd	1	7	651	7
+274	i16x8.shr_s	2	1	simd	1	7	652	7
+275	i16x8.shr_u	2	1	simd	1	7	653	7
+276	i16x8.add	2	1	simd	7	7	654	7
+277	i16x8.add_sat_s	2	1	simd	7	7	655	7
+278	i16x8.add_sat_u	2	1	simd	7	7	656	7
+279	i16x8.sub	2	1	simd	7	7	657	7
+280	i16x8.sub_sat_s	2	1	simd	7	7	658	7
+281	i16x8.sub_sat_u	2	1	simd	7	7	659	7
+282	f64x2.nearest	1	1	simd	7	7	660	7
+283	i16x8.mul	2	1	simd	7	7	661	7
+284	i16x8.min_s	2	1	simd	7	7	662	7
+285	i16x8.min_u	2	1	simd	7	7	663	7
+286	i16x8.max_s	2	1	simd	7	7	664	7
+287	i16x8.max_u	2	1	simd	7	7	665	7
+288	i16x8.avgr_u	2	1	simd	7	7	667	7
+289	i32x4.abs	1	1	simd	7	7	672	7
+290	i32x4.neg	1	1	simd	7	7	673	7
+291	i32x4.shl	2	1	simd	1	7	683	7
+292	i32x4.shr_s	2	1	simd	1	7	684	7
+293	i32x4.shr_u	2	1	simd	1	7	685	7
+294	i32x4.sub	2	1	simd	7	7	689	7
+295	i32x4.mul	2	1	simd	7	7	693	7
+296	i32x4.min_s	2	1	simd	7	7	694	7
+297	i32x4.min_u	2	1	simd	7	7	695	7
+298	i32x4.max_s	2	1	simd	7	7	696	7
+299	i32x4.max_u	2	1	simd	7	7	697	7
+300	i64x2.abs	1	1	simd	7	7	704	7
+301	i64x2.neg	1	1	simd	7	7	705	7
+302	i64x2.shl	2	1	simd	1	7	715	7
+303	i64x2.shr_s	2	1	simd	1	7	716	7
+304	i64x2.shr_u	2	1	simd	1	7	717	7
+305	i64x2.sub	2	1	simd	7	7	721	7
+306	i64x2.mul	2	1	simd	7	7	725	7
+307	i64x2.eq	2	1	simd	7	7	726	7
+308	i64x2.ne	2	1	simd	7	7	727	7
+309	i64x2.lt_s	2	1	simd	7	7	728	7
+310	i64x2.gt_s	2	1	simd	7	7	729	7
+311	i64x2.le_s	2	1	simd	7	7	730	7
+312	i64x2.ge_s	2	1	simd	7	7	731	7
+313	f32x4.abs	1	1	simd	7	7	736	7
+314	f32x4.neg	1	1	simd	7	7	737	7
+315	f32x4.sqrt	1	1	simd	7	7	739	7
+316	f32x4.add	2	1	simd	7	7	740	7
+317	f32x4.sub	2	1	simd	7	7	741	7
+318	f32x4.mul	2	1	simd	7	7	742	7
+319	f32x4.div	2	1	simd	7	7	743	7
+320	f32x4.min	2	1	simd	7	7	744	7
+321	f32x4.max	2	1	simd	7	7	745	7
+322	f32x4.pmin	2	1	simd	7	7	746	7
+323	f32x4.pmax	2	1	simd	7	7	747	7
+324	f64x2.abs	1	1	simd	7	7	748	7
+325	f64x2.neg	1	1	simd	7	7	749	7
+326	f64x2.sqrt	1	1	simd	7	7	751	7
+327	f64x2.add	2	1	simd	7	7	752	7
+328	f64x2.sub	2	1	simd	7	7	753	7
+329	f64x2.mul	2	1	simd	7	7	754	7
+330	f64x2.div	2	1	simd	7	7	755	7
+331	f64x2.min	2	1	simd	7	7	756	7
+332	f64x2.max	2	1	simd	7	7	757	7
+333	f64x2.pmin	2	1	simd	7	7	758	7
+334	f64x2.pmax	2	1	simd	7	7	759	7
+335	i8x16.shuffle	2	1	simd	7	7	525	7
+336	i8x16.swizzle	2	1	simd	7	7	526	7
+337	i8x16.splat	1	1	simd	1	7	527	7
+338	i16x8.splat	1	1	simd	1	7	528	7
+339	i32x4.splat	1	1	simd	1	7	529	7
+340	i64x2.splat	1	1	simd	2	7	530	7
+341	f32x4.splat	1	1	simd	3	7	531	7
+342	f64x2.splat	1	1	simd	4	7	532	7
+343	i8x16.extract_lane_s	1	1	simd	7	1	533	7
+344	i8x16.extract_lane_u	1	1	simd	7	1	534	7
+345	i8x16.replace_lane	2	1	simd	1	7	535	7
+346	i16x8.extract_lane_s	1	1	simd	7	1	536	7
+347	i16x8.extract_lane_u	1	1	simd	7	1	537	7
+348	i16x8.replace_lane	2	1	simd	1	7	538	7
+349	i32x4.extract_lane	1	1	simd	7	1	539	7
+350	i32x4.replace_lane	2	1	simd	1	7	540	7
+351	i64x2.extract_lane	1	1	simd	7	2	541	7
+352	i64x2.replace_lane	2	1	simd	2	7	542	7
+353	f32x4.extract_lane	1	1	simd	7	3	543	7
+354	f32x4.replace_lane	2	1	simd	3	7	544	7
+355	f64x2.extract_lane	1	1	simd	7	4	545	7
+356	f64x2.replace_lane	2	1	simd	4	7	546	7
+357	v128.not	1	1	simd	7	7	589	7
+358	v128.and	2	1	simd	7	7	590	7
+359	v128.andnot	2	1	simd	7	7	591	7
+360	v128.or	2	1	simd	7	7	592	7
+361	v128.xor	2	1	simd	7	7	593	7
+362	v128.bitselect	3	1	simd	7	7	594	7
+363	v128.any_true	1	1	simd	7	1	595	7
+364	f32x4.demote_f64x2_zero	1	1	simd	7	7	606	7
+365	f64x2.promote_low_f32x4	1	1	simd	7	7	607	7
+366	i8x16.all_true	1	1	simd	7	1	611	7
+367	i8x16.bitmask	1	1	simd	7	1	612	7
+368	i8x16.narrow_i16x8_s	2	1	simd	7	7	613	7
+369	i8x16.narrow_i16x8_u	2	1	simd	7	7	614	7
+370	i16x8.extadd_pairwise_i8x16_s	1	1	simd	7	7	636	7
+371	i16x8.extadd_pairwise_i8x16_u	1	1	simd	7	7	637	7
+372	i32x4.extadd_pairwise_i16x8_s	1	1	simd	7	7	638	7
+373	i32x4.extadd_pairwise_i16x8_u	1	1	simd	7	7	639	7
+374	i16x8.q15mulr_sat_s	2	1	simd	7	7	642	7
+375	i16x8.all_true	1	1	simd	7	1	643	7
+376	i16x8.bitmask	1	1	simd	7	1	644	7
+377	i16x8.narrow_i32x4_s	2	1	simd	7	7	645	7
+378	i16x8.narrow_i32x4_u	2	1	simd	7	7	646	7
+379	i16x8.extend_low_i8x16_s	1	1	simd	7	7	647	7
+380	i16x8.extend_high_i8x16_s	1	1	simd	7	7	648	7
+381	i16x8.extend_low_i8x16_u	1	1	simd	7	7	649	7
+382	i16x8.extend_high_i8x16_u	1	1	simd	7	7	650	7
+383	i16x8.extmul_low_i8x16_s	2	1	simd	7	7	668	7
+384	i16x8.extmul_high_i8x16_s	2	1	simd	7	7	669	7
+385	i16x8.extmul_low_i8x16_u	2	1	simd	7	7	670	7
+386	i16x8.extmul_high_i8x16_u	2	1	simd	7	7	671	7
+387	i32x4.all_true	1	1	simd	7	1	675	7
+388	i32x4.bitmask	1	1	simd	7	1	676	7
+389	i32x4.extend_low_i16x8_s	1	1	simd	7	7	679	7
+390	i32x4.extend_high_i16x8_s	1	1	simd	7	7	680	7
+391	i32x4.extend_low_i16x8_u	1	1	simd	7	7	681	7
+392	i32x4.extend_high_i16x8_u	1	1	simd	7	7	682	7
+393	i32x4.dot_i16x8_s	2	1	simd	7	7	698	7
+394	i32x4.extmul_low_i16x8_s	2	1	simd	7	7	700	7
+395	i32x4.extmul_high_i16x8_s	2	1	simd	7	7	701	7
+396	i32x4.extmul_low_i16x8_u	2	1	simd	7	7	702	7
+397	i32x4.extmul_high_i16x8_u	2	1	simd	7	7	703	7
+398	i64x2.all_true	1	1	simd	7	1	707	7
+399	i64x2.bitmask	1	1	simd	7	1	708	7
+400	i64x2.extend_low_i32x4_s	1	1	simd	7	7	711	7
+401	i64x2.extend_high_i32x4_s	1	1	simd	7	7	712	7
+402	i64x2.extend_low_i32x4_u	1	1	simd	7	7	713	7
+403	i64x2.extend_high_i32x4_u	1	1	simd	7	7	714	7
+404	i64x2.extmul_low_i32x4_s	2	1	simd	7	7	732	7
+405	i64x2.extmul_high_i32x4_s	2	1	simd	7	7	733	7
+406	i64x2.extmul_low_i32x4_u	2	1	simd	7	7	734	7
+407	i64x2.extmul_high_i32x4_u	2	1	simd	7	7	735	7
+408	i32x4.trunc_sat_f32x4_s	1	1	simd	7	7	760	7
+409	i32x4.trunc_sat_f32x4_u	1	1	simd	7	7	761	7
+410	f32x4.convert_i32x4_s	1	1	simd	7	7	762	7
+411	f32x4.convert_i32x4_u	1	1	simd	7	7	763	7
+412	i32x4.trunc_sat_f64x2_s_zero	1	1	simd	7	7	764	7
+413	i32x4.trunc_sat_f64x2_u_zero	1	1	simd	7	7	765	7
+414	f64x2.convert_low_i32x4_s	1	1	simd	7	7	766	7
+415	f64x2.convert_low_i32x4_u	1	1	simd	7	7	767	7
+416	v128.load	1	1	simd	1	7	512	1
+417	v128.load8x8_s	1	1	simd	1	7	513	1
+418	v128.load8x8_u	1	1	simd	1	7	514	1
+419	v128.load16x4_s	1	1	simd	1	7	515	1
+420	v128.load16x4_u	1	1	simd	1	7	516	1
+421	v128.load32x2_s	1	1	simd	1	7	517	1
+422	v128.load32x2_u	1	1	simd	1	7	518	1
+423	v128.load8_splat	1	1	simd	1	7	519	1
+424	v128.load16_splat	1	1	simd	1	7	520	1
+425	v128.load32_splat	1	1	simd	1	7	521	1
+426	v128.load64_splat	1	1	simd	1	7	522	1
+427	v128.store	2	0	simd	7	0	523	1
+428	v128.load32_zero	1	1	simd	1	7	604	1
+429	v128.load64_zero	1	1	simd	1	7	605	1
+430	v128.load8_lane	2	1	simd	7	7	596	1
+431	v128.load16_lane	2	1	simd	7	7	597	1
+432	v128.load32_lane	2	1	simd	7	7	598	1
+433	v128.load64_lane	2	1	simd	7	7	599	1
+434	v128.store8_lane	2	0	simd	7	0	600	1
+435	v128.store16_lane	2	0	simd	7	0	601	1
+436	v128.store32_lane	2	0	simd	7	0	602	1
+437	v128.store64_lane	2	0	simd	7	0	603	1

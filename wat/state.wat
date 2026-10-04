@@ -12,7 +12,7 @@
 	;; 14 memory bounds, 15 memory limits, 16 immutable global, 18 export kind, 19 alignment,
 	;; 20 host import failure, 21 invalid resume, 22 suspended invocation reentry, 23 narrow host ABI type mismatch,
 	;; 24 undefined/null element, 25 indirect signature mismatch, 26 table limits, 27 element bounds,
-	;; 28 invalid float-to-integer conversion, 29 instance not initialized.
+	;; 28 invalid float-to-integer conversion, 29 instance not initialized, 30 table instruction bounds.
 	(global $error (mut i32) (i32.const 0))
 	(global $offset (mut i32) (i32.const 0))
 	(global $ready (mut i32) (i32.const 0))
@@ -21,6 +21,12 @@
 	(global $start-function (mut i32) (i32.const 0))
 	(global $start-length (mut i32) (i32.const 0))
 	(global $start-offset (mut i32) (i32.const 0))
+	(data (i32.const 3893) "externrefexterndeclareitem")
+	;; Deferred ref.func global initializers preserve forward function targets.
+	(global $initializer-function (mut i32) (i32.const 0))
+	(global $initializer-function-length (mut i32) (i32.const 0))
+	(global $initializer-function-source (mut i32) (i32.const 0))
+	(global $initializer-function-present (mut i32) (i32.const 0))
 	(data (i32.const 3872) "start")
 	;; Per-load regions follow the source, so source bytes never overlap guest instructions.
 	;; Instruction records are 16 bytes; syntax/control frames are 32 bytes; value slots are 8 bytes.
@@ -171,14 +177,15 @@
 	(func (export "result_count")
 		(result i32)
 
-		(i32.ne (global.get $last-results) (i32.const 0))
+		(call $shape-count (global.get $last-results))
 	)
 
 	;; Return the selected result's scalar type: zero for void, one for i32, two for i64.
 	(func (export "result_type")
+		(param $index i32)
 		(result i32)
 
-		(global.get $last-results)
+		(call $shape-type (global.get $last-results) (local.get $index))
 	)
 
 	;; Set the unsigned instruction budget used independently by each invocation.
@@ -217,3 +224,17 @@
 	(global $initializer-source (mut i32) (i32.const 0))
 	(global $initializer-is-reference (mut i32) (i32.const 0))
 	(global $segments-ready (mut i32) (i32.const 0))
+	;; Table records keep independent names, types, limits and 4096-entry storage arenas.
+	(global $guest-table-arena (mut i32) (i32.const 0))
+	(global $guest-table-index (mut i32) (i32.const 0))
+	(global $guest-table-type (mut i32) (i32.const 5))
+	;; Multivalue result vectors use bounded type records separate from runtime operand slots.
+	(global $result-shape-base (mut i32) (i32.const 0))
+	(global $result-shape-count (mut i32) (i32.const 0))
+	;; Vector high halves have parallel arenas, preserving the existing scalar low-slot ABI.
+	(global $stack-high-base (mut i32) (i32.const 0))
+	(global $call-high-base (mut i32) (i32.const 0))
+	(global $argument-high-base (mut i32) (i32.const 0))
+	;; SIMD literal spelling occupies the remaining reserved keyword bytes.
+	(data (i32.const 3984) "v128i8x16i16x8i32x4i64x2f32x4f64x2")
+	(global $initializer-high (mut i64) (i64.const 0))

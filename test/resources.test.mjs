@@ -103,10 +103,10 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
       });
     }
     i.load('(module (memory 0) (func (export "grow") (param i32) (result i32) local.get 0 memory.grow))');
-    assert.equal(i.invoke('grow', 1024), 0);
+    assert.equal(i.invoke('grow', 2048), 0);
     assert.equal(i.invoke('grow', 1), -1); // Explicit implementation capacity, not a Wasm language limit.
-    assert.equal(i.readMemory(1024 * 65536, 0).length, 0);
-    assert.throws(() => i.load('(module (memory 1025))'), /resource limit/);
+    assert.equal(i.readMemory(2048 * 65536, 0).length, 0);
+    assert.throws(() => i.load('(module (memory 2049))'), /resource limit/);
   });
 
   test(`${binary}: active data bytes, Unicode, adjacent strings and overlapping segments match native`, async () => {
@@ -226,8 +226,10 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
     i.load(`(module (memory 1) (data (i32.const 0) "${'x'.repeat(65536)}"))`);
     assert.equal(i.readMemory(65535, 1)[0], 120);
     assert.throws(() => i.load(`(module (memory 2) (data (i32.const 0) "${'x'.repeat(65537)}"))`), /resource limit/);
-    for (const unsupported of ['(module (memory 0) (memory 0))', '(module (memory 1) (data "passive"))',
-      '(module (global v128 (v128.const i32x4 0 0 0 0)))', '(module (global i32 (i32.add (i32.const 1) (i32.const 2))))']) {
+    i.load('(module (memory 1) (data "passive"))');
+    assert.deepEqual(i.readMemory(0, 7), new Uint8Array(7));
+    for (const unsupported of ['(module (memory 0) (memory 0))',
+      '(module (global v128 (v128.const i32x4 0 0 0)))', '(module (global i32 (i32.add (i32.const 1) (i32.const 2))))']) {
       assert.throws(() => i.load(unsupported), /syntax|unsupported/);
     }
   });

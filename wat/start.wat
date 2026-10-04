@@ -111,14 +111,8 @@
 					)
 				)
 				(call $initialize-global-references)
-				(call $check-linked-segments)
-				;; Bounds failure leaves every linked resource unchanged.
-				(if (global.get $error)
-					(then
-						(global.set $ready (i32.const 0))
-						(return (global.get $error))
-					)
-				)
+				;; Bound resources and functions remain alive after a later segment traps.
+				(global.set $segments-ready (i32.const 1))
 				(call $apply-elements)
 				;; A failed table initializer prevents subsequent memory writes.
 				(if (i32.eqz (global.get $error))
@@ -126,12 +120,12 @@
 						(call $apply-data)
 					)
 				)
-				(global.set $segments-ready (i32.eqz (global.get $error)))
 				(global.set $resource-phase (i32.const 0))
-				;; Failed resource initialization invalidates the instance before any start executes.
+				;; A failed segment prevents the start, while earlier segment effects remain observable.
 				(if (global.get $error)
 					(then
 						(global.set $ready (i32.const 0))
+						(global.set $start-state (i32.const 0))
 						(return (global.get $error))
 					)
 				)

@@ -250,10 +250,11 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
       }
     } finally { await rm(dir, { recursive: true, force: true }); }
     for (const source of [
-      '(module (import "env" "f" (func (result i32 i32))))',
       '(module (import "env" "f" (func (type 0))))']) {
       assert.throws(() => i.load(source), /unsupported|syntax|reference/);
     }
+    i.load('(module (func (export "f") (import "env" "f") (result i32 i32)))', {env:{f:()=>[1,2]}});
+    assert.deepEqual(i.invoke('f'), [1,2]);
     for (const source of ['(module (import "env" "m" (memory 1)))', '(module (import "env" "g" (global i32)))']) assert.throws(() => i.load(source), /missing resource import/);
     const complete = '(module (import "env" "f" (func $f (param $x i32) (result i32))) (export "f" (func $f)))';
     for (let at = 0; at < complete.length; at++) assert.throws(() => i.load(complete.slice(0, at)), /syntax|unsupported/);

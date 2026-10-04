@@ -8,6 +8,8 @@
 		(local $available i64)
 		(local $pages i32)
 
+		;; The 512-function declaration bitmap occupies reserved static bytes below guest source.
+		(call $zero-bytes (i32.const 3920) (i32.const 64))
 		(global.set $start-state (i32.const 0))
 		(global.set $start-function (i32.const 0))
 		(global.set $start-length (i32.const 0))
@@ -16,6 +18,7 @@
 		(global.set $indirect-type-count (i32.const 0))
 		(global.set $element-count (i32.const 0))
 		(global.set $element-entry-count (i32.const 0))
+		(global.set $result-shape-count (i32.const 0))
 		(global.set $guest-table-present (i32.const 0))
 		(global.set $guest-table-size (i32.const 0))
 		(global.set $guest-table-name (i32.const 0))
@@ -91,6 +94,18 @@
 		(global.set $type-stack-base
 			(i32.add (global.get $code-base) (i32.const TYPE_STACK_OFFSET))
 		)
+		(global.set $result-shape-base
+			(i32.add (global.get $code-base) (i32.const RESULT_SHAPE_OFFSET))
+		)
+		(global.set $stack-high-base
+			(i32.add (global.get $code-base) (i32.const STACK_HIGH_OFFSET))
+		)
+		(global.set $call-high-base
+			(i32.add (global.get $code-base) (i32.const CALL_HIGH_OFFSET))
+		)
+		(global.set $argument-high-base
+			(i32.add (global.get $code-base) (i32.const ARGUMENT_HIGH_OFFSET))
+		)
 		(global.set $argument-base (i32.add (global.get $code-base) (i32.const ARGUMENT_OFFSET)))
 		(global.set $signature-base
 			(i32.add (global.get $code-base) (i32.const SIGNATURE_OFFSET))
@@ -98,7 +113,7 @@
 		(global.set $function-type-base
 			(i32.add (global.get $code-base) (i32.const FUNCTION_TYPE_OFFSET))
 		)
-		(global.set $guest-table-base
+		(global.set $guest-table-arena
 			(i32.add (global.get $code-base) (i32.const GUEST_TABLE_OFFSET))
 		)
 		(global.set $element-base (i32.add (global.get $code-base) (i32.const ELEMENT_OFFSET)))
@@ -110,9 +125,9 @@
 		(global.set $fp-t-base (i32.add (global.get $code-base) (i32.const FP_T_OFFSET)))
 		(global.set $host-base (i32.wrap_i64 (local.get $required)))
 		;; Reset optional descriptor fields when reload reuses an existing arena layout.
-		(call $zero-bytes (global.get $segment-base) (i32.const 4096))
+		(call $zero-bytes (global.get $segment-base) (i32.const 6144))
 		(call $zero-bytes (global.get $import-base) (i32.const 32768))
-		(call $zero-bytes (global.get $global-base) (i32.const 8192))
+		(call $zero-bytes (global.get $global-base) (i32.const 10240))
 		(call $zero-bytes (global.get $signature-base) (i32.const 98304))
 		(i32.const 1)
 	)

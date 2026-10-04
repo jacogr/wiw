@@ -149,8 +149,8 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
       for (let end = 0; end < fixture.length; end++) {
         assert.throws(() => i.load(fixture.slice(0, end)), /syntax|unsupported|reference|operand stack/);
       }
-      for (const source of ['(module (func (result v128) v128.const i32x4 0 0 0 0))', '(module (func (param v128)))',
-        '(module (func (result i32 i32) i32.const 1 i32.const 2))', '(module (func (type 0)))']) {
+      for (const source of ['(module (func (result v128) v128.const i32x4 0 0 0))', '(module (func (param v256)))',
+        '(module (func (type 0)))']) {
         assert.throws(() => i.load(source), /syntax|unsupported|reference/);
       }
     } finally { await rm(dir, { recursive: true, force: true }); }
@@ -162,7 +162,7 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
     assert.equal(i.invoke('last'), 42);
     assert.throws(() => i.load(`(module ${'(func) '.repeat(513)})`), /resource limit/);
     assert.throws(() => i.load(`(module (func (local ${'i32 '.repeat(1089)})))`), /resource limit/);
-    assert.throws(() => i.load(`(module (func (param ${'i32 '.repeat(65)})))`), /resource limit/);
+    assert.throws(() => i.load(`(module (func (param ${'i32 '.repeat(129)})))`), /resource limit/);
     assert.throws(() => i.load(`(module (func $f) ${Array.from({ length: 513 }, (_, n) => `(export "e${n}" (func $f))`).join(' ')})`), /resource limit/);
     i.load('(module (func $recurse (export "run") (result i32) call $recurse))');
     assert.throws(() => i.invoke('run'), /resource limit/); // explicit call frames, not native call-stack overflow

@@ -7,7 +7,7 @@ NODE = node
 
 .DELETE_ON_ERROR:
 
-.PHONY: all check check-spec clean
+.PHONY: all check check-spec audit-spec clean
 all: build/wiw-opt.wasm
 
 build:
@@ -23,13 +23,16 @@ build/wiw.wasm: build/wiw.wat
 	$(WAT2WASM) $< -o $@
 
 build/wiw-opt.wasm: build/wiw.wasm
-	$(WASM_OPT) -O2 $< -o $@
+	$(WASM_OPT) -O2 --enable-sign-ext --enable-nontrapping-float-to-int $< -o $@
 
 check: build/wiw.wasm build/wiw-opt.wasm
 	$(NODE) --test test/*.test.mjs
 
 check-spec: build/wiw.wasm build/wiw-opt.wasm
 	$(NODE) --test test/spec*.test.mjs
+
+audit-spec: build/wiw.wasm build/wiw-opt.wasm
+	$(NODE) scripts/spec-audit.mjs
 
 clean:
 	rm -rf build

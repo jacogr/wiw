@@ -78,7 +78,7 @@
 		(param $index i32)
 		(result i32)
 
-		(i32.add (global.get $global-base) (i32.mul (local.get $index) (i32.const 64)))
+		(i32.add (global.get $global-base) (i32.mul (local.get $index) (i32.const 80)))
 	)
 
 	;; Find a named global independently from function and local names; return -1 when absent.
@@ -130,19 +130,10 @@
 		;; Table names and indices resolve independently from memory and global namespaces.
 		(if (i32.eq (local.get $category) (i32.const 3))
 			(then
-				;; Named table references can only identify the sole declared table.
+				;; Names resolve across the complete table namespace.
 				(if (local.get $length)
 					(then
-						(local.set $value
-							(select
-								(i32.const 0)
-								(i32.const -1)
-								(i32.and
-									(i32.eq (local.get $length) (global.get $guest-table-name-length))
-									(call $equal (local.get $value) (global.get $guest-table-name) (local.get $length))
-								)
-							)
-						)
+						(local.set $value (call $find-table (local.get $value) (local.get $length)))
 					)
 				)
 				;; Missing tables and out-of-range targets are validation reference errors.
@@ -426,6 +417,8 @@
 			)
 		)
 		(global.set $initializer-reference (i32.const 0))
+		(global.set $initializer-function-present (i32.const 0))
+		(global.set $initializer-high (i64.const 0))
 		;; Imported globals have no initializer; their values are supplied through their link descriptor.
 		(if (i32.eqz (global.get $parsing-import))
 			(then
@@ -440,7 +433,13 @@
 		(i32.store offset=12 (local.get $record) (local.get $type))
 		(i64.store offset=16 (local.get $record) (local.get $value))
 		(i64.store offset=24 (local.get $record) (local.get $value))
+		(i64.store offset=64 (local.get $record) (global.get $initializer-high))
+		(i64.store offset=72 (local.get $record) (global.get $initializer-high))
 		(i32.store offset=40 (local.get $record) (global.get $initializer-reference))
+		(i32.store offset=44 (local.get $record) (global.get $initializer-function))
+		(i32.store offset=48 (local.get $record) (global.get $initializer-function-length))
+		(i32.store offset=52 (local.get $record) (global.get $initializer-function-source))
+		(i32.store offset=56 (local.get $record) (global.get $initializer-function-present))
 		(i32.store offset=36 (local.get $record) (global.get $parsing-import))
 		(call $finish-resource-declaration (i32.const 2) (global.get $global-count))
 		(i32.store offset=32 (local.get $record) (local.get $offset))
@@ -516,7 +515,14 @@
 			(loop $segments
 				(br_if $done (i32.eq (local.get $i) (global.get $segment-count)))
 				(local.set $record
-					(i32.add (global.get $segment-base) (i32.mul (local.get $i) (i32.const 32)))
+					(i32.add (global.get $segment-base) (i32.mul (local.get $i) (i32.const 48)))
+				)
+				;; Passive data remains available to memory.init and performs no instantiation writes.
+				(if (i32.load offset=40 (local.get $record))
+					(then
+						(local.set $i (i32.add (local.get $i) (i32.const 1)))
+						(br $segments)
+					)
 				)
 				(drop
 					(call $resource-target
@@ -768,6 +774,12 @@
 				;; A nonzero reference stores the target index plus one.
 				(if (i32.load offset=40 (local.get $record))
 					(then
+						(i64.store offset=72
+							(local.get $record)
+							(i64.load offset=72
+								(call $global-record (i32.sub (i32.load offset=40 (local.get $record)) (i32.const 1)))
+							)
+						)
 						(i64.store offset=24
 							(local.get $record)
 							(i64.load offset=24
@@ -780,4 +792,51 @@
 				(br $globals)
 			)
 		)
+	)
+
+	;; Read an exported vector global's high half through the trusted wide host ABI.
+	(func (export "global_high")
+		(param $p i32)
+		(param $n i32)
+		(result i64)
+		(local $record i32)
+
+		(local.set $record (call $host-export (local.get $p) (local.get $n) (i32.const 2)))
+		;; Failed lookups cannot read an unrelated global record.
+		(if (global.get $error)
+			(then
+				(return (i64.const 0))
+			)
+		)
+		(i64.load offset=72 (call $global-record (i32.load offset=8 (local.get $record))))
+	)
+
+	;; Complete a validated exported vector global write with its high half.
+	(func (export "set_global_high")
+		(param $p i32)
+		(param $n i32)
+		(param $value i64)
+		(result i32)
+		(local $record i32)
+
+		(local.set $record (call $host-export (local.get $p) (local.get $n) (i32.const 2)))
+		;; Invalid lookups leave every protected global unchanged.
+		(if (global.get $error)
+			(then
+				(return (global.get $error))
+			)
+		)
+		(local.set $record (call $global-record (i32.load offset=8 (local.get $record))))
+		;; Only mutable vector globals expose this additional value slot.
+		(if
+			(i32.or
+				(i32.eqz (i32.load offset=8 (local.get $record)))
+				(i32.ne (i32.load offset=12 (local.get $record)) (i32.const 7))
+			)
+			(then
+				(return (i32.const 16))
+			)
+		)
+		(i64.store offset=72 (local.get $record) (local.get $value))
+		(i32.const 0)
 	)

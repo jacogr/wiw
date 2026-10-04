@@ -36,19 +36,19 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
     assert.throws(() => consumer.invoke('call'), /stale/);
   });
 
-  test(`${binary}: segment failures are atomic, while a failed start preserves linked resource writes`, async () => {
+  test(`${binary}: completed segments and failed starts preserve linked resource writes`, async () => {
     const provider = await createInterpreter(url), consumer = await createInterpreter(url);
     provider.load(`(module (memory (export "m") 1) (table (export "t") 1 funcref)
       (func (export "call") (result i32) i32.const 0 call_indirect (result i32)))`);
     const imports = {p: provider.exportNamespace()};
     assert.throws(() => consumer.load(`(module (memory (import "p" "m") 1)
       (data (i32.const 0) "bad") (data (i32.const 65536) "x"))`, imports), /memory out of bounds/);
-    assert.equal(provider.readMemory(0, 3).every(byte => byte === 0), true);
+    assert.deepEqual([...provider.readMemory(0, 3)], [98, 97, 100]);
     assert.throws(() => consumer.load(`(module (memory (import "p" "m") 1) (table (import "p" "t") 1 funcref)
       (data (i32.const 0) "bad") (func $f (result i32) i32.const 7)
       (elem (i32.const 0) $f) (elem (i32.const 1) $f))`, imports), /element out of bounds/);
-    assert.equal(provider.readMemory(0, 3).every(byte => byte === 0), true);
-    assert.throws(() => provider.invoke('call'), /undefined element/);
+    assert.deepEqual([...provider.readMemory(0, 3)], [98, 97, 100]);
+    assert.equal(provider.invoke('call'), 7);
     assert.throws(() => consumer.load(`(module (memory (import "p" "m") 1) (table (import "p" "t") 1 funcref)
       (func $f (result i32) i32.const 42) (elem (i32.const 0) $f)
       (func $start i32.const 0 i32.const 42 i32.store8 unreachable) (start $start))`, imports), /unreachable/);

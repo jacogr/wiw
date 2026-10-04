@@ -3,6 +3,12 @@
 		(param $op i32)
 		(result i32)
 
+		;; Vector accesses have their own declared byte widths.
+		(if (call $vector-memory-width (local.get $op))
+			(then
+				(return (call $vector-memory-width (local.get $op)))
+			)
+		)
 		;; Double-precision loads and stores access eight bytes.
 		(if
 			(i32.or (i32.eq (local.get $op) (i32.const 150)) (i32.eq (local.get $op) (i32.const 151)))
@@ -130,7 +136,19 @@
 					)
 					(then
 						(global.set $tok (local.get $at))
-						(call $fail (i32.const 19))
+						(call $fail
+							(select
+								(i32.const 1)
+								(i32.const 19)
+								(i32.or
+									(i32.eqz (local.get $alignment))
+									(i32.ne
+										(i32.and (local.get $alignment) (i32.sub (local.get $alignment) (i32.const 1)))
+										(i32.const 0)
+									)
+								)
+							)
+						)
 					)
 				)
 			)

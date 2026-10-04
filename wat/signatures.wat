@@ -3,7 +3,7 @@
 		(param $index i32)
 		(result i32)
 
-		(i32.add (global.get $signature-base) (i32.mul (local.get $index) (i32.const 96)))
+		(i32.add (global.get $signature-base) (i32.mul (local.get $index) (i32.const 160)))
 	)
 
 	;; Locate one function's deferred type-use metadata, keeping its existing 32-byte function record unchanged.
@@ -156,7 +156,7 @@
 								(local.set $type (call $value-type))
 								(local.set $count (i32.load offset=8 (local.get $s)))
 								;; Enforce the parameter capacity before storing its type byte.
-								(if (i32.ge_u (local.get $count) (i32.const 64))
+								(if (i32.ge_u (local.get $count) (i32.const 128))
 									(then
 										(call $fail (i32.const 6))
 										(return)
@@ -176,7 +176,7 @@
 								(br_if $params-done (i32.eq (global.get $kind) (i32.const 2)))
 								(local.set $count (i32.load offset=8 (local.get $s)))
 								;; Avoid crossing the signature record boundary.
-								(if (i32.ge_u (local.get $count) (i32.const 64))
+								(if (i32.ge_u (local.get $count) (i32.const 128))
 									(then
 										(call $fail (i32.const 6))
 										(return)
@@ -189,21 +189,21 @@
 							)
 						)
 					)
-					;; Zero or one result type is supported, independently of parameter width.
+					;; Result groups append their types in source order.
 					(else
 						(local.set $result (i32.const 1))
 						(call $next)
-						;; Empty result groups describe void signatures.
-						(if (i32.ne (global.get $kind) (i32.const 2))
-							(then
-								;; Multiple result values require a later extension.
-								(if (i32.load offset=12 (local.get $s))
-									(then
-										(call $fail (i32.const 2))
-										(return)
-									)
+						;; Stop after consuming the current group or encountering an error.
+						(block $results-done
+							;; Empty groups add no type; multiple groups extend the same vector.
+							(loop $results
+								(br_if $results-done (global.get $error))
+								(br_if $results-done (i32.eq (global.get $kind) (i32.const 2)))
+								(i32.store offset=12
+									(local.get $s)
+									(call $shape-append (i32.load offset=12 (local.get $s)) (call $value-type))
 								)
-								(i32.store offset=12 (local.get $s) (call $value-type))
+								(br $results)
 							)
 						)
 					)
@@ -228,7 +228,7 @@
 			)
 		)
 		(local.set $s (call $signature (global.get $signature-count)))
-		(call $zero-bytes (local.get $s) (i32.const 96))
+		(call $zero-bytes (local.get $s) (i32.const 160))
 		(i32.store offset=16 (local.get $s) (global.get $tok))
 		(call $next)
 		;; An optional identifier participates only in the explicit type namespace.
@@ -264,7 +264,7 @@
 		(local $open i32)
 
 		;; Bound anonymous signatures independently from explicit type declarations.
-		(if (i32.ge_u (global.get $indirect-type-count) (i32.const 256))
+		(if (i32.ge_u (global.get $indirect-type-count) (i32.const 1024))
 			(then
 				(call $fail (i32.const 6))
 				(return (i32.const 0))
@@ -275,7 +275,9 @@
 			(i32.add (global.get $indirect-type-count) (i32.const 1))
 		)
 		(local.set $s (call $signature (local.get $index)))
-		(call $zero-bytes (local.get $s) (i32.const 96))
+		(call $zero-bytes (local.get $s) (i32.const 160))
+		;; Indirect signatures have no type name, so their first pair retains the optional table target.
+		(drop (call $table-reference (local.get $s)))
 		(i32.store offset=16 (local.get $s) (global.get $tok))
 		;; A leading type-use can be followed by an explicit matching inline signature.
 		(if (i32.eq (global.get $kind) (i32.const 1))
@@ -313,7 +315,12 @@
 		(if
 			(i32.or
 				(i32.ne (i32.load offset=16 (local.get $f)) (i32.load offset=8 (local.get $s)))
-				(i32.ne (i32.load offset=24 (local.get $f)) (i32.load offset=12 (local.get $s)))
+				(i32.eqz
+					(call $shape-equal
+						(i32.load offset=24 (local.get $f))
+						(i32.load offset=12 (local.get $s))
+					)
+				)
 			)
 			(then
 				(return (i32.const 0))
@@ -537,7 +544,12 @@
 								(if
 									(i32.or
 										(i32.ne (i32.load offset=8 (local.get $s)) (i32.load offset=8 (local.get $t)))
-										(i32.ne (i32.load offset=12 (local.get $s)) (i32.load offset=12 (local.get $t)))
+										(i32.eqz
+											(call $shape-equal
+												(i32.load offset=12 (local.get $s))
+												(i32.load offset=12 (local.get $t))
+											)
+										)
 									)
 									(then
 										(call $fail (i32.const 1))

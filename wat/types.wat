@@ -1,4 +1,4 @@
-	;; Consume a scalar declaration and return its type ID: i32, i64, f32 or f64.
+	;; Consume a value declaration: scalar IDs 1..4 or reference IDs 5..6.
 	(func $value-type
 		(result i32)
 
@@ -28,6 +28,27 @@
 			(then
 				(call $next)
 				(return (i32.const 4))
+			)
+		)
+		;; Function references occupy type five and share the eight-byte value slot.
+		(if (call $is-word (i32.const 3845) (i32.const 7))
+			(then
+				(call $next)
+				(return (i32.const 5))
+			)
+		)
+		;; External references occupy type six, with zero reserved for null.
+		(if (call $is-word (i32.const 3893) (i32.const 9))
+			(then
+				(call $next)
+				(return (i32.const 6))
+			)
+		)
+		;; Vector type seven carries a low slot and a parallel high-half slot.
+		(if (call $is-word (i32.const 3984) (i32.const 4))
+			(then
+				(call $next)
+				(return (i32.const 7))
 			)
 		)
 		(call $fail (i32.const 2))
@@ -108,12 +129,64 @@
 		(local $value i64)
 
 		(global.set $initializer-reference (i32.const 0))
+		(global.set $initializer-high (i64.const 0))
+		(global.set $initializer-function-present (i32.const 0))
 		(call $expect (i32.const 1))
 		(local.set $op (call $opcode))
+		;; Vector constants initialize both raw halves without using host numeric conversions.
+		(if (i32.eq (local.get $op) (i32.const 202))
+			(then
+				;; The initializer result must match the declared vector type.
+				(if (i32.ne (local.get $type) (i32.const 7))
+					(then
+						(call $fail (i32.const 7))
+						(return (i64.const 0))
+					)
+				)
+				(call $next)
+				(local.set $op (call $vector-literal))
+				(local.set $value (i64.load (local.get $op)))
+				(global.set $initializer-high (i64.load offset=8 (local.get $op)))
+				(call $expect (i32.const 2))
+				(return (local.get $value))
+			)
+		)
 		;; Imported globals are evaluated after their raw values have been bound by the host.
 		(if (i32.eq (local.get $op) (i32.const 49))
 			(then
 				(call $read-initializer-global (local.get $type))
+				(call $expect (i32.const 2))
+				(return (i64.const 0))
+			)
+		)
+		;; Function initializers may name later declarations and themselves declare that function reference.
+		(if (i32.eq (local.get $op) (i32.const 195))
+			(then
+				;; A function reference cannot initialize an external or numeric global.
+				(if (i32.ne (local.get $type) (i32.const 5))
+					(then
+						(call $fail (i32.const 7))
+					)
+				)
+				(call $next)
+				(global.set $initializer-function-source (global.get $tok))
+				(global.set $initializer-function (call $function-reference))
+				(global.set $initializer-function-length (global.get $immediate-length))
+				(global.set $initializer-function-present (i32.const 1))
+				(call $expect (i32.const 2))
+				(return (i64.const 0))
+			)
+		)
+		;; Null initializers preserve their declared reference type without needing a table.
+		(if (i32.eq (local.get $op) (i32.const 193))
+			(then
+				(call $next)
+				;; The null heap type must agree with the global's exact reference type.
+				(if (i32.ne (call $reference-type) (local.get $type))
+					(then
+						(call $fail (i32.const 7))
+					)
+				)
 				(call $expect (i32.const 2))
 				(return (i64.const 0))
 			)
@@ -212,6 +285,7 @@
 	;; Query a function result's scalar type; invalid indices return the sentinel -1.
 	(func (export "function_result_type")
 		(param $index i32)
+		(param $slot i32)
 		(result i32)
 
 		;; Function indices are unsigned and bounded by the loaded module.
@@ -220,5 +294,68 @@
 				(return (i32.const -1))
 			)
 		)
-		(i32.load offset=24 (call $function (local.get $index)))
+		(call $shape-type
+			(i32.load offset=24 (call $function (local.get $index)))
+			(local.get $slot)
+		)
+	)
+
+	;; Consume a ref.null heap type, rejecting value types and unknown heap types.
+	(func $reference-type
+		(result i32)
+
+		;; The func heap type produces a nullable function reference.
+		(if (call $is-word (i32.const 6) (i32.const 4))
+			(then
+				(call $next)
+				(return (i32.const 5))
+			)
+		)
+		;; The extern heap type produces an opaque host reference.
+		(if (call $is-word (i32.const 3902) (i32.const 6))
+			(then
+				(call $next)
+				(return (i32.const 6))
+			)
+		)
+		(call $fail (i32.const 1))
+		(i32.const 0)
+	)
+
+	;; Resolve forward function initializers and declare those function references before body validation.
+	(func $resolve-reference-globals
+		(local $i i32)
+		(local $record i32)
+		(local $index i32)
+
+		;; Finish after every global descriptor has been examined.
+		(block $done
+			;; Numeric, null and imported-global initializers need no function lookup.
+			(loop $globals
+				(br_if $done (global.get $error))
+				(br_if $done (i32.eq (local.get $i) (global.get $global-count)))
+				(local.set $record (call $global-record (local.get $i)))
+				;; Only explicit ref.func initializers declare and initialize a function value.
+				(if (i32.load offset=56 (local.get $record))
+					(then
+						(local.set $index
+							(call $target
+								(i32.load offset=44 (local.get $record))
+								(i32.load offset=48 (local.get $record))
+								(i32.load offset=52 (local.get $record))
+							)
+						)
+						(call $declare-function (local.get $index))
+						(i64.store offset=16
+							(local.get $record)
+							(i64.extend_i32_u (i32.add (local.get $index) (i32.const 1)))
+						)
+						(i64.store offset=24 (local.get $record) (i64.load offset=16 (local.get $record)))
+						(i64.store offset=72 (local.get $record) (i64.load offset=64 (local.get $record)))
+					)
+				)
+				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br $globals)
+			)
+		)
 	)

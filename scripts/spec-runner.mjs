@@ -60,25 +60,24 @@ export function unsupported(module, opcodes) {
   const children = module.children ?? [];
   let memories = 0, tables = 0;
   walk(module, (node, parent) => {
-    if (node.atom && /^(v128|externref)(\.|$)/.test(node.atom)) reasons.add('non-scalar-types');
+
     if (node.atom && /^[a-z][a-z0-9_]*\./.test(node.atom) && !opcodes.has(node.atom)) reasons.add(`opcode:${node.atom}`);
-    if (node.atom === 'funcref' && head(parent) !== 'table') reasons.add('reference-values');
     const kind = head(node);
     if (kind === 'tag') reasons.add(`declaration:${kind}`);
-    if (kind === 'table' && ['module', 'import'].includes(head(parent))) tables++;
+    if (kind === 'table' && ['module', 'import'].includes(head(parent))) {
+      tables++;
+    }
     if (kind === 'type' && head(parent) === 'module' && !node.children.some(child => head(child) === 'func')) reasons.add('non-function-types');
-    if (kind === 'elem' && head(parent) !== 'table' && !node.children.some(child => head(child) === 'i32.const' || head(child) === 'offset' || head(child) === 'global.get')) reasons.add('nonliteral-or-passive-elements');
-    if (kind === 'result' && node.children.length > 2) reasons.add('multiple-results');
-    if (['block', 'loop', 'if'].includes(kind) && ['param', 'type'].includes(head(node.children[node.children[1]?.atom?.startsWith('$') ? 2 : 1]))) reasons.add('block-parameters-or-type-use');
-    if (kind === 'select' && node.children.some(child => head(child) === 'result')) reasons.add('typed-select');
+
+
     if (kind === 'memory' && ['module', 'import'].includes(head(parent))) { memories++; if (node.children.some(child => child.atom === 'i64')) reasons.add('memory64'); }
     if (kind === 'global') {
       const init = node.children.filter(child => child.children && !['mut', 'export', 'import'].includes(head(child)));
-      if (init.some(child => !['i32.const', 'i64.const', 'f32.const', 'f64.const', 'global.get'].includes(head(child)))) reasons.add('extended-initializer');
+      if (init.some(child => !['i32.const', 'i64.const', 'f32.const', 'f64.const', 'global.get', 'ref.null', 'ref.func', 'v128.const'].includes(head(child)))) reasons.add('extended-initializer');
     }
   });
   if (memories > 1) reasons.add('multiple-memories');
-  if (tables > 1) reasons.add('multiple-tables');
+
   return [...reasons].sort();
 }
 // Script strings use the same byte escapes as WAT; names must decode as strict UTF-8.
@@ -120,8 +119,15 @@ function moduleSource(source, module) {
   wrapped.set(prefix); wrapped.set(bytes, prefix.length); wrapped.set(suffix, prefix.length + bytes.length);
   return wrapped;
 }
+const scriptReferences = new Map();
 function value(node) {
   const type = head(node), literal = node.children?.[1]?.atom?.replaceAll('_', '');
+  if (type === 'v128.const') return vectorBits(node);
+  if (type === 'ref.null') return null;
+  if (type === 'ref.extern') {
+    if (!scriptReferences.has(literal)) scriptReferences.set(literal, Object.freeze({external: literal}));
+    return scriptReferences.get(literal);
+  }
   if (type === 'f32.const' || type === 'f64.const') return floatValue(literal, type === 'f32.const' ? 32 : 64);
   assert.ok(type === 'i32.const' || type === 'i64.const', `unsupported script value ${type}`);
   const negative = literal.startsWith('-');
@@ -135,7 +141,36 @@ function loadModule(engine, source, module, imports) {
   if (module.children.some(child => child.atom === 'binary')) engine.loadBinary(bytes, imports);
   else engine.load(bytes, imports);
 }
+function vectorBits(node) {
+  const format = node.children[1].atom, match = /^(i|f)(8|16|32|64)x(2|4|8|16)$/.exec(format);
+  assert.ok(match, 'vector lane format');
+  const width = Number(match[2]), count = Number(match[3]);
+  assert.equal(width * count, 128); assert.equal(node.children.length - 2, count, 'vector lane count');
+  let bits = 0n;
+  for (let lane = 0; lane < count; lane++) {
+    const literal = node.children[lane + 2].atom.replaceAll('_', '');
+    const negative = literal.startsWith('-');
+    const laneBits = match[1] === 'f' ? floatBits(literal.replace(/nan:(canonical|arithmetic)/, 'nan'), width) : BigInt.asUintN(width, (negative ? -1n : 1n) * BigInt(literal.replace(/^[+-]/, '')));
+    bits |= BigInt.asUintN(width, laneBits) << BigInt(lane * width);
+  }
+  return bits;
+}
+function assertVector(result, expected) {
+  assert.equal(result.type, 'v128', 'vector result type');
+  const format = expected.children[1].atom, width = Number(format.match(/^[if](\d+)/)[1]), count = 128 / width;
+  const exact = vectorBits(expected), mask = (1n << BigInt(width)) - 1n;
+  for (let lane = 0; lane < count; lane++) {
+    const literal = expected.children[lane + 2].atom, bits = (result.bits >> BigInt(lane * width)) & mask;
+    if (format[0] === 'f' && ['nan:canonical', 'nan:arithmetic'].includes(literal)) assertNaN({type: `f${width}`, bits}, literal === 'nan:canonical');
+    else assert.equal(bits, (exact >> BigInt(lane * width)) & mask, `vector lane ${lane}`);
+  }
+}
 function rawValue(node) {
+  if (head(node) === 'v128.const') return {type: 'v128', bits: vectorBits(node)};
+  if (head(node) === 'ref.null' || head(node) === 'ref.extern') {
+    const type = head(node) === 'ref.extern' || node.children[1].atom === 'extern' ? 'externref' : 'funcref';
+    return {type, value: value(node)};
+  }
   const type = head(node).replace('.const', '');
   const literal = node.children[1].atom;
   return {type, bits: type[0] === 'f' ? floatBits(literal, Number(type.slice(1))) : BigInt.asUintN(Number(type.slice(1)), BigInt(value(node)))};
@@ -157,6 +192,7 @@ const trapMessages = {
   'invalid conversion to integer': /invalid conversion to integer/,
   'unreachable': /executed unreachable/,
   'out of bounds memory access': /memory out of bounds/,
+  'out of bounds table access': /element out of bounds|undefined element|table out of bounds/,
   'call stack exhausted': /resource limit/,
   'undefined': /undefined element/,
   'uninitialized': /undefined element/,
@@ -189,11 +225,21 @@ export async function runSuite(binary, root = new URL('../test/spec/', import.me
       while (fields.has(head(parsed[i + 1]))) group.push(parsed[++i]);
       forms.push({start: group[0].start, end: group.at(-1).end, children: [{atom: 'module'}, ...group], inlineSource: `(module ${source.slice(group[0].start, group.at(-1).end)})`});
     }
-    const modules = new Map(), registered = Object.create(null);
+    const modules = new Map(), registered = Object.create(null), unavailable = new Set();
     const host = await createInterpreter(binary);
     const prints = {print: [], print_i32: ['i32'], print_i64: ['i64'], print_f32: ['f32'], print_f64: ['f64'], print_i32_f32: ['i32', 'f32'], print_f64_f64: ['f64', 'f64']};
-    host.load(`(module ${Object.entries(prints).map(([name, params]) => `(func (export "${name}") ${params.length ? `(param ${params.join(' ')})` : ''})`).join(' ')} (memory (export "memory") 1 2) (table (export "table") 10 20 funcref) ${['i32', 'i64', 'f32', 'f64'].map(type => `(global (export "global_${type}") ${type} (${type}.const 666))`).join(' ')})`);
+    host.load(`(module ${Object.entries(prints).map(([name, params]) => `(func (export "${name}") ${params.length ? `(param ${params.join(' ')})` : ''})`).join(' ')} (memory (export "memory") 1 2) (table (export "table") 10 20 funcref) ${['i32', 'i64', 'f32', 'f64'].map(type => `(global (export "global_${type}") ${type} (${type}.const ${type.startsWith('f') ? '666.6' : '666'}))`).join(' ')})`);
     registered.spectest = host.exportNamespace();
+    // A skipped registered instance remains unavailable until a usable registration replaces it.
+    function dependencyReasons(module) {
+      const reasons = new Set();
+      walk(module, node => {
+        if (head(node) !== 'import' || node.children[1]?.string === undefined) return;
+        const name = scriptString(node.children[1].string);
+        if (unavailable.has(name)) reasons.add(`unsupported-import:${name}`);
+      });
+      return [...reasons].sort();
+    }
     let current;
     const counts = {file: entry.file, passed: 0, skipped: 0, reasons: {}, ...(options.audit ? {failed: 0} : {})};
     function skip(node, reasons) {
@@ -214,7 +260,7 @@ export async function runSuite(binary, root = new URL('../test/spec/', import.me
       try {
         const kind = head(node);
         if (kind === 'module') {
-          const reasons = unsupported(node, opcodes);
+          const reasons = [...unsupported(node, opcodes), ...dependencyReasons(node)];
           const capacity = capabilities.capacityModules?.[entry.file]?.[line(source, node)];
           if (capacity) reasons.push(`capacity:${capacity}`);
           current = {reasons, engine: undefined, module: node};
@@ -227,16 +273,21 @@ export async function runSuite(binary, root = new URL('../test/spec/', import.me
         } else if (kind === 'register') {
           const target = node.children[2]?.atom ? modules.get(node.children[2].atom) : current;
           assert.ok(target, 'registration has no module');
-          if (target.reasons.length) { skip(node, target.reasons); continue; }
-          registered[scriptString(node.children[1].string)] = target.engine.exportNamespace();
+          const name = scriptString(node.children[1].string);
+          if (target.reasons.length) {
+            unavailable.add(name); delete registered[name];
+            skip(node, target.reasons); continue;
+          }
+          unavailable.delete(name);
+          registered[name] = target.engine.exportNamespace();
         } else if (['assert_invalid', 'assert_malformed', 'assert_unlinkable', 'assert_uninstantiable'].includes(kind)) {
-          const module = node.children[1], reasons = kind === 'assert_invalid' || kind === 'assert_malformed' ? unsupported(module, opcodes).filter(reason => reason === 'encoded-script-module') : unsupported(module, opcodes);
+          const module = node.children[1], reasons = kind === 'assert_invalid' || kind === 'assert_malformed' ? unsupported(module, opcodes).filter(reason => reason === 'encoded-script-module') : [...unsupported(module, opcodes), ...dependencyReasons(module)];
           if (reasons.length) { skip(node, reasons); continue; }
           const engine = await createInterpreter(binary);
-          const expected = kind === 'assert_invalid' ? /operand stack|reference|immutable|alignment|memory limits|table limits|syntax|unsupported/ : kind === 'assert_malformed' ? /syntax|integer out of range|unsupported/ : kind === 'assert_uninstantiable' ? /memory out of bounds/ : /missing function import|missing resource import|signature mismatch|memory out of bounds|element out of bounds/;
+          const expected = kind === 'assert_invalid' ? /operand stack|reference|immutable|alignment|memory limits|table limits|syntax|unsupported/ : kind === 'assert_malformed' ? (module.children?.some(child => child.atom === 'quote') ? /syntax|integer out of range|unsupported|reference/ : /syntax|integer out of range|unsupported/) : kind === 'assert_uninstantiable' ? /memory out of bounds/ : /missing function import|missing resource import|signature mismatch|memory out of bounds|element out of bounds/;
           assert.throws(() => loadModule(engine, source, module, registered), expected);
         } else if (kind === 'assert_trap' && head(node.children[1]) === 'module') {
-          const module = node.children[1], reasons = kind === 'assert_invalid' || kind === 'assert_malformed' ? unsupported(module, opcodes).filter(reason => reason === 'encoded-script-module') : unsupported(module, opcodes);
+          const module = node.children[1], reasons = kind === 'assert_invalid' || kind === 'assert_malformed' ? unsupported(module, opcodes).filter(reason => reason === 'encoded-script-module') : [...unsupported(module, opcodes), ...dependencyReasons(module)];
           if (reasons.length) { skip(node, reasons); continue; }
           const expected = trapMessages[node.children[2].string.replace(/ \d+$/, '')];
           assert.ok(expected, `unknown expected trap ${node.children[2].string}`);
@@ -249,9 +300,25 @@ export async function runSuite(binary, root = new URL('../test/spec/', import.me
           if (kind === 'invoke') call.execute();
           else if (kind === 'assert_return_canonical_nan' || kind === 'assert_return_arithmetic_nan') assertNaN(call.raw(), kind === 'assert_return_canonical_nan');
           else if (kind === 'assert_return') {
-            assert.ok(node.children.length <= 3, 'multiple script results');
-            if (node.children[2] && head(node.children[1]) === 'invoke') assert.deepEqual(call.raw(), rawValue(node.children[2]));
-            else assert.equal(call.execute(), node.children[2] ? value(node.children[2]) : undefined);
+            const expected = node.children.slice(2);
+            if (!expected.length) assert.equal(call.execute(), undefined);
+            else if (head(node.children[1]) !== 'invoke') assert.equal(call.execute(), value(expected[0]));
+            else {
+              const actual = call.raw(), results = Array.isArray(actual) ? actual : [actual];
+              assert.equal(results.length, expected.length, 'result count');
+              for (let slot = 0; slot < expected.length; slot++) {
+                const node = expected[slot], result = results[slot], pattern = node.children?.[1]?.atom;
+                if (head(node) === 'v128.const') assertVector(result, node);
+                else if (pattern === 'nan:canonical' || pattern === 'nan:arithmetic') {
+                  assert.equal(result.type, head(node).replace('.const', ''), 'NaN result type');
+                  assertNaN(result, pattern === 'nan:canonical');
+                } else if (head(node).startsWith('ref.')) {
+                  const expected = rawValue(node);
+                  assert.equal(result.type, expected.type, 'reference result type');
+                  assert.equal(result.value, expected.value, 'reference result identity');
+                } else assert.deepEqual(result, rawValue(node));
+              }
+            }
           } else {
             const message = node.children[2].string, expected = trapMessages[message.replace(/ \d+$/, '')];
             assert.ok(expected, `unknown expected trap ${message}`);

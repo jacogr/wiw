@@ -11,7 +11,8 @@
   inputtype[count] = $6
   outputtype[count] = $7
   binary[count] = $8
-  if ($1 != count || count > 256) { invalid = 1; exit 1 }
+  secondtype[count] = NF >= 9 ? $9 : $6
+  if ($1 != count || count > 512 || $3 > 15 || $4 > 15 || $6 > 15 || $7 > 15) { invalid = 1; exit 1 }
 }
 function decoded(type, arg) {
   if (type == 1) return "(i32.wrap_i64 (local.get $" arg "))"
@@ -24,22 +25,35 @@ END {
   print "\t;; Opcode keyword bytes occupy reserved memory below the host source buffers."
   offset = 128
   print "\t(data (i32.const 128)"
-  for (i = 1; i <= count; i++) {
+  for (i = 1; i <= count && i <= 202; i++) {
     address[i] = offset
     printf "\t\t\"%s\"\n", name[i]
     offset += length(name[i])
   }
   print "\t)"
   if (offset > 3072) exit 1
-  print "\n\t;; Each opcode has a four-byte record: operand/result counts, then their scalar types."
-  print "\t(data (i32.const 3076)"
-  for (i = 1; i <= count; i++) {
-    printf "\t\t\"\\%02x\\%02x\\%02x\\%02x\"\n", inputs[i], outputs[i], inputtype[i], outputtype[i]
+  print "\n\t;; Each opcode packs operand/result counts and types into two pairs of four-bit fields."
+  print "\t(data (i32.const 3074)"
+  for (i = 1; i <= count && i <= 202; i++) {
+    printf "\t\t\"\\%02x\\%02x\"\n", inputs[i] * 16 + outputs[i], inputtype[i] * 16 + outputtype[i]
   }
   print "\t)"
   print "\n\t;; Resolve the current atom to an opcode; zero means unsupported."
   print "\t(func $opcode\n\t\t(result i32)\n"
   for (i = 1; i <= count; i++) {
+    if (i > 202) {
+      printf "\t\t;; Recognize %s without extending the reserved keyword buffer.\n", name[i]
+      printf "\t\t(if (i32.eq (global.get $len) (i32.const %d))\n\t\t\t(then\n", length(name[i])
+      expr = ""
+      for (j = 1; j <= length(name[i]); j++) {
+        c = index("abcdefghijklmnopqrstuvwxyz0123456789._", substr(name[i], j, 1))
+        ascii = c <= 26 ? c + 96 : (c <= 36 ? c + 21 : (c == 37 ? 46 : 95))
+        term = "(i32.eq (i32.load8_u offset=" (j-1) " (global.get $tok)) (i32.const " ascii "))"
+        expr = expr == "" ? term : "(i32.and " expr " " term ")"
+      }
+      printf "\t\t\t\t;; Compare every byte after the length check.\n\t\t\t\t(if %s (then (return (i32.const %d))))\n\t\t\t)\n\t\t)\n", expr, id[i]
+      continue
+    }
     printf "\t\t;; Recognize %s by its length and keyword bytes.\n", name[i]
     printf "\t\t(if (i32.and (i32.eq (global.get $len) (i32.const %d))\n", length(name[i])
     printf "\t\t\t(call $equal (global.get $tok) (i32.const %d) (i32.const %d)))\n", address[i], length(name[i])
@@ -49,17 +63,41 @@ END {
   print "\n\t;; Decode a wire opcode to its WAT mnemonic without compiling guest instructions."
   print "\t(func $binary-opname\n\t\t(param $byte i32)\n\t\t(result i32)"
   for (i = 1; i <= count; i++) {
-    printf "\t\t;; Emit the MVP mnemonic for binary opcode %d (%s).\n", binary[i], name[i]
+    if (binary[i] < 0) continue
+    if (i > 202) {
+      printf "\t\t;; Decode the SIMD mnemonic %s.\n", name[i]
+      printf "\t\t(if (i32.eq (local.get $byte) (i32.const %d))\n\t\t\t(then\n", binary[i]
+      for (j = 1; j <= length(name[i]); j++) {
+        c = index("abcdefghijklmnopqrstuvwxyz0123456789._", substr(name[i], j, 1))
+        ascii = c <= 26 ? c + 96 : (c <= 36 ? c + 21 : (c == 37 ? 46 : 95))
+        printf "\t\t\t\t(call $binary-byte (i32.const %d))\n", ascii
+      }
+      print "\t\t\t\t(call $binary-byte (i32.const 32))\n\t\t\t\t(return (i32.const 1))\n\t\t\t)\n\t\t)"
+      continue
+    }
+    printf "\t\t;; Emit the instruction mnemonic for binary opcode %d (%s).\n", binary[i], name[i]
     printf "\t\t(if (i32.eq (local.get $byte) (i32.const %d))\n", binary[i]
     printf "\t\t\t(then (call $binary-copy (i32.const %d) (i32.const %d)) (return (i32.const 1)))\n\t\t)\n", address[i], length(name[i])
   }
   print "\t\t(i32.const 0)\n\t)"
   print "\n\t;; Return the number of operands consumed by a known opcode."
   print "\t(func $inputs\n\t\t(param $op i32)\n\t\t(result i32)\n"
-  print "\t\t(i32.load8_u (i32.add (i32.const 3072) (i32.mul (local.get $op) (i32.const 4))))\n\t)"
+  print "\t\t;; Scalar instructions use the compact effect table directly."
+  print "\t\t(if (i32.le_u (local.get $op) (i32.const 202)) (then (return (i32.shr_u (i32.load8_u (i32.add (i32.const 3072) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 4)))))"
+  for (i = 203; i <= count; i++) {
+    printf "\t\t;; inputs for %s.\n", name[i]
+    printf "\t\t(if (i32.eq (local.get $op) (i32.const %d)) (then (return (i32.const %d))))\n", id[i], inputs[i]
+  }
+  print "\t\t(i32.shr_u (i32.load8_u (i32.add (i32.const 3072) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 4))\n\t)"
   print "\n\t;; Return the number of results produced by a known opcode."
   print "\t(func $outputs\n\t\t(param $op i32)\n\t\t(result i32)\n"
-  print "\t\t(i32.load8_u (i32.add (i32.const 3073) (i32.mul (local.get $op) (i32.const 4))))\n\t)"
+  print "\t\t;; Scalar instructions use the compact effect table directly."
+  print "\t\t(if (i32.le_u (local.get $op) (i32.const 202)) (then (return (i32.and (i32.load8_u (i32.add (i32.const 3072) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 15)))))"
+  for (i = 203; i <= count; i++) {
+    printf "\t\t;; outputs for %s.\n", name[i]
+    printf "\t\t(if (i32.eq (local.get $op) (i32.const %d)) (then (return (i32.const %d))))\n", id[i], outputs[i]
+  }
+  print "\t\t(i32.and (i32.load8_u (i32.add (i32.const 3072) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 15))\n\t)"
   print "\n\t;; Apply a unary or binary integer operation after the runtime checks trap conditions."
   print "\t(func $apply\n\t\t(param $op i32)\n\t\t(param $a i32)\n\t\t(param $b i32)\n\t\t(result i32)\n"
   for (i = 1; i <= count; i++) {
@@ -74,19 +112,46 @@ END {
 
   print "\n\t;; Return an opcode's scalar operand type; stores use their address type for the second pop."
   print "\t(func $operand-type\n\t\t(param $op i32)\n\t\t(param $position i32)\n\t\t(result i32)"
+  print "\t\t;; Table set consumes a function reference followed by its i32 slot index."
+  print "\t\t(if (i32.and (i32.eq (local.get $op) (i32.const 199)) (local.get $position))\n\t\t\t(then (return (i32.const 1)))\n\t\t)"
+  print "\t\t;; Growth pops its i32 delta before its initializer; fill pops length, reference, index."
+  print "\t\t(if (i32.or (i32.and (i32.eq (local.get $op) (i32.const 200)) (local.get $position)) (i32.and (i32.eq (local.get $op) (i32.const 201)) (i32.eq (local.get $position) (i32.const 1))))\n\t\t\t(then (return (global.get $guest-table-type)))\n\t\t)"
+  print "\t\t;; Table set's value type belongs to the selected table."
+  print "\t\t(if (i32.eq (local.get $op) (i32.const 199)) (then (return (global.get $guest-table-type))))"
   print "\t\t;; Stores consume a typed value followed by an i32 address."
   print "\t\t(if (i32.and (call $store-op (local.get $op)) (local.get $position))\n\t\t\t(then (return (i32.const 1)))\n\t\t)"
-  print "\t\t(i32.load8_u (i32.add (i32.const 3074) (i32.mul (local.get $op) (i32.const 4))))\n\t)"
+  print "\t\t;; Scalar instructions use the compact effect table directly."
+  print "\t\t(if (i32.le_u (local.get $op) (i32.const 202)) (then (return (i32.shr_u (i32.load8_u (i32.add (i32.const 3073) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 4)))))"
+  for (i = 203; i <= count; i++) {
+    printf "\t\t;; operand-type for %s.\n", name[i]
+    if (inputtype[i] != secondtype[i]) {
+      printf "\t\t;; Mixed signatures pop the scalar right operand before the vector.\n"
+      printf "\t\t(if (i32.eq (local.get $op) (i32.const %d)) (then (return (select (i32.const %d) (i32.const %d) (local.get $position)))))\n", id[i], secondtype[i], inputtype[i]
+      continue
+    }
+    printf "\t\t(if (i32.eq (local.get $op) (i32.const %d)) (then (return (i32.const %d))))\n", id[i], inputtype[i]
+  }
+  print "\t\t(i32.shr_u (i32.load8_u (i32.add (i32.const 3073) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 4))\n\t)"
   print "\n\t;; Return an opcode's declared scalar result type for typed validation."
   print "\t(func $output-type\n\t\t(param $op i32)\n\t\t(result i32)"
-  print "\t\t(i32.load8_u (i32.add (i32.const 3075) (i32.mul (local.get $op) (i32.const 4))))\n\t)"
+  print "\t\t;; Table get returns the selected table's reference type."
+  print "\t\t(if (i32.eq (local.get $op) (i32.const 198)) (then (return (global.get $guest-table-type))))"
+  print "\t\t;; Scalar instructions use the compact effect table directly."
+  print "\t\t(if (i32.le_u (local.get $op) (i32.const 202)) (then (return (i32.and (i32.load8_u (i32.add (i32.const 3073) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 15)))))"
+  for (i = 203; i <= count; i++) {
+    printf "\t\t;; output-type for %s.\n", name[i]
+    printf "\t\t(if (i32.eq (local.get $op) (i32.const %d)) (then (return (i32.const %d))))\n", id[i], outputtype[i]
+  }
+  print "\t\t(i32.and (i32.load8_u (i32.add (i32.const 3073) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 15))\n\t)"
   print "\n\t;; Apply an i64 numeric operation or width conversion after runtime trap checks."
   print "\t(func $apply64\n\t\t(param $op i32)\n\t\t(param $a i64)\n\t\t(param $b i64)\n\t\t(result i64)"
-  for (i = 62; i <= 93; i++) {
+  for (i = 62; i <= count; i++) {
+    if (i > 93 && operation[i] != "integerextend") continue
     printf "\t\t;; Execute %s with full-width integer operands.\n", name[i]
     printf "\t\t(if (i32.eq (local.get $op) (i32.const %d))\n\t\t\t(then\n\t\t\t\t(return ", i
     if (i >= 77 && i <= 87) printf "(i64.extend_i32_u "
     if (i == 91) printf "(i64.extend_i32_s (i32.wrap_i64 (local.get $a)))"
+    else if (operation[i] == "integerextend" && inputtype[i] == 1) printf "(i64.extend_i32_s (%s (i32.wrap_i64 (local.get $a))))", name[i]
     else if (i == 92 || i == 93) printf "(%s (i32.wrap_i64 (local.get $a)))", name[i]
     else {
       printf "(%s (local.get $a)", name[i]
@@ -105,6 +170,8 @@ END {
   print "\t)"
   print "\n\t;; Recognize all scalar loads and stores for memarg parsing and resource dispatch."
   print "\t(func $memory-op\n\t\t(param $op i32)\n\t\t(result i32)"
+  print "\t\t;; Vector accesses share the memory declaration and alignment rules."
+  print "\t\t(if (call $vector-memory-width (local.get $op)) (then (return (i32.const 1))))"
   print "\t\t(i32.or (i32.and (i32.ge_u (local.get $op) (i32.const 53)) (i32.le_u (local.get $op) (i32.const 60)))"
   print "\t\t\t(i32.or (i32.and (i32.ge_u (local.get $op) (i32.const 94)) (i32.le_u (local.get $op) (i32.const 104)))"
   print "\t\t\t\t(i32.and (i32.ge_u (local.get $op) (i32.const 148)) (i32.le_u (local.get $op) (i32.const 151)))))"

@@ -147,7 +147,7 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
     } finally { await rm(dir, { recursive: true, force: true }); }
   });
 
-  test(`${binary}: malformed control syntax and unsupported block signatures fail cleanly`, async () => {
+  test(`${binary}: malformed control syntax and invalid block signatures fail cleanly`, async () => {
     const i = await createInterpreter(url);
     const bad = ['block', '(block end)', 'end', 'else', '(then)', '(else)', '(if (i32.const 1))',
       '(if (i32.const 1) (else))', '(if (i32.const 1) (then) (then))',
@@ -161,11 +161,8 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
         const source = guest(body);
         assert.throws(() => i.load(source), /syntax|unsupported|reference|operand stack/, source);
         assert.throws(() => i.invoke('run'), /no loaded module/);
-        // The final three cases describe block signatures deliberately outside wiw's subset.
-        if (!bad.slice(-3).includes(body)) {
-          await writeFile(join(dir, 'guest.wat'), source);
-          assert.throws(() => execFileSync('wat2wasm', [join(dir, 'guest.wat'), '-o', join(dir, 'guest.wasm')], { stdio: 'pipe' }), source);
-        }
+        await writeFile(join(dir, 'guest.wat'), source);
+        assert.throws(() => execFileSync('wat2wasm', [join(dir, 'guest.wat'), '-o', join(dir, 'guest.wasm')], { stdio: 'pipe' }), source);
       }
       // Truncation inside conditions, arm wrappers and named branches cannot hang the parser.
       for (let end = 0; end < factorial.length; end++) assert.throws(() => i.load(factorial.slice(0, end)));

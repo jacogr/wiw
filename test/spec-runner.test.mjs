@@ -51,14 +51,14 @@ test('official runner preserves named instances, global gets, imports and typed 
 });
 
 test('unsupported dependencies and capacity exclusions are counted, never passed', async () => {
-  const report = await run(`(module $F (func (export "f") (result v128) v128.const i32x4 0 0 0 0))
-    (assert_return (invoke $F "f") (v128.const i32x4 0 0 0 0))
+  const report = await run(`(module $F (func (export "f") (result v128) future.test))
+    (assert_return (invoke $F "f") (future.test))
     (assert_invalid (module (func (param v128) i32.const 1)) "type mismatch")
     (module (func (export "ok") (result i32) i32.const 42))
     (assert_return (invoke "ok") (i32.const 42))`);
   assert.equal(report.passed, 3); assert.equal(report.skipped, 2);
   assert.equal(report.skips[1].command, 'assert_return');
-  assert.ok(report.skips[1].reason.includes('non-scalar-types'));
+  assert.ok(report.skips[1].reason.includes('opcode:future.test'));
   const capacity = await run('(module)\n(module)', (_, manifest) => {manifest.capacityModules = {'fixture.wast': {'1': 'fixture-limit'}};});
   assert.equal(capacity.passed, 1); assert.equal(capacity.skipped, 1);
   assert.equal(capacity.skips[0].reason, 'capacity:fixture-limit');
@@ -141,4 +141,61 @@ test('audit reports supported failures separately, without passing or skipping t
     assert.equal(report.passed, 1); assert.equal(report.failed, 1); assert.equal(report.skipped, 0);
     assert.equal(report.failures[0].command, 'assert_return');
   } finally {await rm(dir, {recursive: true, force: true});}
+});
+
+test('2.0 NaN patterns enforce scalar type and canonical or arithmetic payloads', async () => {
+  const module = `(module
+    (func (export "canonical") (result f32) f32.const -nan)
+    (func (export "payload") (result f64) f64.const nan:0x8000000000042)
+    (func (export "signaling") (result f64) f64.const nan:0x1))`;
+  const report = await run(`${module}
+    (assert_return (invoke "canonical") (f32.const nan:canonical))
+    (assert_return (invoke "payload") (f64.const nan:arithmetic))`);
+  assert.equal(report.passed, 3); assert.equal(report.skipped, 0);
+  for (const assertion of [
+    '(assert_return (invoke "payload") (f64.const nan:canonical))',
+    '(assert_return (invoke "canonical") (f64.const nan:canonical))',
+    '(assert_return (invoke "signaling") (f64.const nan:arithmetic))'
+  ]) await assert.rejects(run(module + assertion), /fixture.wast:/);
+});
+
+
+test('skipped registrations propagate through imports and valid replacement clears the dependency', async () => {
+  const report = await run(`
+    (module $A (table (export "t") 1 funcref) (func (result v128) future.test))
+    (register "provider" $A)
+    (module $B (table (import "provider" "t") 1 funcref)
+      (func (export "size") (result i32) table.size))
+    (assert_return (invoke $B "size") (i32.const 1))
+    (register "consumer" $B)
+    (module (import "consumer" "size" (func (result i32))))
+    (assert_unlinkable (module (table (import "provider" "t") 2 funcref)) "incompatible import type")
+    (module $OK (table (export "t") 1 funcref))
+    (register "provider" $OK)
+    (module (table (import "provider" "t") 1 funcref)
+      (func (export "size") (result i32) table.size))
+    (assert_return (invoke "size") (i32.const 1))
+    (assert_unlinkable (module (table (import "really-missing" "t") 1 funcref)) "unknown import")`);
+  assert.equal(report.passed, 5); assert.equal(report.skipped, 7);
+  assert.equal(report.skips[2].reason, 'unsupported-import:provider');
+  assert.equal(report.skips[3].reason, 'unsupported-import:provider');
+  assert.equal(report.skips[5].reason, 'unsupported-import:consumer');
+  assert.equal(report.skips[6].reason, 'unsupported-import:provider');
+  await assert.rejects(run('(module (table (import "really-missing" "t") 1 funcref))'), /missing resource import/);
+});
+
+
+test('reference assertions preserve opaque identity and null argument types', async () => {
+  const report = await run(`(module
+    (func (export "null") (result funcref) ref.null func)
+    (func (export "identity") (param externref) (result externref) local.get 0)
+    (func (export "isNull") (param externref) (result i32) local.get 0 ref.is_null))
+    (assert_return (invoke "null") (ref.null func))
+    (assert_return (invoke "identity" (ref.extern 1)) (ref.extern 1))
+    (assert_return (invoke "isNull" (ref.null extern)) (i32.const 1))
+    (assert_return (invoke "isNull" (ref.extern 1)) (i32.const 0))`);
+  assert.equal(report.passed, 5); assert.equal(report.skipped, 0);
+  await assert.rejects(run('(module (func (export "null") (result funcref) ref.null func)) (assert_return (invoke "null") (ref.null extern))'), /reference result type/);
+  await assert.rejects(run(`(module (func (export "identity") (param externref) (result externref) local.get 0))
+    (assert_return (invoke "identity" (ref.extern 1)) (ref.extern 2))`), /fixture.wast:/);
 });

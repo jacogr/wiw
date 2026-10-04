@@ -1,1096 +1,1050 @@
 {
-  "baseline": "WebAssembly 2.0 wg-2.0: entire pinned core suite, including SIMD",
-  "policy": "CI and the full audit execute all 148 pinned files with zero skips/failures and frozen per-file command counts. Any failure, skip, pin change or source hash change fails verification.",
-  "types": [
-    "i32",
-    "i64",
-    "f32",
-    "f64",
-    "funcref",
-    "externref",
-    "v128"
-  ],
-  "resultsPerFunction": 128,
-  "blockParameters": 128,
-  "unsupported": [],
-  "capacityModules": {},
-  "fuelPerInvocation": 10000000,
-  "expectedCoverage": [
+  "tag": "wg-2.0",
+  "revision": "fffc6e12fa454e475455a7b58d3b5dc343980c10",
+  "scope": "Entire recursively inventoried core suite, including SIMD; both bootstrap reports agree and all files are verified in CI.",
+  "passed": 54006,
+  "skipped": 0,
+  "failed": 0,
+  "fileCount": 148,
+  "verifiedFileCount": 148,
+  "verifiedCommands": 54006,
+  "files": [
     {
       "file": "address.wast",
       "passed": 260,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "align.wast",
       "passed": 162,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "binary-leb128.wast",
       "passed": 91,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "binary.wast",
       "passed": 136,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "block.wast",
       "passed": 223,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "br.wast",
       "passed": 97,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "br_if.wast",
       "passed": 118,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "br_table.wast",
       "passed": 174,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "bulk.wast",
       "passed": 117,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "call.wast",
       "passed": 91,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "call_indirect.wast",
       "passed": 172,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "comments.wast",
       "passed": 8,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "const.wast",
       "passed": 778,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "conversions.wast",
       "passed": 619,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "custom.wast",
       "passed": 11,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "data.wast",
       "passed": 61,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "elem.wast",
       "passed": 98,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "endianness.wast",
       "passed": 69,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "exports.wast",
       "passed": 96,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "f32.wast",
       "passed": 2514,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "f32_bitwise.wast",
       "passed": 364,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "f32_cmp.wast",
       "passed": 2407,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "f64.wast",
       "passed": 2514,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "f64_bitwise.wast",
       "passed": 364,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "f64_cmp.wast",
       "passed": 2407,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "fac.wast",
       "passed": 8,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "float_exprs.wast",
       "passed": 927,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "float_literals.wast",
       "passed": 179,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "float_memory.wast",
       "passed": 90,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "float_misc.wast",
       "passed": 471,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "forward.wast",
       "passed": 5,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "func.wast",
       "passed": 172,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "func_ptrs.wast",
       "passed": 36,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "global.wast",
       "passed": 110,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "i32.wast",
       "passed": 460,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "i64.wast",
       "passed": 416,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "if.wast",
       "passed": 241,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "imports.wast",
       "passed": 178,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "inline-module.wast",
       "passed": 1,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "int_exprs.wast",
       "passed": 108,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "int_literals.wast",
       "passed": 51,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "labels.wast",
       "passed": 29,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "left-to-right.wast",
       "passed": 96,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "linking.wast",
       "passed": 132,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "load.wast",
       "passed": 97,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "local_get.wast",
       "passed": 36,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "local_set.wast",
       "passed": 53,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "local_tee.wast",
       "passed": 97,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "loop.wast",
       "passed": 120,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "memory.wast",
       "passed": 88,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "memory_copy.wast",
       "passed": 4450,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "memory_fill.wast",
       "passed": 100,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "memory_grow.wast",
       "passed": 104,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "memory_init.wast",
       "passed": 240,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "memory_redundancy.wast",
       "passed": 8,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "memory_size.wast",
       "passed": 42,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "memory_trap.wast",
       "passed": 182,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "names.wast",
       "passed": 486,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "nop.wast",
       "passed": 88,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "obsolete-keywords.wast",
       "passed": 11,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "ref_func.wast",
       "passed": 17,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "ref_is_null.wast",
       "passed": 16,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "ref_null.wast",
       "passed": 3,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "return.wast",
       "passed": 84,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "select.wast",
       "passed": 148,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_address.wast",
       "passed": 49,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_align.wast",
       "passed": 100,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_bit_shift.wast",
       "passed": 252,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_bitwise.wast",
       "passed": 169,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_boolean.wast",
       "passed": 277,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_const.wast",
       "passed": 757,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_conversions.wast",
       "passed": 282,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_f32x4.wast",
       "passed": 790,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_f32x4_arith.wast",
       "passed": 1822,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_f32x4_cmp.wast",
       "passed": 2607,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_f32x4_pmin_pmax.wast",
       "passed": 3887,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_f32x4_rounding.wast",
       "passed": 201,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_f64x2.wast",
       "passed": 803,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_f64x2_arith.wast",
       "passed": 1825,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_f64x2_cmp.wast",
       "passed": 2685,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_f64x2_pmin_pmax.wast",
       "passed": 3887,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_f64x2_rounding.wast",
       "passed": 201,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i16x8_arith.wast",
       "passed": 194,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i16x8_arith2.wast",
       "passed": 172,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i16x8_cmp.wast",
       "passed": 465,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i16x8_extadd_pairwise_i8x16.wast",
       "passed": 21,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i16x8_extmul_i8x16.wast",
       "passed": 117,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i16x8_q15mulr_sat_s.wast",
       "passed": 30,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i16x8_sat_arith.wast",
       "passed": 222,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i32x4_arith.wast",
       "passed": 194,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i32x4_arith2.wast",
       "passed": 149,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i32x4_cmp.wast",
       "passed": 475,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i32x4_dot_i16x8.wast",
       "passed": 32,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i32x4_extadd_pairwise_i16x8.wast",
       "passed": 21,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i32x4_extmul_i16x8.wast",
       "passed": 117,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i32x4_trunc_sat_f32x4.wast",
       "passed": 107,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i32x4_trunc_sat_f64x2.wast",
       "passed": 107,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i64x2_arith.wast",
       "passed": 200,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i64x2_arith2.wast",
       "passed": 25,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i64x2_cmp.wast",
       "passed": 113,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i64x2_extmul_i32x4.wast",
       "passed": 117,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i8x16_arith.wast",
       "passed": 131,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i8x16_arith2.wast",
       "passed": 211,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i8x16_cmp.wast",
       "passed": 445,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_i8x16_sat_arith.wast",
       "passed": 214,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_int_to_int_extend.wast",
       "passed": 253,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_lane.wast",
       "passed": 475,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_linking.wast",
       "passed": 3,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_load.wast",
       "passed": 39,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_load16_lane.wast",
       "passed": 36,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_load32_lane.wast",
       "passed": 24,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_load64_lane.wast",
       "passed": 16,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_load8_lane.wast",
       "passed": 52,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_load_extend.wast",
       "passed": 104,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_load_splat.wast",
       "passed": 126,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_load_zero.wast",
       "passed": 39,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_select.wast",
       "passed": 7,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_splat.wast",
       "passed": 185,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_store.wast",
       "passed": 28,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_store16_lane.wast",
       "passed": 36,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_store32_lane.wast",
       "passed": 24,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_store64_lane.wast",
       "passed": 16,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "simd/simd_store8_lane.wast",
       "passed": 52,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "skip-stack-guard-page.wast",
       "passed": 11,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "stack.wast",
       "passed": 7,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "start.wast",
       "passed": 20,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "store.wast",
       "passed": 68,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "switch.wast",
       "passed": 28,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "table-sub.wast",
       "passed": 2,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "table.wast",
       "passed": 19,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "table_copy.wast",
       "passed": 1728,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "table_fill.wast",
       "passed": 45,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "table_get.wast",
       "passed": 16,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "table_grow.wast",
       "passed": 58,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "table_init.wast",
       "passed": 780,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "table_set.wast",
       "passed": 26,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "table_size.wast",
       "passed": 39,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "token.wast",
       "passed": 58,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "traps.wast",
       "passed": 36,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "type.wast",
       "passed": 3,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "unreachable.wast",
       "passed": 64,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "unreached-invalid.wast",
       "passed": 118,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "unreached-valid.wast",
       "passed": 7,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "unwind.wast",
       "passed": 50,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "utf8-custom-section-id.wast",
       "passed": 176,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "utf8-import-field.wast",
       "passed": 176,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "utf8-import-module.wast",
       "passed": 176,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     },
     {
       "file": "utf8-invalid-encoding.wast",
       "passed": 176,
       "skipped": 0,
-      "reasons": {}
+      "reasons": {},
+      "failed": 0
     }
   ],
-  "tableEntries": 4096,
-  "explicitTypes": 256,
-  "indirectSignatures": 1024,
-  "elementSegments": 128,
-  "elementEntries": 4096,
-  "branchTableEntries": 32768,
-  "floatLiteralBytes": 8192,
-  "functions": 512,
-  "exports": 512,
-  "parameters": 128,
-  "localSlots": 1088,
-  "instructions": 65536,
-  "callFrames": 512,
-  "guestPages": 2048,
-  "imports": 1024,
-  "declaredAndInternedTypes": 768,
-  "binaryTextBytes": 1048576,
-  "verifiedFiles": [
-    "address.wast",
-    "align.wast",
-    "binary-leb128.wast",
-    "binary.wast",
-    "block.wast",
-    "br.wast",
-    "br_if.wast",
-    "br_table.wast",
-    "bulk.wast",
-    "call.wast",
-    "call_indirect.wast",
-    "comments.wast",
-    "const.wast",
-    "conversions.wast",
-    "custom.wast",
-    "data.wast",
-    "elem.wast",
-    "endianness.wast",
-    "exports.wast",
-    "f32.wast",
-    "f32_bitwise.wast",
-    "f32_cmp.wast",
-    "f64.wast",
-    "f64_bitwise.wast",
-    "f64_cmp.wast",
-    "fac.wast",
-    "float_exprs.wast",
-    "float_literals.wast",
-    "float_memory.wast",
-    "float_misc.wast",
-    "forward.wast",
-    "func.wast",
-    "func_ptrs.wast",
-    "global.wast",
-    "i32.wast",
-    "i64.wast",
-    "if.wast",
-    "imports.wast",
-    "inline-module.wast",
-    "int_exprs.wast",
-    "int_literals.wast",
-    "labels.wast",
-    "left-to-right.wast",
-    "linking.wast",
-    "load.wast",
-    "local_get.wast",
-    "local_set.wast",
-    "local_tee.wast",
-    "loop.wast",
-    "memory.wast",
-    "memory_copy.wast",
-    "memory_fill.wast",
-    "memory_grow.wast",
-    "memory_init.wast",
-    "memory_redundancy.wast",
-    "memory_size.wast",
-    "memory_trap.wast",
-    "names.wast",
-    "nop.wast",
-    "obsolete-keywords.wast",
-    "ref_func.wast",
-    "ref_is_null.wast",
-    "ref_null.wast",
-    "return.wast",
-    "select.wast",
-    "simd/simd_address.wast",
-    "simd/simd_align.wast",
-    "simd/simd_bit_shift.wast",
-    "simd/simd_bitwise.wast",
-    "simd/simd_boolean.wast",
-    "simd/simd_const.wast",
-    "simd/simd_conversions.wast",
-    "simd/simd_f32x4.wast",
-    "simd/simd_f32x4_arith.wast",
-    "simd/simd_f32x4_cmp.wast",
-    "simd/simd_f32x4_pmin_pmax.wast",
-    "simd/simd_f32x4_rounding.wast",
-    "simd/simd_f64x2.wast",
-    "simd/simd_f64x2_arith.wast",
-    "simd/simd_f64x2_cmp.wast",
-    "simd/simd_f64x2_pmin_pmax.wast",
-    "simd/simd_f64x2_rounding.wast",
-    "simd/simd_i16x8_arith.wast",
-    "simd/simd_i16x8_arith2.wast",
-    "simd/simd_i16x8_cmp.wast",
-    "simd/simd_i16x8_extadd_pairwise_i8x16.wast",
-    "simd/simd_i16x8_extmul_i8x16.wast",
-    "simd/simd_i16x8_q15mulr_sat_s.wast",
-    "simd/simd_i16x8_sat_arith.wast",
-    "simd/simd_i32x4_arith.wast",
-    "simd/simd_i32x4_arith2.wast",
-    "simd/simd_i32x4_cmp.wast",
-    "simd/simd_i32x4_dot_i16x8.wast",
-    "simd/simd_i32x4_extadd_pairwise_i16x8.wast",
-    "simd/simd_i32x4_extmul_i16x8.wast",
-    "simd/simd_i32x4_trunc_sat_f32x4.wast",
-    "simd/simd_i32x4_trunc_sat_f64x2.wast",
-    "simd/simd_i64x2_arith.wast",
-    "simd/simd_i64x2_arith2.wast",
-    "simd/simd_i64x2_cmp.wast",
-    "simd/simd_i64x2_extmul_i32x4.wast",
-    "simd/simd_i8x16_arith.wast",
-    "simd/simd_i8x16_arith2.wast",
-    "simd/simd_i8x16_cmp.wast",
-    "simd/simd_i8x16_sat_arith.wast",
-    "simd/simd_int_to_int_extend.wast",
-    "simd/simd_lane.wast",
-    "simd/simd_linking.wast",
-    "simd/simd_load.wast",
-    "simd/simd_load16_lane.wast",
-    "simd/simd_load32_lane.wast",
-    "simd/simd_load64_lane.wast",
-    "simd/simd_load8_lane.wast",
-    "simd/simd_load_extend.wast",
-    "simd/simd_load_splat.wast",
-    "simd/simd_load_zero.wast",
-    "simd/simd_select.wast",
-    "simd/simd_splat.wast",
-    "simd/simd_store.wast",
-    "simd/simd_store16_lane.wast",
-    "simd/simd_store32_lane.wast",
-    "simd/simd_store64_lane.wast",
-    "simd/simd_store8_lane.wast",
-    "skip-stack-guard-page.wast",
-    "stack.wast",
-    "start.wast",
-    "store.wast",
-    "switch.wast",
-    "table-sub.wast",
-    "table.wast",
-    "table_copy.wast",
-    "table_fill.wast",
-    "table_get.wast",
-    "table_grow.wast",
-    "table_init.wast",
-    "table_set.wast",
-    "table_size.wast",
-    "token.wast",
-    "traps.wast",
-    "type.wast",
-    "unreachable.wast",
-    "unreached-invalid.wast",
-    "unreached-valid.wast",
-    "unwind.wast",
-    "utf8-custom-section-id.wast",
-    "utf8-import-field.wast",
-    "utf8-import-module.wast",
-    "utf8-invalid-encoding.wast"
-  ],
-  "dataRecordBytes": 48,
-  "tableOperations": [
-    "call_indirect",
-    "table.get",
-    "table.set",
-    "table.size",
-    "table.copy",
-    "table.init",
-    "elem.drop",
-    "table.grow",
-    "table.fill"
-  ],
-  "opcodeEffectRecordBytes": 2,
-  "externalReferenceHandlesPerLoad": 65535,
-  "elementRecordBytes": 64,
-  "tables": 32,
-  "resultShapeRecords": 4096,
-  "signatureRecordBytes": 160,
-  "resultShapeRecordBytes": 132,
-  "globalRecordBytes": 80,
-  "vectorSlotBytes": 16
+  "failures": []
 }

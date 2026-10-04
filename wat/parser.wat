@@ -496,6 +496,7 @@
 		;; Defer signature-dependent validation until all forward targets are available.
 		(if (i32.eqz (global.get $error))
 			(then
+				(call $resolve-data)
 				(call $resolve-and-validate)
 			)
 		)

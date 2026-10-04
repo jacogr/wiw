@@ -220,7 +220,7 @@
 		(if
 			(i32.ge_u
 				(local.get $count)
-				(select (i32.const 64) (i32.const CAP_LOCALS) (local.get $parameter))
+				(select (i32.const 128) (i32.const CAP_LOCALS) (local.get $parameter))
 			)
 			(then
 				(call $fail (i32.const 6))
@@ -478,18 +478,17 @@
 					)
 				)
 				(call $next)
-				;; Result groups can be empty or contain one supported integer type.
-				(if (i32.ne (global.get $kind) (i32.const 2))
-					(then
-						(local.set $result-type (call $value-type))
-						;; Multiple results require an extension outside the current subset.
-						(if (i32.load offset=24 (local.get $f))
-							(then
-								(call $fail (i32.const 2))
-								(return)
-							)
+				;; Collect ordered results across all result groups.
+				(block $results-done
+					;; Each parsed type appends to the function's bounded result shape.
+					(loop $results
+						(br_if $results-done (global.get $error))
+						(br_if $results-done (i32.eq (global.get $kind) (i32.const 2)))
+						(i32.store offset=24
+							(local.get $f)
+							(call $shape-append (i32.load offset=24 (local.get $f)) (call $value-type))
 						)
-						(i32.store offset=24 (local.get $f) (local.get $result-type))
+						(br $results)
 					)
 				)
 				(call $expect (i32.const 2))
@@ -596,7 +595,9 @@
 
 		(call $intern-function-types)
 		(call $resolve-signatures)
+		(call $resolve-control-signatures)
 		(call $resolve-elements)
+		(call $resolve-reference-globals)
 		;; End call resolution when all instruction records have been checked.
 		(block $calls-done
 			;; Rewrite named call immediates into numeric function indices exactly once.
@@ -606,7 +607,11 @@
 					(i32.add (global.get $code-base) (i32.mul (local.get $i) (i32.const 16)))
 				)
 				;; Direct calls resolve against the completed function namespace.
-				(if (i32.eq (i32.load (local.get $record)) (i32.const 36))
+				(if
+					(i32.or
+						(i32.eq (i32.load (local.get $record)) (i32.const 36))
+						(i32.eq (i32.load (local.get $record)) (i32.const 195))
+					)
 					(then
 						(i32.store offset=4
 							(local.get $record)
@@ -658,6 +663,12 @@
 						(i32.load offset=8 (local.get $record))
 						(i32.load offset=12 (local.get $record))
 						(i32.load offset=16 (local.get $record))
+					)
+				)
+				;; Exported functions belong to the declaration set required by ref.func bodies.
+				(if (i32.eqz (i32.load offset=20 (local.get $record)))
+					(then
+						(call $declare-function (i32.load offset=8 (local.get $record)))
 					)
 				)
 				(local.set $i (i32.add (local.get $i) (i32.const 1)))

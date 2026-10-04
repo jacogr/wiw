@@ -53,25 +53,75 @@
 		(select (global.get $guest-max) (i32.const -1) (global.get $memory-max-present))
 	)
 
-	;; Report the table's current logical number of entries.
+	;; Return one table's current number of entries to the trusted host adapter.
 	(func (export "table_size")
+		(param $index i32)
 		(result i32)
 
-		(global.get $guest-table-size)
+		(i32.load offset=8 (call $canonical-table-record (local.get $index)))
 	)
 
-	;; Report the declared table maximum, using -1 for an unbounded declaration.
+	;; Return one table's declared maximum or -1 for an unbounded declaration.
 	(func (export "table_max")
+		(param $index i32)
 		(result i32)
 
-		(global.get $guest-table-max)
+		(i32.load offset=12 (call $canonical-table-record (local.get $index)))
 	)
 
-	;; Expose the protected table entry arena to the trusted synchronous binding adapter.
-	(func (export "table_base")
+	;; Expose the reference type of an independently indexed table.
+	(func (export "table_type")
+		(param $index i32)
 		(result i32)
 
-		(global.get $guest-table-base)
+		(i32.load offset=16 (call $canonical-table-record (local.get $index)))
+	)
+
+	;; Expose one table's protected entry arena to the synchronous binding adapter.
+	(func (export "table_base")
+		(param $index i32)
+		(result i32)
+
+		(i32.add (call $canonical-table-record (local.get $index)) (i32.const 64))
+	)
+
+	;; Install compatible imported limits before allocating initial entries.
+	(func (export "bind_guest_table")
+		(param $index i32)
+		(param $size i32)
+		(param $maximum i32)
+		(result i32)
+
+		;; Reject oversized actual imports before modifying their descriptor.
+		(if (i32.gt_u (local.get $size) (i32.const 4096))
+			(then
+				(return (i32.const 6))
+			)
+		)
+		(i32.store offset=8 (call $guest-table-record (local.get $index)) (local.get $size))
+		(i32.store offset=12 (call $guest-table-record (local.get $index)) (local.get $maximum))
+		(i32.const 0)
+	)
+
+	;; Give repeated imports of one shared table a single local entry arena.
+	(func (export "alias_guest_table")
+		(param $index i32)
+		(param $canonical i32)
+
+		(i32.store offset=20
+			(call $guest-table-record (local.get $index))
+			(i32.add (local.get $canonical) (i32.const 1))
+		)
+	)
+
+	;; Synchronize growth of one shared table, initializing new entries to null.
+	(func (export "grow_guest_table")
+		(param $index i32)
+		(param $delta i32)
+		(result i32)
+
+		(call $use-table (local.get $index))
+		(call $table-grow (i64.const 0) (local.get $delta))
 	)
 
 	;; Allocate resources using validated actual import sizes before the host installs their contents.
@@ -108,8 +158,6 @@
 			)
 		)
 		(global.set $memory-max-present (i32.ne (local.get $maximum) (i32.const -1)))
-		(global.set $guest-table-size (local.get $entries))
-		(global.set $guest-table-max (local.get $table-maximum))
 		(call $allocate-table)
 		(call $allocate-resources)
 		(global.set $resource-phase (i32.const 2))
@@ -132,7 +180,7 @@
 		(if
 			(i32.or
 				(i32.ge_u (global.get $function-count) (i32.const CAP_FUNCTIONS))
-				(i32.gt_u (local.get $count) (i32.const 64))
+				(i32.gt_u (local.get $count) (i32.const 128))
 			)
 			(then
 				(call $fail (i32.const 6))
@@ -261,94 +309,41 @@
 		)
 	)
 
-	;; Check every active segment before shared memory or table entries can be modified.
-	(func $check-linked-segments
-		(local $kind i32)
+	;; Install a foreign function's ordered result vector from trusted host type bytes.
+	(func (export "foreign_results")
+		(param $index i32)
+		(param $types i32)
+		(param $count i32)
+		(result i32)
 		(local $i i32)
-		(local $record i32)
-		(local $count i32)
-		(local $base i32)
-		(local $limit i64)
+		(local $shape i32)
 
-		(local.set $kind (i32.const 1))
-		;; Complete both independent resource segment lists.
-		(block $done
-			;; Check data first and element records second, without publishing any writes.
-			(loop $kinds
-				(local.set $i (i32.const 0))
-				(local.set $count
-					(select
-						(global.get $segment-count)
-						(global.get $element-count)
-						(i32.eq (local.get $kind) (i32.const 1))
-					)
-				)
-				(local.set $base
-					(select
-						(global.get $segment-base)
-						(global.get $element-base)
-						(i32.eq (local.get $kind) (i32.const 1))
-					)
-				)
-				(local.set $limit
-					(select
-						(i64.mul (i64.extend_i32_u (global.get $guest-pages)) (i64.const 65536))
-						(i64.extend_i32_u (global.get $guest-table-size))
-						(i32.eq (local.get $kind) (i32.const 1))
-					)
-				)
-				;; Empty segment lists still leave the other resource kind to check.
-				(block $checked
-					;; Each segment's target and unsigned range must fit its actual imported resource.
-					(loop $segments
-						(br_if $checked (i32.eq (local.get $i) (local.get $count)))
-						(local.set $record (i32.add (local.get $base) (i32.mul (local.get $i) (i32.const 32))))
-						(drop
-							(call $resource-target
-								(local.get $kind)
-								(i32.load offset=16 (local.get $record))
-								(i32.load offset=20 (local.get $record))
-								(i32.load offset=24 (local.get $record))
-							)
-						)
-						(br_if $done (global.get $error))
-						;; Imported-global offsets use their bound values during these preflight checks.
-						(if (i32.load offset=28 (local.get $record))
-							(then
-								(i32.store
-									(local.get $record)
-									(i32.wrap_i64
-										(i64.load offset=24
-											(call $global-record (i32.sub (i32.load offset=28 (local.get $record)) (i32.const 1)))
-										)
-									)
-								)
-							)
-						)
-						;; Wide addition detects overflow instead of wrapping the segment's end address.
-						(if
-							(i64.gt_u
-								(i64.add
-									(i64.extend_i32_u (i32.load (local.get $record)))
-									(i64.extend_i32_u (i32.load offset=8 (local.get $record)))
-								)
-								(local.get $limit)
-							)
-							(then
-								(global.set $tok (i32.load offset=12 (local.get $record)))
-								(call $fail
-									(select (i32.const 14) (i32.const 27) (i32.eq (local.get $kind) (i32.const 1)))
-								)
-								(br $done)
-							)
-						)
-						(local.set $i (i32.add (local.get $i) (i32.const 1)))
-						(br $segments)
-					)
-				)
-				(br_if $done (i32.eq (local.get $kind) (i32.const 3)))
-				(local.set $kind (i32.const 3))
-				(br $kinds)
+		;; Function and vector limits apply before reading the caller's type bytes.
+		(if
+			(i32.or
+				(i32.ge_u (local.get $index) (global.get $function-count))
+				(i32.gt_u (local.get $count) (i32.const 64))
+			)
+			(then
+				(return (i32.const 6))
 			)
 		)
+		;; Finish after collecting all result types into the local shape arena.
+		(block $done
+			;; Foreign shape pointers never cross instance boundaries.
+			(loop $types
+				(br_if $done (global.get $error))
+				(br_if $done (i32.eq (local.get $i) (local.get $count)))
+				(local.set $shape
+					(call $shape-append
+						(local.get $shape)
+						(i32.load8_u (i32.add (local.get $types) (local.get $i)))
+					)
+				)
+				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br $types)
+			)
+		)
+		(i32.store offset=24 (call $function (local.get $index)) (local.get $shape))
+		(global.get $error)
 	)

@@ -42,7 +42,8 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
           compared++;
         }
       }
-      assert.equal(compared, 1400);
+      // Eight saturating conversions add 240 boundary/NaN comparisons to the MVP cases.
+      assert.equal(compared, 1640);
     } finally { await rm(dir, { recursive: true, force: true }); }
   });
 

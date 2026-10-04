@@ -322,7 +322,7 @@
 			)
 		)
 		(local.set $record
-			(i32.add (global.get $segment-base) (i32.mul (global.get $segment-count) (i32.const 32)))
+			(i32.add (global.get $segment-base) (i32.mul (global.get $segment-count) (i32.const 48)))
 		)
 		(i32.store (local.get $record) (local.get $offset))
 		(i32.store offset=4 (local.get $record) (local.get $start))
@@ -335,26 +335,204 @@
 		(i32.sub (global.get $data-count) (local.get $start))
 	)
 
-	;; Parse a standard active data segment with a literal i32 offset and concatenated strings.
+	;; Locate a data segment's 48-byte descriptor, including name, mode and remaining runtime length.
+	(func $data-record
+		(param $index i32)
+		(result i32)
+
+		(i32.add (global.get $segment-base) (i32.mul (local.get $index) (i32.const 48)))
+	)
+
+	;; Resolve a data identifier or numeric index after every segment declaration is available.
+	(func $data-target
+		(param $value i32)
+		(param $length i32)
+		(result i32)
+		(local $i i32)
+		(local $record i32)
+
+		;; Numeric references use the complete active/passive source-order index space.
+		(if (i32.eqz (local.get $length))
+			(then
+				;; Out-of-range references remain invalid even in unreachable code.
+				(if (i32.ge_u (local.get $value) (global.get $segment-count))
+					(then
+						(call $fail (i32.const 10))
+					)
+				)
+				(return (local.get $value))
+			)
+		)
+		;; Stop once all named segment records have been searched.
+		(block $done
+			;; Compare full source-backed names without conflating segment and memory namespaces.
+			(loop $names
+				(br_if $done (i32.eq (local.get $i) (global.get $segment-count)))
+				(local.set $record (call $data-record (local.get $i)))
+				;; The first exact match selects a declared segment.
+				(if
+					(i32.and
+						(i32.eq (local.get $length) (i32.load offset=36 (local.get $record)))
+						(call $equal
+							(local.get $value)
+							(i32.load offset=32 (local.get $record))
+							(local.get $length)
+						)
+					)
+					(then
+						(return (local.get $i))
+					)
+				)
+				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br $names)
+			)
+		)
+		(call $fail (i32.const 10))
+		(i32.const 0)
+	)
+
+	;; Parse an optional segment name followed by an active offset or passive string payload.
 	(func $parse-data
 		(local $source i32)
 		(local $offset i32)
 		(local $reference i32)
+		(local $name i32)
+		(local $length i32)
+		(local $open i32)
+		(local $passive i32)
+		(local $record i32)
+		(local $i i32)
 
+		;; Bound the next descriptor before parsing a header into its target fields.
+		(if (i32.ge_u (global.get $segment-count) (i32.const 128))
+			(then
+				(call $fail (i32.const 6))
+				(return)
+			)
+		)
 		(local.set $source (global.get $tok))
 		(call $next)
-		(call $segment-target
-			(i32.add (global.get $segment-base) (i32.mul (global.get $segment-count) (i32.const 32)))
-		)
-		(local.set $offset (call $initializer))
-		(local.set $reference (global.get $initializer-reference))
-		(drop (call $data-segment (local.get $offset) (local.get $source)))
-		(i32.store offset=28
-			(i32.add
-				(global.get $segment-base)
-				(i32.mul (i32.sub (global.get $segment-count) (i32.const 1)) (i32.const 32))
+		;; Segment identifiers belong to their own namespace and must be unique.
+		(if (call $named)
+			(then
+				(local.set $name (global.get $tok))
+				(local.set $length (global.get $len))
+				;; Complete duplicate checks before publishing any new descriptor.
+				(block $done
+					;; Earlier declarations have already recorded their complete name spans.
+					(loop $names
+						(br_if $done (i32.eq (local.get $i) (global.get $segment-count)))
+						(local.set $record (call $data-record (local.get $i)))
+						;; Duplicate names are declaration errors regardless of segment mode.
+						(if
+							(i32.and
+								(i32.eq (local.get $length) (i32.load offset=36 (local.get $record)))
+								(call $equal
+									(local.get $name)
+									(i32.load offset=32 (local.get $record))
+									(local.get $length)
+								)
+							)
+							(then
+								(call $fail (i32.const 10))
+								(return)
+							)
+						)
+						(local.set $i (i32.add (local.get $i) (i32.const 1)))
+						(br $names)
+					)
+				)
+				(call $next)
 			)
-			(local.get $reference)
+		)
+		(local.set $record (call $data-record (global.get $segment-count)))
+		;; Parenthesized headers identify active segments; strings or a closing delimiter identify passive data.
+		(if
+			(i32.or
+				(i32.eq (global.get $kind) (i32.const 1))
+				(i32.eq (global.get $kind) (i32.const 3))
+			)
+			(then
+				;; A parenthesized memory selector precedes the offset; other openings belong to the initializer.
+				(if (i32.eq (global.get $kind) (i32.const 1))
+					(then
+						(local.set $open (global.get $tok))
+						(call $next)
+						;; Consume only the explicit memory wrapper, replaying offset expressions unchanged.
+						(if (call $is-word (i32.const 80) (i32.const 6))
+							(then
+								(call $next)
+								(call $segment-target (local.get $record))
+								(call $expect (i32.const 2))
+							)
+							;; Ordinary initializer parentheses must remain available to the constant-expression parser.
+							(else
+								(global.set $pos (local.get $open))
+								(call $next)
+							)
+						)
+					)
+				)
+				(call $segment-target (local.get $record))
+				(local.set $offset (call $initializer))
+				(local.set $reference (global.get $initializer-reference))
+			)
+			;; Passive segments retain bytes without requiring or writing a memory at instantiation.
+			(else
+				(local.set $passive (i32.const 1))
+			)
+		)
+		(drop (call $data-segment (local.get $offset) (local.get $source)))
+		;; Parsing failures must not publish mode/name fields or dereference a missing record.
+		(if (global.get $error)
+			(then
+				(return)
+			)
+		)
+		(i32.store offset=28 (local.get $record) (local.get $reference))
+		(i32.store offset=32 (local.get $record) (local.get $name))
+		(i32.store offset=36 (local.get $record) (local.get $length))
+		(i32.store offset=40 (local.get $record) (local.get $passive))
+		(i32.store offset=44
+			(local.get $record)
+			(select (i32.load offset=8 (local.get $record)) (i32.const 0) (local.get $passive))
+		)
+	)
+
+	;; Resolve memory.init/data.drop references once the entire data namespace has been parsed.
+	(func $resolve-data
+		(local $i i32)
+		(local $record i32)
+		(local $op i32)
+
+		;; Finish after every normalized instruction has had its deferred data reference checked.
+		(block $done
+			;; References remain checked even in dead code and before instantiation writes.
+			(loop $code
+				(br_if $done (global.get $error))
+				(br_if $done (i32.eq (local.get $i) (global.get $code-count)))
+				(local.set $record
+					(i32.add (global.get $code-base) (i32.mul (local.get $i) (i32.const 16)))
+				)
+				(local.set $op (i32.load (local.get $record)))
+				;; Other opcodes retain their existing immediate metadata.
+				(if
+					(i32.or (i32.eq (local.get $op) (i32.const 189)) (i32.eq (local.get $op) (i32.const 190)))
+					(then
+						(global.set $tok (i32.load offset=8 (local.get $record)))
+						(i32.store offset=4
+							(local.get $record)
+							(call $data-target
+								(i32.load offset=4 (local.get $record))
+								(i32.load offset=12 (local.get $record))
+							)
+						)
+						(i32.store offset=12 (local.get $record) (i32.const 0))
+					)
+				)
+				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br $code)
+			)
 		)
 	)
 

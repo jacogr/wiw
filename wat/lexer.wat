@@ -82,7 +82,9 @@
 						;; Discard comment bytes until newline or EOF, then resume skipping.
 						(loop $line
 							(br_if $skip (i32.ge_u (global.get $pos) (global.get $end)))
-							(br_if $skip (i32.eq (call $peek) (i32.const 10)))
+							(br_if $skip
+								(i32.or (i32.eq (call $peek) (i32.const 10)) (i32.eq (call $peek) (i32.const 13)))
+							)
 							(call $advance)
 							(br $line)
 						)
@@ -174,6 +176,12 @@
 						(then
 							(global.set $len (i32.sub (global.get $pos) (global.get $tok)))
 							(call $advance)
+							;; Adjacent strings require separating whitespace or a comment.
+							(if (i32.eq (call $peek) (i32.const 34))
+								(then
+									(call $fail (i32.const 1))
+								)
+							)
 							(return)
 						)
 					)

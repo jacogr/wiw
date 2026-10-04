@@ -1,10 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
-const messages = ['', 'invalid syntax', 'unsupported feature', 'integer out of range', 'unknown export', 'invalid buffer', 'resource limit', 'invalid operand stack', 'divide by zero', 'integer overflow', 'invalid or duplicate reference', 'argument mismatch', 'exhausted fuel', 'executed unreachable', 'memory out of bounds', 'invalid memory limits', 'immutable global', 'interpreter error', 'export kind mismatch', 'invalid alignment', 'host import failed', 'invalid resume', 'invocation already suspended', 'host value type mismatch', 'undefined element', 'indirect call type mismatch', 'invalid table limits', 'element out of bounds', 'invalid conversion to integer', 'instance not initialized'];
+const messages = ['', 'invalid syntax', 'unsupported feature', 'integer out of range', 'unknown export', 'invalid buffer', 'resource limit', 'invalid operand stack', 'divide by zero', 'integer overflow', 'invalid or duplicate reference', 'argument mismatch', 'exhausted fuel', 'executed unreachable', 'memory out of bounds', 'invalid memory limits', 'immutable global', 'interpreter error', 'export kind mismatch', 'invalid alignment', 'host import failed', 'invalid resume', 'invocation already suspended', 'host value type mismatch', 'undefined element', 'indirect call type mismatch', 'invalid table limits', 'element out of bounds', 'invalid conversion to integer', 'instance not initialized', 'table out of bounds'];
 
 // Typed forwarding bindings retain the provider's signature and load generation.
-/** @type {WeakMap<Function, {params: number[], results: number, valid: () => boolean}>} */
+/** @type {WeakMap<Function, {params: number[], results: number | number[], valid: () => boolean}>} */
 const functionTypes = new WeakMap();
 const resourceTypes = new WeakMap();
 let invocationDepth = 0;
@@ -13,17 +13,19 @@ const maxInvocationDepth = 128;
 /** Load the native interpreter. Guest source is never handed to WebAssembly. */
 export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm', import.meta.url)) {
   const { instance } = await WebAssembly.instantiate(await readFile(binary));
-  const e = /** @type {{memory: WebAssembly.Memory, load: (p: number, n: number) => number, initialize: () => number, invoke: (p: number, n: number, args: number, count: number) => number, error_code: () => number, error_offset: () => number, host_base: () => number, result_count: () => number, set_fuel: (fuel: number) => void, guest_memory_base: () => number, guest_memory_pages: () => number, guest_memory_present: () => number, get_global: (p: number, n: number) => number, set_global: (p: number, n: number, value: number) => number, import_count: () => number, import_info: (index: number) => number, function_params: (index: number) => number, function_results: (index: number) => number, export_function: (p: number, n: number) => number, pending_import: () => number, pending_args: () => number, resume: (value: number, failed: number) => number, grow_guest_memory: (delta: number) => number, invoke64: (p: number, n: number, args: number, count: number) => bigint, resume64: (value: bigint, failed: number) => bigint, result_type: () => number, function_param_type: (index: number, slot: number) => number, function_result_type: (index: number) => number, global_type: (p: number, n: number) => number, get_global64: (p: number, n: number) => bigint, set_global64: (p: number, n: number, value: bigint) => number}} */ (instance.exports);
+  const e = /** @type {{memory: WebAssembly.Memory, load: (p: number, n: number) => number, initialize: () => number, invoke: (p: number, n: number, args: number, count: number) => number, error_code: () => number, error_offset: () => number, host_base: () => number, result_count: () => number, set_fuel: (fuel: number) => void, guest_memory_base: () => number, guest_memory_pages: () => number, guest_memory_present: () => number, get_global: (p: number, n: number) => number, set_global: (p: number, n: number, value: number) => number, import_count: () => number, import_info: (index: number) => number, function_params: (index: number) => number, function_results: (index: number) => number, export_function: (p: number, n: number) => number, pending_import: () => number, pending_args: () => number, resume: (value: number, failed: number) => number, grow_guest_memory: (delta: number) => number, invoke64: (p: number, n: number, args: number, count: number) => bigint, resume64: (value: bigint, failed: number) => bigint, result_type: (slot: number) => number, function_param_type: (index: number, slot: number) => number, function_result_type: (index: number, slot: number) => number, global_type: (p: number, n: number) => number, argument_high_base: () => number, pending_high_args: () => number, result_high_base: () => number, result_base: () => number, global_high: (p: number, n: number) => bigint, set_global_high: (p: number, n: number, value: bigint) => number, get_global64: (p: number, n: number) => bigint, set_global64: (p: number, n: number, value: bigint) => number}} */ (instance.exports);
   let loaded = false;
   let invoking = false;
   let generation = 0;
-  /** @type {{module: string, name: string, params: number[], results: number, callback: Function}[]} */
+  /** @type {{module: string, name: string, params: number[], results: number | number[], callback: Function}[]} */
   let bindings = [];
   let resources = [];
-  let exportedResources = new Map();
+  let exportedResources = new Map(), exportedFunctions = new Map();
   let tableFunctions = new Map();
   let foreignFunctions = new Map();
   const owner = {};
+  const negativeZeroKey = Symbol();
+  let externalValues = [null], externalIds = new Map();
 
   function ensure(/** @type {number} */ required) {
     if (required > e.memory.buffer.byteLength) e.memory.grow(Math.ceil((required - e.memory.buffer.byteLength) / 65536));
@@ -64,18 +66,40 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
   function readText(/** @type {number} */ p, /** @type {number} */ n) {
     return new TextDecoder('utf-8', {ignoreBOM: true}).decode(new Uint8Array(e.memory.buffer, p, n));
   }
-  const scalarNames = [null, 'i32', 'i64', 'f32', 'f64'];
+  const scalarNames = [null, 'i32', 'i64', 'f32', 'f64', 'funcref', 'externref', 'v128'];
   function decodedValue(/** @type {bigint} */ bits, /** @type {number} */ type) {
     if (!type) return undefined;
     if (type === 1) return Number(BigInt.asIntN(32, bits));
     if (type === 2) return BigInt.asIntN(64, bits);
+    if (type === 7) return BigInt.asUintN(128, bits);
+    if (type === 5) return bits === 0n ? null : functionReference(Number(bits - 1n)).callback;
+    if (type === 6) return externalValues[Number(bits)];
     const view = new DataView(new ArrayBuffer(8));
     view.setBigInt64(0, bits, true);
     return type === 3 ? view.getFloat32(0, true) : view.getFloat64(0, true);
   }
   function typedValue(/** @type {number | bigint} */ value, /** @type {number} */ type) {
+    if (type === 7) {
+      if (typeof value !== 'bigint' || value < -(1n << 127n) || value > (1n << 128n) - 1n) throw new Error('value must be a v128 BigInt bit pattern');
+      return BigInt.asUintN(128, value);
+    }
     if (type === 1) { i32(/** @type {number} */ (value)); return BigInt(value); }
-    if (type >= 3) {
+    if (type === 5) {
+      if (value === null) return 0n;
+      const metadata = functionTypes.get(value);
+      if (!metadata?.reference || !metadata.valid()) throw new Error('value must be a live wiw function reference or null');
+      return BigInt(tableFunctionIndex(metadata.reference()) + 1);
+    }
+    if (type === 6) {
+      if (value === null) return 0n;
+      const key = Object.is(value, -0) ? negativeZeroKey : value;
+      if (!externalIds.has(key)) {
+        if (externalValues.length >= 65536) throw new Error('external reference resource limit');
+        externalIds.set(key, externalValues.length); externalValues.push(value);
+      }
+      return BigInt(externalIds.get(key));
+    }
+    if (type === 3 || type === 4) {
       if (typeof value !== 'number') throw new Error(`value must be an ${scalarNames[type]} Number`);
       const view = new DataView(new ArrayBuffer(8));
       if (type === 3) view.setFloat32(0, value, true);
@@ -96,8 +120,22 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
     return {
       index,
       params: Array.from({ length: e.function_params(index) }, (_, slot) => e.function_param_type(index, slot)),
-      results: e.function_result_type(index)
+      results: resultSignature(index)
     };
+  }
+  // Reference descriptors carry opaque values; numeric descriptors retain exact bits.
+  function rawResult(bits, type) {
+    return type === 5 || type === 6 ? {type: scalarNames[type], value: decodedValue(bits, type)} :
+      {type: scalarNames[type], bits: BigInt.asUintN(type === 7 ? 128 : type === 1 || type === 3 ? 32 : 64, bits)};
+  }
+  function rawSlot(arg, type) {
+    if (arg.type !== scalarNames[type]) throw new Error('raw argument type mismatch');
+    if (type === 5 || type === 6) {
+      if (!Object.hasOwn(arg, 'value')) throw new Error('raw reference requires an opaque value');
+      return typedValue(arg.value, type);
+    }
+    if (typeof arg.bits !== 'bigint') throw new Error('raw argument type mismatch');
+    return type === 7 ? BigInt.asUintN(128, arg.bits) : BigInt.asIntN(64, arg.bits);
   }
   // Shared state is synchronized at each synchronous guest/host boundary.
   function synchronizeIn() {
@@ -109,11 +147,16 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
         if (delta > 0 && e.grow_guest_memory(delta) < 0) throw new Error('shared memory growth exceeds capacity');
         new Uint8Array(e.memory.buffer, e.guest_memory_base(), state.bytes.length).set(state.bytes);
       } else if (state.kind === 2) {
-        new DataView(e.memory.buffer).setBigInt64(e.global_info(binding.index) + 24, state.bits, true);
+        const bits = (state.type === 5 || state.type === 6) ? typedValue(state.value, state.type) : state.bits;
+        const view = new DataView(e.memory.buffer), at = e.global_info(binding.index);
+        view.setBigInt64(at + 24, BigInt.asIntN(64, bits), true);
+        view.setBigInt64(at + 72, state.type === 7 ? BigInt.asIntN(64, bits >> 64n) : 0n, true);
       } else {
+        const delta = state.entries.length - e.table_size(binding.index);
+        if (delta > 0 && e.grow_guest_table(binding.index, delta) < 0) throw new Error('shared table growth exceeds capacity');
         state.entries.forEach((entry, index) => {
-          const target = entry ? tableFunctionIndex(entry) : -1;
-          new DataView(e.memory.buffer).setInt32(e.table_base() + index * 4, target, true);
+          const target = state.type === 5 ? (entry ? tableFunctionIndex(entry) : -1) : Number(typedValue(entry, 6)) - 1;
+          new DataView(e.memory.buffer).setInt32(e.table_base(binding.index) + index * 4, target, true);
         });
       }
     }
@@ -124,15 +167,22 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       if (state.kind === 1) {
         state.pages = e.guest_memory_pages();
         state.bytes = new Uint8Array(e.memory.buffer, e.guest_memory_base(), state.pages * 65536).slice();
-      } else if (state.kind === 2) state.bits = new DataView(e.memory.buffer).getBigInt64(e.global_info(binding.index) + 24, true);
-      else state.entries = Array.from({length: e.table_size()}, (_, index) => {
-        const target = new DataView(e.memory.buffer).getInt32(e.table_base() + index * 4, true);
-        return target < 0 ? null : functionReference(target);
+      } else if (state.kind === 2) {
+        state.bits = new DataView(e.memory.buffer).getBigInt64(e.global_info(binding.index) + 24, true);
+        if (state.type === 7) state.bits = BigInt.asUintN(64, state.bits) | (BigInt.asUintN(64, new DataView(e.memory.buffer).getBigInt64(e.global_info(binding.index) + 72, true)) << 64n);
+        if ((state.type === 5 || state.type === 6)) state.value = decodedValue(state.bits, state.type);
+      } else state.entries = Array.from({length: e.table_size(binding.index)}, (_, index) => {
+        const target = new DataView(e.memory.buffer).getInt32(e.table_base(binding.index) + index * 4, true);
+        return state.type === 6 ? decodedValue(BigInt(target + 1), 6) : target < 0 ? null : functionReference(target);
       });
     }
   }
+  function resultSignature(index) {
+    const count = e.function_results(index);
+    return count <= 1 ? e.function_result_type(index, 0) : Array.from({length: count}, (_, slot) => e.function_result_type(index, slot));
+  }
   function signatureAt(index) {
-    return {params: Array.from({length: e.function_params(index)}, (_, slot) => e.function_param_type(index, slot)), results: e.function_result_type(index)};
+    return {params: Array.from({length: e.function_params(index)}, (_, slot) => e.function_param_type(index, slot)), results: resultSignature(index)};
   }
   function functionReference(index) {
     if (tableFunctions.has(index)) return tableFunctions.get(index);
@@ -157,10 +207,10 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       requireIdle();
       if (!valid()) throw new Error('stale forwarded function');
       if (invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
-      return invokeValues('', args.map(arg => BigInt.asIntN(64, arg.bits)), true, index);
+      return invokeValues('', args.map((arg, slot) => rawSlot(arg, signature.params[slot])), true, index);
     };
-    functionTypes.set(callback, {...signature, valid, raw});
-    const reference = {owner, index, callback, signature};
+    functionTypes.set(callback, {...signature, valid, raw, reference: () => reference});
+    const reference = {owner, index, callback: exportedFunctions.get(index) ?? callback, signature};
     tableFunctions.set(index, reference);
     return reference;
   }
@@ -171,7 +221,12 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
     const at = e.host_base(); ensure(at + params.length);
     new Uint8Array(e.memory.buffer, at, params.length).set(params);
     const slot = bindings.length;
-    const index = e.foreign_function(params.length, results, at, slot);
+    const index = e.foreign_function(params.length, Array.isArray(results) ? results[0] : results, at, slot);
+    if (index >= 0 && Array.isArray(results)) {
+      ensure(at + results.length);
+      new Uint8Array(e.memory.buffer, at, results.length).set(results);
+      check(e.foreign_results(index, at, results.length));
+    }
     check(e.error_code());
     bindings.push({module: '<table>', name: String(reference.index), params, results, callback: reference.callback});
     foreignFunctions.set(reference, index); tableFunctions.set(index, reference);
@@ -189,9 +244,11 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       else if (kind === 2) {
         const view = new DataView(e.memory.buffer), at = e.global_info(index);
         Object.assign(state, {type: view.getInt32(at + 12, true), mutable: view.getInt32(at + 8, true), bits: view.getBigInt64(at + 24, true)});
-      } else Object.assign(state, {maximum: e.table_max(), entries: Array.from({length: e.table_size()}, (_, slot) => {
-        const target = new DataView(e.memory.buffer).getInt32(e.table_base() + slot * 4, true);
-        return target < 0 ? null : functionReference(target);
+        if (state.type === 7) state.bits = BigInt.asUintN(64, state.bits) | (BigInt.asUintN(64, view.getBigInt64(at + 72, true)) << 64n);
+        if ((state.type === 5 || state.type === 6)) state.value = decodedValue(state.bits, state.type);
+      } else Object.assign(state, {type: e.table_type(index), maximum: e.table_max(index), entries: Array.from({length: e.table_size(index)}, (_, slot) => {
+        const target = new DataView(e.memory.buffer).getInt32(e.table_base(index) + slot * 4, true);
+        return e.table_type(index) === 6 ? decodedValue(BigInt(target + 1), 6) : target < 0 ? null : functionReference(target);
       })});
       resources.push({index, state});
     }
@@ -209,17 +266,39 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       try {
         const view = new DataView(e.memory.buffer);
         const at = e.pending_args();
-        const args = binding.params.map((type, index) => decodedValue(view.getBigInt64(at + index * 8, true), type));
+        const pendingHigh = e.pending_high_args();
+        const rawArgs = binding.params.map((type, index) => {
+          let bits = view.getBigInt64(at + index * 8, true);
+          if (type === 7) bits = BigInt.asUintN(64, bits) | (BigInt.asUintN(64, view.getBigInt64(pendingHigh + index * 8, true)) << 64n);
+          return rawResult(bits, type);
+        });
+        const args = rawArgs.map((value, index) => binding.params[index] === 5 || binding.params[index] === 6 ? value.value : decodedValue(value.bits, binding.params[index]));
         synchronizeOut();
         const forwarding = functionTypes.get(binding.callback);
-        const returned = forwarding?.raw ? forwarding.raw(binding.params.map((type, index) => ({type: scalarNames[type], bits: BigInt.asUintN(type === 1 || type === 3 ? 32 : 64, view.getBigInt64(at + index * 8, true))}))) : binding.callback(...args);
+        const returned = forwarding?.raw ? forwarding.raw(rawArgs) : binding.callback(...args);
         synchronizeIn();
-        if (returned && typeof returned.then === 'function') {
+        if (binding.results !== 6 && returned && typeof returned.then === 'function') {
           // Consume rejected promises while rejecting asynchronous callbacks for this synchronous ABI.
           Promise.resolve(returned).catch(() => {});
           throw new Error('import callbacks must be synchronous');
         }
-        if (binding.results) result = forwarding?.raw ? BigInt.asIntN(64, returned.bits) : typedValue(returned, binding.results);
+        if (Array.isArray(binding.results)) {
+          if (!Array.isArray(returned) || returned.length !== binding.results.length) throw new Error('import result count mismatch');
+          const slots = returned.map((value, slot) => forwarding?.raw ? rawSlot(value, binding.results[slot]) : typedValue(value, binding.results[slot]));
+          const resultAt = e.pending_args(); ensure(resultAt + slots.length * 8);
+          const output = new DataView(e.memory.buffer);
+          slots.forEach((value, slot) => {
+            output.setBigInt64(resultAt + slot * 8, BigInt.asIntN(64, value), true);
+            output.setBigInt64(e.pending_high_args() + slot * 8, binding.results[slot] === 7 ? BigInt.asIntN(64, value >> 64n) : 0n, true);
+          });
+          result = slots[0];
+        } else if (binding.results) {
+          result = forwarding?.raw ? rawSlot(returned, binding.results) : typedValue(returned, binding.results);
+          if (binding.results === 7) {
+            new DataView(e.memory.buffer).setBigInt64(e.pending_high_args(), BigInt.asIntN(64, result >> 64n), true);
+            result = BigInt.asIntN(64, result);
+          }
+        }
       } catch (error) { failure = error; failed = true; }
       value = e.resume64(result, failed ? 1 : 0);
       if (failed) {
@@ -230,7 +309,17 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       check(e.error_code());
     }
     check(e.error_code());
-    return raw ? {type: scalarNames[e.result_type()], bits: BigInt.asUintN(e.result_type() === 1 || e.result_type() === 3 ? 32 : 64, value)} : decodedValue(value, e.result_type());
+    if (e.result_count() > 1) {
+      const output = new DataView(e.memory.buffer), at = e.result_base();
+      return Array.from({length: e.result_count()}, (_, slot) => {
+        let bits = output.getBigInt64(at + slot * 8, true);
+        const type = e.result_type(slot);
+        if (type === 7) bits = BigInt.asUintN(64, bits) | (BigInt.asUintN(64, output.getBigInt64(e.result_high_base() + slot * 8, true)) << 64n);
+        return raw ? rawResult(bits, type) : decodedValue(bits, type);
+      });
+    }
+    if (e.result_type(0) === 7) value = BigInt.asUintN(64, value) | (BigInt.asUintN(64, new DataView(e.memory.buffer).getBigInt64(e.result_high_base(), true)) << 64n);
+    return raw ? rawResult(value, e.result_type(0)) : decodedValue(value, e.result_type(0));
   }
   // Run either public scalar values or exact raw slots through the same protected invocation.
   function invokeValues(name, values, raw = false, index = undefined) {
@@ -240,7 +329,10 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       const argumentsAt = Math.ceil((at + n) / 8) * 8;
       ensure(argumentsAt + values.length * 8);
       const view = new DataView(e.memory.buffer);
-      values.forEach((value, index) => view.setBigInt64(argumentsAt + index * 8, value, true));
+      values.forEach((value, index) => {
+        view.setBigInt64(argumentsAt + index * 8, BigInt.asIntN(64, value), true);
+        view.setBigInt64(e.argument_high_base() + index * 8, value > 0n ? BigInt.asIntN(64, value >> 64n) : 0n, true);
+      });
       invoking = true;
       invocationDepth++;
       try {
@@ -258,8 +350,9 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       requireIdle();
       loaded = false;
       generation++;
-      bindings = []; resources = []; exportedResources = new Map();
+      bindings = []; resources = []; exportedResources = new Map(); exportedFunctions = new Map();
       tableFunctions = new Map(); foreignFunctions = new Map();
+      externalValues = [null]; externalIds = new Map();
       const sourceLength = write(source, 4096);
       check(binarySource ? e.load_binary(4096, sourceLength) : e.load(4096, sourceLength));
       const resolved = [], resourceBindings = [];
@@ -279,10 +372,11 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
           if (!state.valid() || state.kind !== kind) throw new Error(`import signature mismatch or stale binding ${module}.${name}`);
           if (kind === 1 || kind === 3) {
             const actual = kind === 1 ? state.pages : state.entries.length;
-            const minimum = kind === 1 ? pages : entries, requiredMaximum = kind === 1 ? maximum : tableMaximum;
+            const minimum = kind === 1 ? pages : e.table_size(target), requiredMaximum = kind === 1 ? maximum : e.table_max(target);
+            if (kind === 3 && state.type !== e.table_type(target)) throw new Error(`import signature mismatch ${module}.${name}`);
             if (actual < minimum || (requiredMaximum !== -1 && (state.maximum === -1 || state.maximum > requiredMaximum))) throw new Error(`import signature mismatch ${module}.${name}`);
             if (kind === 1) {pages = actual; maximum = state.maximum;}
-            else {entries = actual; tableMaximum = state.maximum;}
+            else check(e.bind_guest_table(target, actual, state.maximum));
           } else {
             const globalAt = e.global_info(target);
             if (state.type !== view.getInt32(globalAt + 12, true) || state.mutable !== view.getInt32(globalAt + 8, true)) throw new Error(`import signature mismatch ${module}.${name}`);
@@ -291,15 +385,20 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
           resolved.push(null); continue;
         }
         const params = Array.from({ length: e.function_params(target) }, (_, slot) => e.function_param_type(target, slot));
-        const results = e.function_result_type(target);
+        const results = resultSignature(target);
         if (typeof callback !== 'function') throw new Error(`missing function import ${module}.${name}`);
         const signature = functionTypes.get(callback);
-        if (signature && (!signature.valid() || signature.params.join(',') !== params.join(',') || signature.results !== results)) {
+        if (signature && (!signature.valid() || signature.params.join(',') !== params.join(',') || JSON.stringify(signature.results) !== JSON.stringify(results))) {
           throw new Error(`import signature mismatch or stale binding ${module}.${name}`);
         }
         resolved.push({ module, name, params, results, callback });
       }
       bindings = resolved; resources = resourceBindings;
+      const tableAliases = new Map();
+      for (const binding of resources) if (binding.state.kind === 3) {
+        if (tableAliases.has(binding.state)) e.alias_guest_table(binding.index, tableAliases.get(binding.state));
+        else tableAliases.set(binding.state, binding.index);
+      }
       check(e.prepare_resource_imports(pages, maximum, entries, tableMaximum));
       synchronizeIn();
       if (invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
@@ -329,12 +428,13 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       requireIdle();
       requireLoaded();
       if (invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
-      if (args.length > 64) throw new Error('too many arguments (maximum 64)');
+      if (args.length > 128) throw new Error('too many arguments (maximum 128)');
       const signature = functionSignature(name);
       if (args.length !== signature.params.length) throw new Error('argument mismatch');
       const values = args.map((arg, index) => {
         try { return typedValue(arg, signature.params[index]); }
         catch (error) {
+          if (signature.params[index] >= 5) throw error;
           throw new Error(signature.params[index] === 2 ? 'arguments must be i64 BigInt integers' : signature.params[index] === 1 ? 'arguments must be i32 integers' : `arguments must be ${scalarNames[signature.params[index]]} Numbers`);
         }
       });
@@ -348,18 +448,20 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       const signature = functionSignature(name);
       if (args.length !== signature.params.length) throw new Error('argument mismatch');
       const values = args.map((arg, index) => {
-        if (arg.type !== scalarNames[signature.params[index]] || typeof arg.bits !== 'bigint') throw new Error('raw argument type mismatch');
-        return BigInt.asIntN(64, arg.bits);
+        return rawSlot(arg, signature.params[index]);
       });
       return invokeValues(name, values, true);
     },
     signature(/** @type {string} */ name) {
       const signature = functionSignature(name);
-      return { params: signature.params.map(type => scalarNames[type]), result: scalarNames[signature.results] };
+      return { params: signature.params.map(type => scalarNames[type]), result: Array.isArray(signature.results) ? signature.results.map(type => scalarNames[type]) : scalarNames[signature.results] };
     },
     exportFunction(/** @type {string} */ name) {
       requireLoaded();
       const signature = functionSignature(name);
+      if (exportedFunctions.has(signature.index)) return exportedFunctions.get(signature.index);
+      const existing = tableFunctions.get(signature.index);
+      if (existing?.owner === owner) return existing.callback;
       const currentGeneration = generation;
       const callback = (/** @type {(number | bigint)[]} */ ...args) => {
         if (!loaded || generation !== currentGeneration) throw new Error('stale forwarded function');
@@ -377,6 +479,7 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
           return functionReference(signature.index);
         }
       });
+      exportedFunctions.set(signature.index, callback);
       return callback;
     },
     exportNamespace() {
@@ -397,7 +500,8 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       const n = write(name, at);
       const type = e.global_type(at, n);
       check(e.error_code());
-      const value = e.get_global64(at, n);
+      let value = e.get_global64(at, n);
+      if (type === 7) value = BigInt.asUintN(64, value) | (BigInt.asUintN(64, e.global_high(at, n)) << 64n);
       check(e.error_code());
       return decodedValue(value, type);
     },
@@ -408,7 +512,11 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       const n = write(name, at);
       const type = e.global_type(at, n);
       check(e.error_code());
-      check(e.set_global64(at, n, typedValue(value, type)));
+      const bits = typedValue(value, type);
+      // Foreign function interning uses host scratch; restore the global name afterward.
+      write(name, at);
+      check(e.set_global64(at, n, BigInt.asIntN(64, bits)));
+      if (type === 7) check(e.set_global_high(at, n, BigInt.asIntN(64, bits >> 64n)));
       synchronizeOut();
     },
     readMemory(/** @type {number} */ offset, /** @type {number} */ length) {

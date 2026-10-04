@@ -70,6 +70,7 @@
 		(local.set $meta (call $metadata (local.get $start)))
 		(i32.store (local.get $meta) (i32.const -1))
 		(i32.store offset=4 (local.get $meta) (i32.const -1))
+		(i32.store offset=20 (local.get $meta) (i32.const 0))
 		(i32.store offset=8 (local.get $meta) (i32.load offset=12 (local.get $frame)))
 		(i32.store offset=12 (local.get $meta) (i32.load offset=20 (local.get $frame)))
 		(i32.store offset=16 (local.get $meta) (i32.load offset=24 (local.get $frame)))
@@ -127,39 +128,63 @@
 		)
 	)
 
-	;; Read an optional zero-or-one integer block result declaration, replaying other opening tokens.
-	;; Block parameters and type-use signatures are outside the current subset.
+	;; Collect repeated block result groups, replaying the first body opening.
 	(func $block-result
 		(result i32)
 		(local $open i32)
-		(local $arity i32)
+		(local $shape i32)
 
-		;; A block type declaration is parenthesized; bare instruction atoms begin its body.
-		(if (i32.eq (global.get $kind) (i32.const 1))
-			(then
+		;; Stop at the first token that belongs to the block body.
+		(block $done
+			;; Repeated result groups extend the same ordered shape.
+			(loop $groups
+				(br_if $done (global.get $error))
+				(br_if $done (i32.ne (global.get $kind) (i32.const 1)))
 				(local.set $open (global.get $tok))
 				(call $next)
-				;; Only a result keyword is consumed as a supported block signature.
-				(if (call $is-word (i32.const 17) (i32.const 6))
+				;; Parameter/type-use headers retain a deferred structural signature.
+				(if
+					(i32.or
+						(call $is-word (i32.const 64) (i32.const 5))
+						(call $is-word (i32.const 3856) (i32.const 4))
+					)
 					(then
-						(call $next)
-						;; An empty result group has arity zero; a single integer saves its scalar type.
-						(if (i32.ne (global.get $kind) (i32.const 2))
+						;; Parameter declarations cannot follow result declarations.
+						(if (local.get $shape)
 							(then
-								(local.set $arity (call $value-type))
+								(call $fail (i32.const 1))
+								(return (i32.const 0))
 							)
 						)
-						(call $expect (i32.const 2))
-					)
-					;; This opening parenthesis belongs to an instruction, so restore it for the body parser.
-					(else
 						(global.set $pos (local.get $open))
 						(call $next)
+						(return (i32.sub (i32.const -1) (call $indirect-signature)))
 					)
 				)
+				;; Other declaration heads are left to subsequent control-signature support.
+				(if (i32.eqz (call $is-word (i32.const 17) (i32.const 6)))
+					(then
+						(global.set $pos (local.get $open))
+						(call $next)
+						(br $done)
+					)
+				)
+				(call $next)
+				;; Finish the current group at its close or an earlier error.
+				(block $types-done
+					;; Append every type without imposing singleton result arity.
+					(loop $types
+						(br_if $types-done (global.get $error))
+						(br_if $types-done (i32.eq (global.get $kind) (i32.const 2)))
+						(local.set $shape (call $shape-append (local.get $shape) (call $value-type)))
+						(br $types)
+					)
+				)
+				(call $expect (i32.const 2))
+				(br $groups)
 			)
 		)
-		(local.get $arity)
+		(local.get $shape)
 	)
 
 	;; Resolve a branch label to control depth, ignoring ordinary expression/arm syntax frames.
@@ -267,6 +292,85 @@
 		(local $wide i64)
 
 		(global.set $immediate-length (i32.const 0))
+		;; Function and element-drop references retain forward names in their immediate fields.
+		(if
+			(i32.or (i32.eq (local.get $op) (i32.const 195)) (i32.eq (local.get $op) (i32.const 196)))
+			(then
+				(return (call $function-reference))
+			)
+		)
+		;; Table initialization stores its independent table/element targets in the auxiliary arena.
+		(if (i32.eq (local.get $op) (i32.const 197))
+			(then
+				(return (call $element-immediate))
+			)
+		)
+		;; A null instruction retains its reference type for typed stack validation.
+		(if (i32.eq (local.get $op) (i32.const 193))
+			(then
+				(return (call $reference-type))
+			)
+		)
+		;; Select collects zero or one result type across repeated result groups.
+		(if (i32.eq (local.get $op) (i32.const 47))
+			(then
+				;; Stop at the first operand group, preserving its opening token.
+				(block $done
+					;; Empty result groups contribute no type; a second type is invalid.
+					(loop $results
+						(br_if $done (i32.ne (global.get $kind) (i32.const 1)))
+						(local.set $start (global.get $tok))
+						(call $next)
+						;; Only result annotations belong to the immediate.
+						(if (i32.eqz (call $is-word (i32.const 17) (i32.const 6)))
+							(then
+								(global.set $pos (local.get $start))
+								(call $next)
+								(br $done)
+							)
+						)
+						(call $next)
+						;; Consume types until the group closes, enforcing singleton arity.
+						(block $group-done
+							;; A nonempty annotation contains one supported value type.
+							(loop $types
+								(br_if $group-done (global.get $error))
+								(br_if $group-done (i32.eq (global.get $kind) (i32.const 2)))
+								;; A second type is invalid regardless of grouping.
+								(if (local.get $value)
+									(then
+										(call $fail (i32.const 7))
+										(br $group-done)
+									)
+								)
+								(local.set $value (call $value-type))
+								(br $types)
+							)
+						)
+						(call $expect (i32.const 2))
+						(br_if $done (global.get $error))
+						(br $results)
+					)
+				)
+				(return (local.get $value))
+			)
+		)
+		;; Vector constants preserve their 128 bits in an auxiliary immediate record.
+		(if (i32.eq (local.get $op) (i32.const 202))
+			(then
+				(return (call $vector-literal))
+			)
+		)
+		;; SIMD lane indices and shuffle masks are parsed before folded operands.
+		(if
+			(i32.or
+				(call $vector-lane-count (local.get $op))
+				(i32.eq (local.get $op) (i32.const 335))
+			)
+			(then
+				(return (call $vector-immediate (local.get $op)))
+			)
+		)
 		;; Constants use the existing signed/unsigned i32 literal decoder.
 		(if (i32.eq (local.get $op) (i32.const 1))
 			(then
@@ -337,10 +441,53 @@
 				(return (call $index))
 			)
 		)
+		;; Data instructions accept a deferred segment index or name, including forward references.
+		(if
+			(i32.or (i32.eq (local.get $op) (i32.const 189)) (i32.eq (local.get $op) (i32.const 190)))
+			(then
+				;; Named data references retain their exact source span until module-wide resolution.
+				(if (call $named)
+					(then
+						(local.set $value (global.get $tok))
+						(global.set $immediate-length (global.get $len))
+						(call $next)
+						(return (local.get $value))
+					)
+				)
+				(return (call $index))
+			)
+		)
+		;; Table operations retain optional targets until module-wide validation.
+		(if
+			(i32.or
+				(i32.or (i32.eq (local.get $op) (i32.const 191)) (i32.eq (local.get $op) (i32.const 192)))
+				(i32.and
+					(i32.ge_u (local.get $op) (i32.const 198))
+					(i32.le_u (local.get $op) (i32.const 201))
+				)
+			)
+			(then
+				(return (call $table-immediate (local.get $op)))
+			)
+		)
 		;; Loads and stores accept an optional unsigned offset followed by byte alignment.
 		(if (call $memory-op (local.get $op))
 			(then
-				(return (call $memarg (local.get $op)))
+				(local.set $value (call $memarg (local.get $op)))
+				;; Lane memory operations append one bounded index after their memory attributes.
+				(if (call $vector-memory-lanes (local.get $op))
+					(then
+						(global.set $immediate-length (call $index))
+						;; The selected lane must belong to the operation's declared shape.
+						(if
+							(i32.ge_u (global.get $immediate-length) (call $vector-memory-lanes (local.get $op)))
+							(then
+								(call $fail (i32.const 1))
+							)
+						)
+					)
+				)
+				(return (local.get $value))
 			)
 		)
 		;; Direct and conditional branches resolve their target label in the current control context.

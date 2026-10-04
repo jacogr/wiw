@@ -64,7 +64,7 @@ for (const binary of ['wiw.wasm', 'wiw-opt.wasm']) {
       ...['-', '+', '0x', '0Xff', '1__2', '_1', '1_', '0x_ff', '1.0', '1e2',
         '0xgg', '4294967296', '-2147483649', '-0x80000001', '999999999999999999999999999999'].map(x => moduleFor(x)),
       '(module (func (export "x") (result i32) i32.const 1 i32.const 2))',
-      '(module (func (export "x") (result v128) v128.const i32x4 0 0 0 0))',
+      '(module (func (export "x") (result v128) v128.const i32x4 0 0 0))',
       '(module (memory i64 1))',
       moduleFor('42') + '(module)', moduleFor('4\0')];
     for (const source of malformed) {

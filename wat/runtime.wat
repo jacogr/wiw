@@ -10,6 +10,7 @@
 		(local $f i32)
 		(local $i i32)
 		(local $value i64)
+		(local $high i64)
 
 		(local.set $f (call $function (local.get $index)))
 		(i32.store (local.get $frame) (i32.load offset=8 (local.get $f)))
@@ -22,9 +23,17 @@
 			(loop $locals
 				(br_if $done (i32.eq (local.get $i) (i32.load offset=20 (local.get $f))))
 				(local.set $value (i64.const 0))
+				(local.set $high (i64.const 0))
 				;; Parameter slots receive host/caller values; remaining slots stay zero.
 				(if (i32.lt_u (local.get $i) (i32.load offset=16 (local.get $f)))
 					(then
+						(local.set $high
+							(i64.load
+								(call $slot-high-address
+									(i32.add (local.get $args) (i32.mul (local.get $i) (i32.const 8)))
+								)
+							)
+						)
 						(local.set $value
 							(i64.load (i32.add (local.get $args) (i32.mul (local.get $i) (i32.const 8))))
 						)
@@ -37,6 +46,7 @@
 					)
 					(local.get $value)
 				)
+				(i64.store (call $local-high-address (local.get $frame) (local.get $i)) (local.get $high))
 				(local.set $i (i32.add (local.get $i) (i32.const 1)))
 				(br $locals)
 			)
@@ -66,6 +76,7 @@
 		(i32.store offset=8 (local.get $frame) (local.get $end))
 		(i32.store offset=12 (local.get $frame) (local.get $base))
 		(i32.store offset=16 (local.get $frame) (local.get $arity))
+		(i32.store offset=20 (local.get $frame) (i32.const 0))
 		(global.set $control-count (i32.add (global.get $control-count) (i32.const 1)))
 	)
 
@@ -83,34 +94,12 @@
 		;; Loop labels have zero inputs even if the loop declares a normal-completion result.
 		(if (i32.eq (i32.load (local.get $control)) (i32.const 38))
 			(then
-				(local.set $arity (i32.const 0))
+				(local.set $arity (i32.load offset=20 (local.get $control)))
 			)
 		)
-		;; Copy a branch result before discarding intervening operand values.
-		(if (local.get $arity)
-			(then
-				(local.set $value
-					(i64.load
-						(i32.add
-							(global.get $stack-base)
-							(i32.mul (i32.sub (global.get $sp) (i32.const 1)) (i32.const 8))
-						)
-					)
-				)
-				(i64.store
-					(i32.add
-						(global.get $stack-base)
-						(i32.mul (i32.load offset=12 (local.get $control)) (i32.const 8))
-					)
-					(local.get $value)
-				)
-			)
-		)
-		(global.set $sp
-			(i32.add
-				(i32.load offset=12 (local.get $control))
-				(i32.ne (local.get $arity) (i32.const 0))
-			)
+		(call $runtime-shift
+			(i32.load offset=12 (local.get $control))
+			(call $shape-count (local.get $arity))
 		)
 		(global.set $control-count (local.get $target))
 		(i32.store (local.get $call) (i32.load offset=8 (local.get $control)))
@@ -153,6 +142,10 @@
 			(i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8)))
 			(local.get $value)
 		)
+		(i64.store
+			(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
+			(i64.const 0)
+		)
 		(global.set $sp (i32.add (global.get $sp) (i32.const 1)))
 	)
 
@@ -168,6 +161,11 @@
 		(local $inputs i32)
 		(local $a i64)
 		(local $b i64)
+		(local $c i64)
+		(local $a-high i64)
+		(local $b-high i64)
+		(local $c-high i64)
+		(local $value-high i64)
 		(local $value i64)
 		(local $calls i32)
 		(local $frame i32)
@@ -234,9 +232,8 @@
 					(global.set $sp
 						(i32.add
 							(i32.load offset=8 (local.get $frame))
-							(i32.ne
+							(call $shape-count
 								(i32.load offset=24 (call $function (i32.load offset=12 (local.get $frame))))
-								(i32.const 0)
 							)
 						)
 					)
@@ -272,6 +269,7 @@
 					;; Indirect selection resolves a non-null table entry before entering the shared call path.
 					(if (i32.eq (local.get $op) (i32.const 105))
 						(then
+							(call $use-table (i32.load (call $signature (local.get $callee))))
 							(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
 							(local.set $selector
 								(i32.wrap_i64
@@ -388,8 +386,12 @@
 						(local.get $op)
 						(local.get $pc)
 						(i32.load (local.get $meta))
-						(global.get $sp)
+						(i32.sub (global.get $sp) (call $shape-count (i32.load offset=20 (local.get $meta))))
 						(i32.load offset=4 (local.get $record))
+					)
+					(i32.store offset=20
+						(call $control (i32.sub (global.get $control-count) (i32.const 1)))
+						(i32.load offset=20 (local.get $meta))
 					)
 					;; Runtime control exhaustion ends this invocation before its body executes.
 					(if (global.get $error)
@@ -512,14 +514,31 @@
 						)
 					)
 					(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
+					(local.set $b-high
+						(i64.load
+							(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
+						)
+					)
 					(local.set $b
 						(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
 					)
 					(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
+					(local.set $a-high
+						(i64.load
+							(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
+						)
+					)
 					(local.set $a
 						(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
 					)
 					(call $runtime-value (select (local.get $a) (local.get $b) (local.get $selector)))
+					(i64.store
+						(i32.add
+							(global.get $stack-high-base)
+							(i32.mul (i32.sub (global.get $sp) (i32.const 1)) (i32.const 8))
+						)
+						(select (local.get $a-high) (local.get $b-high) (local.get $selector))
+					)
 					;; Preserve the same capacity/error handling as every other result-producing opcode.
 					(if (global.get $error)
 						(then
@@ -529,13 +548,49 @@
 					(br $dispatch)
 				)
 			)
+			;; Table instructions execute against their validated destination descriptor.
+			(if
+				(i32.or
+					(i32.or (i32.eq (local.get $op) (i32.const 191)) (i32.eq (local.get $op) (i32.const 192)))
+					(i32.and
+						(i32.ge_u (local.get $op) (i32.const 197))
+						(i32.le_u (local.get $op) (i32.const 201))
+					)
+				)
+				(then
+					(call $use-table (i32.load (i32.load offset=4 (local.get $record))))
+				)
+			)
 			(local.set $inputs (call $inputs (local.get $op)))
 			(local.set $a (i64.const 0))
+			(local.set $a-high (i64.const 0))
 			(local.set $b (i64.const 0))
-			;; Binary instructions consume the right operand first to preserve operand order.
-			(if (i32.eq (local.get $inputs) (i32.const 2))
+			(local.set $b-high (i64.const 0))
+			(local.set $c (i64.const 0))
+			(local.set $c-high (i64.const 0))
+			;; Three-input bulk instructions consume their length before value/source and destination.
+			(if (i32.eq (local.get $inputs) (i32.const 3))
 				(then
 					(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
+					(local.set $c-high
+						(i64.load
+							(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
+						)
+					)
+					(local.set $c
+						(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
+					)
+				)
+			)
+			;; Binary and bulk instructions consume their second operand before the first.
+			(if (i32.ge_u (local.get $inputs) (i32.const 2))
+				(then
+					(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
+					(local.set $b-high
+						(i64.load
+							(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
+						)
+					)
 					(local.set $b
 						(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
 					)
@@ -545,6 +600,11 @@
 			(if (local.get $inputs)
 				(then
 					(global.set $sp (i32.sub (global.get $sp) (i32.const 1)))
+					(local.set $a-high
+						(i64.load
+							(i32.add (global.get $stack-high-base) (i32.mul (global.get $sp) (i32.const 8)))
+						)
+					)
 					(local.set $a
 						(i64.load (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
 					)
@@ -579,6 +639,14 @@
 				)
 			)
 			(local.set $value (i64.const 0))
+			(local.set $value-high (i64.const 0))
+			;; Vector constants load both preserved halves from their immediate record.
+			(if (i32.eq (local.get $op) (i32.const 202))
+				(then
+					(local.set $value (i64.load (i32.load offset=4 (local.get $record))))
+					(local.set $value-high (i64.load offset=8 (i32.load offset=4 (local.get $record))))
+				)
+			)
 			;; Constants retrieve their stored immediate rather than computing from operands.
 			(if (i32.eq (local.get $op) (i32.const 1))
 				(then
@@ -630,9 +698,15 @@
 			)
 			;; Wide numeric operations and conversions preserve full-width bits until an explicit wrap.
 			(if
-				(i32.and
-					(i32.ge_u (local.get $op) (i32.const 62))
-					(i32.le_u (local.get $op) (i32.const 93))
+				(i32.or
+					(i32.and
+						(i32.ge_u (local.get $op) (i32.const 62))
+						(i32.le_u (local.get $op) (i32.const 93))
+					)
+					(i32.and
+						(i32.ge_u (local.get $op) (i32.const 174))
+						(i32.le_u (local.get $op) (i32.const 178))
+					)
 				)
 				(then
 					(local.set $value (call $apply64 (local.get $op) (local.get $a) (local.get $b)))
@@ -647,11 +721,39 @@
 							(i32.lt_u (local.get $op) (i32.const 148))
 							(i32.ne (local.get $op) (i32.const 127))
 						)
-						(i32.ge_u (local.get $op) (i32.const 152))
+						(i32.or
+							(i32.and
+								(i32.ge_u (local.get $op) (i32.const 152))
+								(i32.le_u (local.get $op) (i32.const 173))
+							)
+							(i32.and
+								(i32.ge_u (local.get $op) (i32.const 179))
+								(i32.le_u (local.get $op) (i32.const 186))
+							)
+						)
 					)
 				)
 				(then
 					(local.set $value (call $float-apply (local.get $op) (local.get $a) (local.get $b)))
+				)
+			)
+			;; SIMD arithmetic preserves the separately stored upper half.
+			(if (i32.ge_u (local.get $op) (i32.const 203))
+				(then
+					(local.set $value
+						(call $vector-apply
+							(local.get $op)
+							(local.get $a)
+							(local.get $a-high)
+							(local.get $b)
+							(local.get $b-high)
+							(local.get $c)
+							(local.get $c-high)
+							(i32.load offset=4 (local.get $record))
+							(i32.load offset=12 (local.get $record))
+						)
+					)
+					(local.set $value-high (global.get $vector-high))
 				)
 			)
 			;; Local reads fetch the current frame's parameter/local slot.
@@ -667,6 +769,16 @@
 					)
 				)
 			)
+			;; Local reads carry both halves while scalar locals retain a zero high half.
+			(if (i32.eq (local.get $op) (i32.const 33))
+				(then
+					(local.set $value-high
+						(i64.load
+							(call $local-high-address (local.get $frame) (i32.load offset=4 (local.get $record)))
+						)
+					)
+				)
+			)
 			;; Local writes update only this frame; tee also preserves the written value as a result.
 			(if
 				(i32.or (i32.eq (local.get $op) (i32.const 34)) (i32.eq (local.get $op) (i32.const 35)))
@@ -678,6 +790,11 @@
 						)
 						(local.get $a)
 					)
+					(i64.store
+						(call $local-high-address (local.get $frame) (i32.load offset=4 (local.get $record)))
+						(local.get $a-high)
+					)
+					(local.set $value-high (local.get $a-high))
 					(local.set $value (local.get $a))
 				)
 			)
@@ -702,7 +819,7 @@
 						(i32.ge_u (local.get $op) (i32.const 49))
 						(i32.le_u (local.get $op) (i32.const 60))
 					)
-					(call $memory-op (local.get $op))
+					(i32.and (i32.le_u (local.get $op) (i32.const 202)) (call $memory-op (local.get $op)))
 				)
 				(then
 					(local.set $value
@@ -712,6 +829,129 @@
 							(local.get $b)
 							(i32.load offset=4 (local.get $record))
 						)
+					)
+				)
+			)
+			;; Global vector slots carry a parallel persistent high half.
+			(if (i32.eq (local.get $op) (i32.const 49))
+				(then
+					(local.set $value-high
+						(i64.load offset=72 (call $global-record (i32.load offset=4 (local.get $record))))
+					)
+				)
+			)
+			;; Global writes retain the complete vector value after ordinary mutability checks.
+			(if (i32.eq (local.get $op) (i32.const 50))
+				(then
+					(i64.store offset=72
+						(call $global-record (i32.load offset=4 (local.get $record)))
+						(local.get $a-high)
+					)
+				)
+			)
+			;; Bulk operations check both ranges before writes and preserve memmove overlap semantics.
+			(if
+				(i32.and
+					(i32.ge_u (local.get $op) (i32.const 187))
+					(i32.le_u (local.get $op) (i32.const 188))
+				)
+				(then
+					(call $bulk-memory
+						(local.get $op)
+						(i32.wrap_i64 (local.get $a))
+						(i32.wrap_i64 (local.get $b))
+						(i32.wrap_i64 (local.get $c))
+					)
+				)
+			)
+			;; Data lifecycle instructions use the same three-input ordering as copy/fill.
+			(if
+				(i32.or (i32.eq (local.get $op) (i32.const 189)) (i32.eq (local.get $op) (i32.const 190)))
+				(then
+					(call $data-use
+						(local.get $op)
+						(i32.load offset=4 (local.get $record))
+						(i32.wrap_i64 (local.get $a))
+						(i32.wrap_i64 (local.get $b))
+						(i32.wrap_i64 (local.get $c))
+					)
+				)
+			)
+			;; Table access translates between nullable slots and persistent table entry indices.
+			(if
+				(i32.or (i32.eq (local.get $op) (i32.const 198)) (i32.eq (local.get $op) (i32.const 199)))
+				(then
+					(local.set $value
+						(call $table-access (local.get $op) (i32.wrap_i64 (local.get $a)) (local.get $b))
+					)
+				)
+			)
+			;; Function values use index plus one, keeping null distinct from function zero.
+			(if (i32.eq (local.get $op) (i32.const 195))
+				(then
+					(local.set $value
+						(i64.extend_i32_u (i32.add (i32.load offset=4 (local.get $record)) (i32.const 1)))
+					)
+				)
+			)
+			;; Dropping a segment is idempotent and independent of the table's existence.
+			(if (i32.eq (local.get $op) (i32.const 196))
+				(then
+					(i32.store offset=44
+						(call $element-record (i32.load offset=4 (local.get $record)))
+						(i32.const 0)
+					)
+				)
+			)
+			;; Initialize table ranges from the passive segment's remaining live entries.
+			(if (i32.eq (local.get $op) (i32.const 197))
+				(then
+					(call $element-init
+						(i32.load offset=8 (i32.load offset=4 (local.get $record)))
+						(i32.wrap_i64 (local.get $a))
+						(i32.wrap_i64 (local.get $b))
+						(i32.wrap_i64 (local.get $c))
+					)
+				)
+			)
+			;; Both reference types encode null as zero; a null test produces an ordinary i32.
+			(if (i32.eq (local.get $op) (i32.const 194))
+				(then
+					(local.set $value (i64.extend_i32_u (i64.eqz (local.get $a))))
+				)
+			)
+			;; Size observes the current imported or owned table without touching its entries.
+			(if (i32.eq (local.get $op) (i32.const 191))
+				(then
+					(local.set $value (i64.extend_i32_u (global.get $guest-table-size)))
+				)
+			)
+			;; Copy moves complete function references after both unsigned ranges pass bounds checks.
+			(if (i32.eq (local.get $op) (i32.const 192))
+				(then
+					(call $table-copy
+						(i32.load offset=8 (i32.load offset=4 (local.get $record)))
+						(i32.wrap_i64 (local.get $a))
+						(i32.wrap_i64 (local.get $b))
+						(i32.wrap_i64 (local.get $c))
+					)
+				)
+			)
+			;; Growth returns the previous size or -1 and initializes only newly allocated entries.
+			(if (i32.eq (local.get $op) (i32.const 200))
+				(then
+					(local.set $value
+						(i64.extend_i32_s (call $table-grow (local.get $a) (i32.wrap_i64 (local.get $b))))
+					)
+				)
+			)
+			;; Fill validates its complete range before publishing reference writes.
+			(if (i32.eq (local.get $op) (i32.const 201))
+				(then
+					(call $table-fill
+						(i32.wrap_i64 (local.get $a))
+						(local.get $b)
+						(i32.wrap_i64 (local.get $c))
 					)
 				)
 			)
@@ -725,6 +965,13 @@
 			(if (call $outputs (local.get $op))
 				(then
 					(call $runtime-value (local.get $value))
+					(i64.store
+						(i32.add
+							(global.get $stack-high-base)
+							(i32.mul (i32.sub (global.get $sp) (i32.const 1)) (i32.const 8))
+						)
+						(local.get $value-high)
+					)
 				)
 			)
 			;; A failed operand allocation ends the invocation without entering another instruction.
@@ -736,4 +983,48 @@
 			(br $dispatch)
 		)
 		(i64.const 0)
+	)
+
+	;; Preserve the top vector while discarding operands below it down to a target floor.
+	(func $runtime-shift
+		(param $base i32)
+		(param $count i32)
+		(local $i i32)
+		(local $source i32)
+
+		(local.set $source (i32.sub (global.get $sp) (local.get $count)))
+		;; Values move toward lower addresses, so forward scalar copying preserves overlap.
+		(block $done
+			;; Copy every result, including references and raw floating-point bits.
+			(loop $values
+				(br_if $done (i32.eq (local.get $i) (local.get $count)))
+				(i64.store
+					(i32.add
+						(global.get $stack-base)
+						(i32.mul (i32.add (local.get $base) (local.get $i)) (i32.const 8))
+					)
+					(i64.load
+						(i32.add
+							(global.get $stack-base)
+							(i32.mul (i32.add (local.get $source) (local.get $i)) (i32.const 8))
+						)
+					)
+				)
+				(i64.store
+					(i32.add
+						(global.get $stack-high-base)
+						(i32.mul (i32.add (local.get $base) (local.get $i)) (i32.const 8))
+					)
+					(i64.load
+						(i32.add
+							(global.get $stack-high-base)
+							(i32.mul (i32.add (local.get $source) (local.get $i)) (i32.const 8))
+						)
+					)
+				)
+				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br $values)
+			)
+		)
+		(global.set $sp (i32.add (local.get $base) (local.get $count)))
 	)

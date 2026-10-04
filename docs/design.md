@@ -1,6 +1,7 @@
 # wiw design
 
-wiw implements a WebAssembly 1.0 interpreter in WAT. m4 assembles readable
+wiw implements an interpreter in WAT, advancing from its completed 1.0 baseline
+toward WebAssembly 2.0. m4 assembles readable
 source modules; wat2wasm builds the bootstrap and wasm-opt optimizes it. Node
 transports bytes, binds synchronous callbacks and coordinates shared resources.
 The engine parses and validates guest text and binary modules itself.
@@ -13,9 +14,13 @@ expressions into 16-byte instruction records. Names and forward references resol
 after signatures are known. Explicit types retain source-order indices; implicit
 function signatures are structurally interned. Separate indirect signatures do
 not change the declared type namespace. `scripts/opcodes.tsv` defines numeric
-operations and binary opcode mappings; awk generates lookup helpers.
+operations and binary opcode mappings; awk generates lookup helpers. Each opcode
+uses two metadata bytes: operand/result counts occupy the high/low nibbles of
+the first, and operand/result types the second. Opcode one starts at byte 3074;
+256 records fit below the keyword region at 3840. Generated count/type fields
+are limited to four bits.
 
-Validation models operands and structured scopes for all four scalar types.
+Validation models operands and structured scopes for four numeric and two reference types.
 Functions and blocks return zero or one value; blocks have no parameters.
 Unreachable regions have polymorphic operand floors, while concrete dead-code
 values and references still undergo type checks. Named labels shadow outer
@@ -28,7 +33,9 @@ checks section order/duplicates, unsigned/signed LEB widths and terminal bits,
 UTF-8 names, limits, reserved bytes, indices, locals and instructions. Legal
 nonminimal LEB encodings are accepted. It renders a bounded ASCII WAT module and
 calls the same text loader. Float constants render exact hex values or NaN bits.
-Binary input reserves 1 MiB decoded text plus a separate function-type map;
+Sign-extension opcodes and `0xfc` saturating-conversion subopcodes feed the same
+numeric dispatch. Prefix subopcodes are bounded before mapping, and syntax-only
+`then` has no binary encoding. Binary input reserves 1 MiB decoded text plus a separate function-type map;
 capacity exhaustion is distinct from malformed encoding. Guest binaries are
 never given to native WebAssembly compilation.
 
@@ -55,6 +62,112 @@ to f32/f64, nearest ties to even, including subnormals. Float-to-integer operati
 check NaN and range before native conversions. `invokeRaw` and typed forwarding
 retain signaling NaNs; plain Number callbacks have JavaScript's Number boundary.
 
+## Bulk memory and data lifetime
+
+Copy, fill and initialization consume destination, source/value and length as
+three i32 operands. Every range uses unsigned 64-bit arithmetic before the first
+write, including zero-length endpoints. Copy preserves memmove semantics with
+backward copying for later destinations and forward copying otherwise. Fill
+repeats the low byte. Helpers process eight-byte slots and a bounded byte tail
+using ordinary scalar instructions, so the engine remains self-hosting without
+native bulk instructions. Each bulk opcode consumes one guest fuel unit; its
+internal copying is bounded by guest-memory and decoded-data capacities.
+
+Data records are 48 bytes. The existing active target/offset fields remain at
+0..28; name pointer/length are at 32/36, passive mode at 40, and remaining runtime
+length at 44. Active and passive declarations share source-order indices. Names
+and forward references resolve before validation and initialization. Passive
+segments do not require memory at instantiation or participate in shared-resource
+bounds checks. Active segments have zero runtime length after initialization.
+`data.drop` is idempotent; `memory.init` checks the remaining length and writes
+without consuming passive bytes. Lifetime belongs to each instance even when
+its memory is shared. Reload resets it.
+
+Binary data flags 0/1/2 describe implicit active, passive and explicit active
+segments. Data-count section 12 precedes code despite its numeric ID. Its presence
+is stored separately from its unsigned count, including 0xffffffff. Counts must
+match actual data, and code using init/drop requires the section. Active binary
+element flags 0/2 accept legal padded LEB tags and explicit table indices.
+
+## Reference values
+
+Value IDs 5/6 represent funcref/externref in signatures, locals, globals and block
+results. Their eight-byte slots use zero for null. A non-null function reference
+stores its local function index plus one. External values use per-instance host
+handles, retained until reload with a limit of 65,535 non-null handles. JavaScript
+objects remain opaque; undefined, promises and thenable objects are valid
+non-null external values. Signed zero remains distinguishable in numeric
+external values. Reference locals and null global initializers begin at zero.
+
+`ref.null` retains its func/extern heap type; `ref.is_null` accepts only references,
+including unknown dead operands, and produces i32. Typed select declares exactly
+one result type and consumes matching values. Untyped select rejects concrete
+references even in dead code. Binary reference bytes and typed-select singleton
+vectors feed the same parser and validator. No native reference instructions
+are required in the bootstrap, preserving self-hosting.
+
+Node forwarding translates reference values between local handles and function
+indices while numeric fields retain exact raw bits, including mixed signatures.
+Reference `invokeRaw` descriptors use `{type, value}` rather than exposing internal
+indices; numeric descriptors retain `{type, bits}`. Shared reference globals
+synchronize opaque values rather than instance-local indices. Exported function
+callbacks retain stable identity per function/load, while ordinary forwarded
+exports still traverse the guarded invocation path. Stale generations remain
+invalid. Externref tables remain outside the current single-funcref-table implementation.
+
+## Function declarations and element lifetime
+
+`ref.func` produces a function index plus one and requires that its target occur
+in a function export, global initializer or element segment. Imports, start
+references, direct calls and function bodies do not declare a target. A 64-byte
+bitmap at static bytes 3920..3983 records the 512 possible declarations and is
+cleared per load. All names resolve before every body, including unreachable
+code, is validated. Global ref.func initializers retain value/name length/source
+and a presence flag at record offsets 44/48/52/56 until forward resolution.
+
+Element descriptors are 64 bytes. Fields 0..28 retain active offset, entry range,
+source, table target and imported-offset metadata. Name pointer/length are at
+32/36, mode at 40 (active/passive/declarative = 0/1/2), live length at 44 and
+reference type at 48. Entries are 16 bytes: function/global target, name length,
+source and initializer kind. Function references resolve and declare their
+targets; nulls preserve -1 in table storage; imported immutable globals are read
+after binding. Both index lists and typed expression lists support forward
+references, with optional item wrappers around flat or folded expressions.
+
+Passive/declarative elements need no table to load. Only active segments take
+part in linked initialization or write table entries. Active and
+declarative live lengths are zero; passive segments retain their length until
+`elem.drop`, which is idempotent. `table.init` checks complete unsigned table and
+live segment ranges before writes, including zero-length endpoints, and never
+consumes the source. Lifetime belongs to the instance even when its table is
+shared. Table and segment namespaces resolve independently, including in dead
+code; their reference types must agree even for empty ranges. Binary flags 0..7
+render all modes into this parser, rejecting invalid flags and element type bytes.
+
+`table.get` and `table.set` validate i32 indices and function-reference values,
+translate between -1 table nulls and zero reference slots, and preserve foreign
+function identity through the existing Node sharing protocol. Bounds failures
+use status 30. Explicit indirect-call table targets occupy the otherwise unused
+name fields of indirect signature records and resolve separately from type uses.
+Their binary table indices accept legal padded unsigned LEBs.
+
+## Table copy and size
+
+`table.size` reads the current size of the sole funcref table. `table.copy`
+consumes destination, source and length as i32 operands. Both unsigned ranges
+are checked in i64 before writes, including zero-length endpoints. Later
+destinations copy backward, so overlapping ranges preserve reference identity
+and null entries. Bounds failures use status 30. The helper uses ordinary scalar
+loads/stores, with one guest fuel unit per opcode and at most 4,096 iterations.
+
+Optional numeric/named targets resolve after all declarations, independently
+for destination and source and even in unreachable code. Four auxiliary slots
+retain the two index/name pairs per operation; these share the bounded branch
+vector arena. Omitted targets select table zero. Explicit copy syntax requires
+both indices. Binary subopcodes 14/16 render indices into the same parser,
+accepting legal padded unsigned LEBs. Imported copies synchronize through the
+existing shared-resource protocol, including trap paths.
+
 ## Linking and initialization
 
 MVP function, memory, global and table imports support module-level and inline
@@ -72,18 +185,21 @@ reentry cycles. Reload makes old function/resource generations stale.
 Concurrent invocation of a shared resource is outside this synchronous protocol.
 
 Standalone load initializes storage directly. A load with resource imports defers
-initialization until storage is prepared and bindings are installed. All active
-data and element bounds are checked before any linked writes. Segment failures
-leave shared resources unchanged. Successful initialization commits segments,
-then runs the optional zero-argument, zero-result start once. A trapping start
-leaves its completed writes observable, including table references to unexported
-functions, while public invocation of the failed instance remains unavailable.
+initialization until storage is prepared and bindings are installed. Active elements
+then data initialize in segment order. Each segment checks its complete range
+before writing; earlier completed segments persist if a later segment traps,
+as required by 2.0. The optional start runs only after all segments succeed.
+A trapping start also preserves completed writes and references to unexported
+functions; public invocation of the failed instance remains unavailable.
 Start state is 0 completed/absent, 1 pending, 2 running/suspended or 3 failed.
 
 Imports suspend through pending argument slots and resume with a value or host
 failure. Callbacks must be synchronous. They can inspect/mutate resources and
 invoke another instance; active-instance invoke/reload is rejected. Nested host
-forwarding is bounded at 128 invocations. The WAT engine has no native Wasm imports.
+forwarding is bounded at 128 invocations. The WAT engine has no native Wasm imports. The bootstrap now uses native
+sign-extension and nontrapping float-conversion instructions; Binaryen receives
+explicit feature flags. These instructions are also supported by guest dispatch,
+so the expanded engine remains self-hosting.
 
 ## Host ABI
 
@@ -104,9 +220,11 @@ get_global64/set_global64 and global_type(namePtr,nameLen). Arguments and suspen
 import arguments use little-endian eight-byte slots; i32 values are canonicalized
 from their low 32 bits, and f32 values are zero-extended raw IEEE bits. f64
 values occupy all 64 raw bits. invoke64/resume64/get_global64 return i64 even for an i32
-guest result. result_type() and function_param_type(index,slot)/
-function_result_type(index) expose scalar types (0 void, 1 i32, 2 i64, 3 f32, 4 f64).
-result_count()/function_results() retain their zero-or-one count contract.
+guest result. result_type(slot) and function_param_type(index,slot)/
+function_result_type(index,slot) expose value types (0 void, 1 i32, 2 i64, 3 f32, 4 f64,
+5 funcref, 6 externref, 7 v128).
+result_count()/function_results(index) return the complete declared result count.
+result_base() exposes result slots in declaration order.
 The original invoke uses four-byte i32 arguments; invoke/get_global/set_global/
 resume reject wide values with status 23. Rejected narrow resume preserves the
 pending call for resume64 or failure cleanup. The Node wrapper uses the wide ABI.
@@ -124,7 +242,7 @@ Execution errors point to the original opcode, including errors inside a callee.
 
 The wrapper exposes load(source,imports), loadBinary(bytes,imports), invoke(name,...args) and setFuel(limit). It
 validates host Number/BigInt types and returns a signed i32 Number, signed i64
-BigInt, f32/f64 Number or undefined for void. It also
+BigInt, f32/f64 Number, opaque reference values or undefined for void. It also
 provides getGlobal/setGlobal for exported globals and readMemory/writeMemory for
 bounded access to the sole guest memory. Read snapshots survive native growth;
 these inspection helpers do not require the memory itself to be exported.
@@ -136,14 +254,15 @@ The binary loader `load_binary(ptr,len)` shares load's invalidation contract.
 `invoke_index64(index,argsPtr,count)` is a trusted adapter entry point for table
 functions without public exports. Export/resource introspection uses
 `exports_count`, `export_info`, `global_info`, `function_info`, `memory_min`,
-`memory_max`, `table_size`, `table_max` and `table_base`. `foreign_function`
+`memory_max`, and indexed `table_size`, `table_max`, `table_type` and `table_base`. `foreign_function`
 creates a typed suspended-call descriptor for a function held by another
 instance. These helpers do not expose callable guest instructions.
 
 `prepare_resource_imports(pages,max,entries,tableMax)` reserves linked storage
-before binding. `segments_ready` distinguishes a failed start after committed
-initialization from a segment failure before writes. The Node wrapper uses this
-state to preserve shared effects and table references after a start trap.
+before binding. `bind_guest_table(index,size,max)` installs compatible actual table
+limits and `alias_guest_table(index,canonical)` shares repeated imports locally.
+`segments_ready` marks bound resources whose segment effects and function references
+must survive a later initialization or start trap.
 
 ## Records and arenas
 
@@ -162,31 +281,35 @@ relative to the aligned end of the loaded source:
 
 | Region | Offset | Reserved bytes |
 | --- | ---: | ---: |
-| code | 0 | 524,288 |
-| frame | 524,288 | 8,192 |
-| stack | 532,480 | 32,768 |
-| function | 565,248 | 16,384 |
-| local name | 581,632 | 4,456,448 |
-| export | 5,038,080 | 16,384 |
-| call | 5,054,464 | 4,472,832 |
-| metadata | 9,527,296 | 1,048,576 |
-| control | 10,575,872 | 131,072 |
-| table | 10,706,944 | 131,072 |
-| global | 10,838,016 | 8,192 |
-| segment | 10,846,208 | 4,096 |
-| data | 10,850,304 | 65,536 |
-| import | 10,915,840 | 32,768 |
-| local type | 10,948,608 | 557,056 |
-| type stack | 11,505,664 | 4,096 |
-| argument | 11,509,760 | 512 |
-| signature | 11,510,272 | 98,304 |
-| function type | 11,608,576 | 16,384 |
-| guest table | 11,624,960 | 16,384 |
-| element | 11,641,344 | 4,096 |
-| element entry | 11,645,440 | 65,536 |
-| fp a | 11,710,976 | 4,096 |
-| fp b | 11,715,072 | 4,096 |
-| fp t | 11,719,168 | 4,096 |
+| code | 0 | 1,048,576 |
+| frame | 1,048,576 | 8,192 |
+| stack | 1,056,768 | 32,768 |
+| function | 1,089,536 | 16,384 |
+| local name | 1,105,920 | 4,456,448 |
+| export | 5,562,368 | 16,384 |
+| call | 5,578,752 | 4,472,832 |
+| metadata | 10,051,584 | 2,097,152 |
+| control | 12,148,736 | 131,072 |
+| table | 12,279,808 | 131,072 |
+| global | 12,410,880 | 10,240 |
+| segment | 12,421,120 | 6,144 |
+| data | 12,427,264 | 65,536 |
+| import | 12,492,800 | 32,768 |
+| local type | 12,525,568 | 557,056 |
+| type stack | 13,082,624 | 4,096 |
+| argument | 13,086,720 | 1,024 |
+| signature | 13,087,744 | 286,720 |
+| function type | 13,374,464 | 16,384 |
+| guest table | 13,390,848 | 526,336 |
+| element | 13,917,184 | 8,192 |
+| element entry | 13,925,376 | 65,536 |
+| result shape | 13,990,912 | 540,672 |
+| stack high | 14,531,584 | 32,768 |
+| call high | 14,564,352 | 4,456,448 |
+| argument high | 19,020,800 | 1,024 |
+| fp a | 19,021,824 | 4,096 |
+| fp b | 19,025,920 | 4,096 |
+| fp t | 19,030,016 | 4,096 |
 
 Guest memory begins on the next page boundary after these arenas. Host scratch
 follows logical guest memory and moves after growth; hosts must re-query
@@ -195,11 +318,11 @@ common loader's arenas. The loader clears optional metadata on every reload.
 
 ## Bounds and failures
 
-Capacities: 512 functions/exports, 64 parameters, 1,088 combined local slots,
-32,768 instructions, 512 calls, 4,096 operands/controls, 256 syntax frames,
-32,768 branch-table entries, 128 globals/data/element segments, 64 KiB decoded
-data/names, 1,024 memory pages, 4,096 table entries/element references, 256 explicit
-types, 768 declared/interned types, 256 indirect signatures, 1,024 imports,
+Capacities: 512 functions/exports, 128 parameters, 1,088 combined local slots,
+65,536 instructions, 512 calls, 4,096 operands/controls, 256 syntax frames,
+32,768 auxiliary immediate slots, 128 globals/data/element segments, 64 KiB decoded
+data/names, 2,048 memory pages, 4,096 table entries/element references, 256 explicit
+types, 768 declared/interned types, 1,024 indirect/control signatures, 1,024 imports,
 8,192 bytes per float literal and 1 MiB binary text expansion. Memory maxima
 remain language-level limits; allocating/growing beyond engine bounds fails.
 These are implementation limits rather than changes to WebAssembly validation.
@@ -212,7 +335,7 @@ limits 15; immutable global write 16; export kind mismatch 18; invalid alignment
 19; host import failure 20; invalid resume 21; suspended invocation reentry 22; narrow host ABI type mismatch 23;
 undefined/null element 24; indirect signature mismatch 25; table limits 26;
 element initialization bounds 27; invalid float-to-integer conversion 28;
-instance awaiting initialization or failed start 29.
+instance awaiting initialization or failed start 29; table instruction bounds 30.
 Status 17 is unused. These capacities are implementation limits, not WebAssembly
 language restrictions, and remain explicit bounds on self-hosted programs.
 
@@ -221,11 +344,13 @@ language restrictions, and remain explicit bounds on self-hosted programs.
 `make check` runs both bootstrap builds through regressions, negative/capacity
 cases and differential native-Wasm oracles. Harness tests check exact scalar
 bits, trap classes, isolated negative assertions, linking, coverage accounting
-and revision/hash verification. The official `wg-1.0` submodule at
-`977f97014c962f7bd1291fcc6d28b41a924882bf` contributes all 73 core files:
-19,270 commands per build, zero skips and zero capacity exclusions. Expected
-per-file totals are frozen in `test/spec/capabilities.json`. This completion
-applies to that pin and the documented engine bounds, not later proposals.
+and revision/hash verification. The official `wg-2.0` submodule at
+`fffc6e12fa454e475455a7b58d3b5dc343980c10` contributes all 148 core files,
+including SIMD. All 148 files / 54,006 commands pass per build with zero
+skips and failures in CI and the independent full audit. Per-file counts are
+frozen in `test/spec/capabilities.json`; `test/spec/progress.json` records the
+matching successful reports. The completed previous `wg-1.0` milestone passed
+all 73 files and 19,270 commands per build.
 
 Self-hosting parses expanded `build/wiw.wat` inside a running interpreter,
 then executes scalar, control, memory, table, import and start fixtures. A second
@@ -241,3 +366,59 @@ Use tabs and separate declarations/statements. Immediately precede every functio
 with a purpose comment, and every if, else, block and loop with its intent.
 Describe termination and named exits so readers can follow the execution flow.
 Keep these comments current when behavior changes.
+
+Reference tables use 32 independent descriptors followed by fixed 4096-entry
+arenas. Descriptor fields 0/4 are name pointer/length, 8/12 current size/maximum,
+16 reference type, and 20 optional canonical import index plus one. Table entries
+store the nullable value slot minus one for both reference types. Host synchronization
+translates opaque external handles and foreign function indices per instance.
+`table.grow` returns the old size or -1 within declared and storage limits;
+`table.fill` checks its entire unsigned range before writing. Shared import aliases
+observe writes and growth immediately within a guest invocation.
+
+Multivalue shapes keep void as zero and singletons as scalar type IDs. Longer
+vectors use 132-byte records (count plus up to 128 ordered type bytes), with
+4096 records in a separate arena. Signature records are 160 bytes, including
+128 parameter type bytes. Structural comparisons inspect vector types rather
+than comparing their arena pointers. Deferred control type uses share the bounded
+1024-record anonymous-signature space. Normalized control metadata offset 20
+stores the parameter shape; runtime and validation controls retain it for loop
+branches and implicit else paths. Branches shift complete result vectors to the
+saved floor, and validation checks each br_table target against the same actual
+operand types, preserving unreachable polymorphism.
+
+The wide ABI exposes indexed result types and result_base for returned vectors.
+Multivalue import adapters write their complete vector at pending_args before
+resume64; singleton callers retain the existing compatibility value argument.
+Node forwarding translates each result independently, retaining reference identity
+and raw floating-point payloads. Public multivalue invocations return arrays.
+
+
+## SIMD storage and dispatch
+
+Vector type 7 uses a low 64-bit slot and a parallel high 64-bit slot. Operand,
+argument and call-frame arenas have matching high-half storage; local reads,
+selects, control branches, calls and returns copy both halves. Global records
+are 80 bytes, with initial/current high halves at offsets 64/72. Scalar high
+halves are zero. Vector constants pack integer or exact IEEE float lanes into
+16 auxiliary bytes.
+
+The trusted host ABI exposes `argument_high_base`, `pending_high_args` and
+`result_high_base`. Hosts write vector high halves before `invoke64` or
+`resume64`, then combine both returned slots. `global_high`/`set_global_high`
+provide the corresponding named-global access. Node exposes vectors as unsigned
+128-bit BigInt patterns, including raw calls, callbacks and shared globals.
+
+SIMD mnemonic matching uses generated byte comparisons after checking token
+length, keeping the fixed keyword buffer below guest source. SIMD stack effects
+and binary names are generated from the same opcode table. The binary decoder
+reads lane indices, shuffle masks, memargs and 16-byte constants into ordinary
+WAT syntax. Normalized memory-lane instructions store their offset at field 4
+and lane index at field 12; field 8 retains the source offset.
+
+`vector-lane`, `vector-signed`, `vector-insert` and `vector-clamp` implement
+packing, signed extraction and narrow saturation. Runtime SIMD instructions use
+scalar i64/f32/f64 operations. Widening, narrowing, pairwise sums, dot products,
+shuffles and conversions preserve lane order. Vector memory accesses validate
+the complete unsigned range before any native read or write, including lane
+stores. No native SIMD instruction or guest compilation is needed for execution.
