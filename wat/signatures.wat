@@ -6,7 +6,7 @@
 		(i32.add (global.get $signature-base) (i32.mul (local.get $index) (i32.const 544)))
 	)
 
-	;; Locate one function's deferred type-use metadata, keeping its existing 32-byte function record unchanged.
+	;; Locate deferred function type metadata; offset 20 retains a completed non-null reference type.
 	(func $function-type
 		(param $index i32)
 		(result i32)
@@ -399,11 +399,7 @@
 				(return
 					(call $heap-type-subtype
 						(call $reference-heap (call $function-reference-type (local.get $function)))
-						(call $type-target
-							(i32.load offset=16 (local.get $signature))
-							(i32.load offset=20 (local.get $signature))
-							(i32.load offset=24 (local.get $signature))
-						)
+						(i32.load offset=16 (local.get $signature))
 					)
 				)
 			)
@@ -499,6 +495,7 @@
 		(local $count i32)
 		(local $old i32)
 		(local $to i32)
+		(local $resolved i32)
 
 		;; Finish once all deferred function type uses have been applied.
 		(block $functions-done
@@ -601,15 +598,14 @@
 				(if (i32.and (i32.load offset=28 (local.get $s)) (i32.const 1))
 					(then
 						(global.set $tok (i32.load offset=24 (local.get $s)))
-						(local.set $t
-							(call $signature
-								(call $type-target
-									(i32.load offset=16 (local.get $s))
-									(i32.load offset=20 (local.get $s))
-									(i32.load offset=24 (local.get $s))
-								)
+						(local.set $resolved
+							(call $type-target
+								(i32.load offset=16 (local.get $s))
+								(i32.load offset=20 (local.get $s))
+								(i32.load offset=24 (local.get $s))
 							)
 						)
+						(local.set $t (call $signature (local.get $resolved)))
 						(br_if $calls-done (global.get $error))
 						;; Nonempty inline vectors must describe the entire referenced signature.
 						(if (i32.or (i32.load offset=8 (local.get $s)) (i32.load offset=12 (local.get $s)))
@@ -672,6 +668,9 @@
 								)
 							)
 						)
+						;; Retain the resolved expected heap index and its original diagnostic offset.
+						(i32.store offset=16 (local.get $s) (local.get $resolved))
+						(i32.store offset=20 (local.get $s) (i32.const 0))
 					)
 				)
 				(local.set $i (i32.add (local.get $i) (i32.const 1)))

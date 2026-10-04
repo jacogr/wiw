@@ -661,6 +661,7 @@
 		(call $validate-heap-types)
 		(call $intern-function-types)
 		(call $resolve-signatures)
+		(global.set $function-types-resolved (i32.eqz (global.get $error)))
 		(call $resolve-tags)
 		(call $resolve-control-signatures)
 		(call $resolve-elements)

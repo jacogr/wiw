@@ -1479,8 +1479,21 @@
 		(result i32)
 		(local $i i32)
 		(local $use i32)
+		(local $type i32)
 
 		(local.set $use (call $function-type (local.get $function)))
+		;; Parsing may inspect unfinished declarations; only completed module types can use cached values.
+		(if (global.get $function-types-resolved)
+			(then
+				(local.set $type (i32.load offset=20 (local.get $use)))
+				;; A nonzero reference type belongs to this declaration in the current load generation.
+				(if (local.get $type)
+					(then
+						(return (local.get $type))
+					)
+				)
+			)
+		)
 		;; An explicit function type use preserves its declared heap type.
 		(if (i32.load offset=12 (local.get $use))
 			(then
@@ -1511,7 +1524,20 @@
 				)
 			)
 		)
-		(call $intern-reference-type (local.get $i) (i32.const 0) (global.get $tok) (i32.const 1))
+		(local.set $type
+			(call $intern-reference-type (local.get $i) (i32.const 0) (global.get $tok) (i32.const 1))
+		)
+		;; Cache matched completed types; parsing and unmatched foreign signatures remain uncached.
+		(if
+			(i32.and
+				(i32.and (global.get $function-types-resolved) (i32.eqz (global.get $error)))
+				(i32.lt_u (local.get $i) (global.get $signature-count))
+			)
+			(then
+				(i32.store offset=20 (local.get $use) (local.get $type))
+			)
+		)
+		(local.get $type)
 	)
 
 	;; Return a function local's abstract initialization level slot.

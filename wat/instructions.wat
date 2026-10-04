@@ -33,6 +33,7 @@
 		(global.set $code-count (i32.const 0))
 		(global.set $depth (i32.const 0))
 		(global.set $function-count (i32.const 0))
+		(global.set $function-types-resolved (i32.const 0))
 		(global.set $export-count (i32.const 0))
 		(global.set $table-count (i32.const 0))
 		(global.set $global-count (i32.const 0))

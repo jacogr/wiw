@@ -10,6 +10,9 @@ const samples = Number(process.env.BENCH_SAMPLES ?? 5);
 assert.ok(Number.isSafeInteger(iterations) && iterations > 0 && iterations <= 100000);
 assert.ok(Number.isSafeInteger(samples) && samples > 0 && samples <= 20);
 const common = `(type $t (func (param i64) (result i64)))`;
+// Distinct preceding types expose repeated named/implicit type lookup costs.
+const precedingTypes = Array.from({length:32}, (_,index) =>
+  `(type (func (param ${'i32 '.repeat(index+1)}) (result i32)))`).join('');
 const cases = {
   direct: `(module ${common}
     (func $run (export "run") (type $t)
@@ -17,6 +20,13 @@ const cases = {
         (else (return_call $run (i64.sub (local.get 0) (i64.const 1)))))))`,
   indirect: `(module ${common} (table funcref (elem $run))
     (func $run (export "run") (type $t)
+      (if (result i64) (i64.eqz (local.get 0)) (then (i64.const 0))
+        (else (return_call_indirect (type $t) (i64.sub (local.get 0) (i64.const 1)) (i32.const 0))))))`,
+  indirectTypes: `(module ${precedingTypes} ${common} (table funcref (elem $first $second))
+    (func $first (export "run") (param i64) (result i64)
+      (if (result i64) (i64.eqz (local.get 0)) (then (i64.const 0))
+        (else (return_call_indirect (type $t) (i64.sub (local.get 0) (i64.const 1)) (i32.const 1)))))
+    (func $second (param i64) (result i64)
       (if (result i64) (i64.eqz (local.get 0)) (then (i64.const 0))
         (else (return_call_indirect (type $t) (i64.sub (local.get 0) (i64.const 1)) (i32.const 0))))))`,
   reference: `(module ${common} (elem declare func $run)

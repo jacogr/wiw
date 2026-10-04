@@ -180,6 +180,8 @@
 		)
 		(local.set $index (global.get $function-count))
 		(local.set $f (call $function (local.get $index)))
+		;; Dynamic entries start with fresh type metadata even when a previous module used this slot.
+		(call $zero-bytes (call $function-type (local.get $index)) (i32.const 32))
 		(i32.store offset=8 (local.get $f) (i32.const -1))
 		(i32.store offset=12 (local.get $f) (local.get $slot))
 		(i32.store offset=16 (local.get $f) (local.get $count))
@@ -336,6 +338,8 @@
 			)
 		)
 		(i32.store offset=24 (call $function (local.get $index)) (local.get $shape))
+		;; Completing a foreign result vector invalidates any previously derived reference type.
+		(i32.store offset=20 (call $function-type (local.get $index)) (i32.const 0))
 		(global.get $error)
 	)
 

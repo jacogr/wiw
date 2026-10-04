@@ -201,6 +201,8 @@
 	(global $signature-base (mut i32) (i32.const 0))
 	(global $signature-count (mut i32) (i32.const 0))
 	(global $indirect-type-count (mut i32) (i32.const 0))
+	;; Completed function type caches are valid only after module signature resolution.
+	(global $function-types-resolved (mut i32) (i32.const 0))
 	(global $function-type-base (mut i32) (i32.const 0))
 	(global $guest-table-base (mut i32) (i32.const 0))
 	(global $element-base (mut i32) (i32.const 0))

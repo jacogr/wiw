@@ -619,3 +619,32 @@ versus the preceding 522,360 ms measurement (17.3% less time), with all 65,199
 commands across 258 files and zero skips/failures. The original 34.12-minute
 baseline, intermediate timings, paired microbenchmarks and diagnostic profiles
 remain in `test/performance.json`. Both paired benchmark builds use Binaryen 133.
+
+
+Explicit indirect-call expected types resolve once during loading. Their signature
+records retain the resolved heap index and the original diagnostic source offset.
+Each selected function retains its precise non-null reference type after the first
+lookup following completed signature resolution. Parsing unfinished declarations
+cannot populate this cache. New declarations and dynamically inserted foreign
+functions start with clear metadata; completing a foreign result vector invalidates
+its cached type. Unmatched foreign signatures remain uncached.
+
+Every indirect call still reads the current table entry, checks bounds and null,
+and compares the selected function's precise heap type against the expected type
+using the existing recursive subtype check. Inline signatures retain their existing
+matching rules. Regressions cover live table replacement, declared subtypes,
+equivalent singleton types, distinct recursive groups, shared-table foreign
+functions, reordered declarations on reload, and recovery after a failed load.
+
+In paired Binaryen 133 benchmarks, ordinary hosted indirect calls take 82 ms versus
+93 ms previously. With 32 preceding types and implicit callee signatures, the
+alternating-table benchmark takes 82 ms versus 461 ms. Profiling the pinned
+indirect stress function reduces diagnostic instructions per indirect tail call
+from 2,672 to 580; direct and reference tail-call counts stay at 383 and 396.
+
+The standalone hosted audit with resolved indirect types takes 417,008 ms
+(6.95 minutes), compared with the preceding 431,787 ms (3.4% less time).
+The pinned indirect tail-call file takes 11.37 seconds versus 22.80 seconds.
+All 65,199 commands across 258 files pass with zero skips and failures in both
+runtimes, and all 136 regression tests pass. These measurements retain the
+original stress inputs; full-suite timings remain subject to run variation.
