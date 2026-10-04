@@ -49,3 +49,6 @@ jobs:
       - name: Run tests
         run: |
           make check
+
+      - name: Audit full spec through an interpreted copy
+        run: make audit-selfhost

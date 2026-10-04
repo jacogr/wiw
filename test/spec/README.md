@@ -38,6 +38,14 @@ and returns nonzero for any failure or skip. `progress.json` records the matchin
 successful reports and per-file counts. The previous `wg-1.0` milestone passed
 all 73 files / 19,270 commands with zero skips.
 
+`make audit-selfhost` executes the same inventory and expectations through an
+interpreted WAT copy on each bootstrap build. Every script instance, including
+spectest and negative assertions, runs inside its own copy. Partial and completed
+reports are written to `build/spec-selfhost-*.json`, with source hashes and
+per-file timings. Both builds complete all 54,006 commands with zero failures/skips.
+`selfhost.json` records the matching completion snapshot, engine source hash and
+measured timings; coverage remains frozen in `capabilities.json`. CI runs this audit after the ordinary regression suite.
+
 Text modules reach the interpreter with their comments and whitespace intact.
 Quoted modules concatenate decoded script bytes before WAT parsing. Binary
 modules reach the WAT binary reader, then its common parser/validator/runtime.

@@ -10,7 +10,7 @@ import { specSource } from '../scripts/spec-source.js';
 const binary = new URL('../build/wiw.wasm', import.meta.url);
 
 // Small scripts check harness behavior independently of the submodule fixtures.
-async function run(source, mutate = () => {}) {
+async function run(source, mutate = () => {}, options = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'wiw-spec-runner-'));
   const provenance = {revision: 'fixture', files: [{file: 'fixture.wast', sha256: createHash('sha256').update(source).digest('hex')}]};
   const capabilities = {capacityModules: {}, fuelPerInvocation: 100000};
@@ -19,7 +19,7 @@ async function run(source, mutate = () => {}) {
     await writeFile(join(dir, 'fixture.wast'), source);
     await writeFile(join(dir, 'upstream.json'), JSON.stringify(provenance));
     await writeFile(join(dir, 'capabilities.json'), JSON.stringify(capabilities));
-    return await runSuite(binary, pathToFileURL(dir + '/'));
+    return await runSuite(binary, pathToFileURL(dir + '/'), options);
   } finally { await rm(dir, {recursive: true, force: true}); }
 }
 
@@ -198,4 +198,29 @@ test('reference assertions preserve opaque identity and null argument types', as
   await assert.rejects(run('(module (func (export "null") (result funcref) ref.null func)) (assert_return (invoke "null") (ref.null extern))'), /reference result type/);
   await assert.rejects(run(`(module (func (export "identity") (param externref) (result externref) local.get 0))
     (assert_return (invoke "identity" (ref.extern 1)) (ref.extern 2))`), /fixture.wast:/);
+});
+
+
+test('interpreted audit retains isolated failures, named registrations and cumulative progress counts', async () => {
+  let progress;
+  const report = await run(`
+    (module $A (func (export "f") (result i32) i32.const 42))
+    (register "a" $A)
+    (assert_return (invoke $A "f") (i32.const 41))
+    (assert_invalid (module (func (result i64) i32.const 1)) "type mismatch")
+    (module $B (func $f (import "a" "f") (result i32)) (func (export "f") (result i32) call $f))
+    (assert_return (invoke $B "f") (i32.const 42))
+    (assert_return (invoke $A "f") (i32.const 42))`, undefined, {
+      audit: true, interpreted: true, profile: true,
+      onFile(counts, partial) {
+        progress = {passed: partial.passed, failed: partial.failed, files: partial.files.length, counts};
+      }
+    });
+  assert.equal(report.passed, 6); assert.equal(report.failed, 1); assert.equal(report.skipped, 0);
+  assert.equal(progress.passed, 6); assert.equal(progress.failed, 1); assert.equal(progress.files, 1);
+  assert.deepEqual(progress.counts, report.files[0]);
+  assert.equal(report.runtime, 'interpreted'); assert.equal(report.interpreterDepth, 1);
+  assert.equal(report.engineSourceSha256, createHash('sha256').update(await readFile(new URL('../build/wiw.wat', import.meta.url))).digest('hex'));
+  assert.equal(report.timings[0].file, 'fixture.wast');
+  assert.ok(report.timings[0].elapsedMs >= 0 && report.elapsedMs >= report.timings[0].elapsedMs);
 });

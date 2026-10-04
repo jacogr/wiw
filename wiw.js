@@ -10,10 +10,39 @@ const resourceTypes = new WeakMap();
 let invocationDepth = 0;
 const maxInvocationDepth = 128;
 
+// Backing memory and address origins stay private to the host adapters.
+const engineBackends = new WeakMap();
+
 /** Load the native interpreter. Guest source is never handed to WebAssembly. */
 export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm', import.meta.url)) {
   const { instance } = await WebAssembly.instantiate(await readFile(binary));
-  const e = /** @type {{memory: WebAssembly.Memory, load: (p: number, n: number) => number, initialize: () => number, invoke: (p: number, n: number, args: number, count: number) => number, error_code: () => number, error_offset: () => number, host_base: () => number, result_count: () => number, set_fuel: (fuel: number) => void, guest_memory_base: () => number, guest_memory_pages: () => number, guest_memory_present: () => number, get_global: (p: number, n: number) => number, set_global: (p: number, n: number, value: number) => number, import_count: () => number, import_info: (index: number) => number, function_params: (index: number) => number, function_results: (index: number) => number, export_function: (p: number, n: number) => number, pending_import: () => number, pending_args: () => number, resume: (value: number, failed: number) => number, grow_guest_memory: (delta: number) => number, invoke64: (p: number, n: number, args: number, count: number) => bigint, resume64: (value: bigint, failed: number) => bigint, result_type: (slot: number) => number, function_param_type: (index: number, slot: number) => number, function_result_type: (index: number, slot: number) => number, global_type: (p: number, n: number) => number, argument_high_base: () => number, pending_high_args: () => number, result_high_base: () => number, result_base: () => number, global_high: (p: number, n: number) => bigint, set_global_high: (p: number, n: number, value: bigint) => number, get_global64: (p: number, n: number) => bigint, set_global64: (p: number, n: number, value: bigint) => number}} */ (instance.exports);
+  return wrapInterpreter(instance.exports);
+}
+
+/** Run a WAT copy of wiw inside a bootstrap interpreter using the same host ABI. */
+export async function createInterpretedInterpreter(binary = new URL('./build/wiw-opt.wasm', import.meta.url), options = {}) {
+  const parent = await createInterpreter(binary);
+  parent.load(options.source ?? await readFile(new URL('./build/wiw.wat', import.meta.url), 'utf8'));
+  parent.setFuel(options.parentFuel ?? 4294967295);
+  const backend = engineBackends.get(parent);
+  const memoryOffset = backend.memoryOffset + backend.exports.guest_memory_base();
+  const exports = {memory: backend.exports.memory};
+  for (const [name, value] of Object.entries(backend.exports)) {
+    if (typeof value === 'function') exports[name] = (...args) => parent.invoke(name, ...args);
+  }
+  return wrapInterpreter(exports, {
+    memoryOffset,
+    ensureMemory(required) {
+      const current = backend.exports.guest_memory_pages();
+      const needed = Math.ceil(required / 65536);
+      if (needed > current && parent.growMemory(needed - current) < 0) throw new Error('resource limit while growing interpreted backing memory');
+    }
+  });
+}
+
+// Numeric pointers remain relative to the engine's own memory at every depth.
+function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
+  const e = /** @type {{memory: WebAssembly.Memory, load: (p: number, n: number) => number, initialize: () => number, invoke: (p: number, n: number, args: number, count: number) => number, error_code: () => number, error_offset: () => number, host_base: () => number, result_count: () => number, set_fuel: (fuel: number) => void, guest_memory_base: () => number, guest_memory_pages: () => number, guest_memory_present: () => number, get_global: (p: number, n: number) => number, set_global: (p: number, n: number, value: number) => number, import_count: () => number, import_info: (index: number) => number, function_params: (index: number) => number, function_results: (index: number) => number, export_function: (p: number, n: number) => number, pending_import: () => number, pending_args: () => number, resume: (value: number, failed: number) => number, grow_guest_memory: (delta: number) => number, invoke64: (p: number, n: number, args: number, count: number) => bigint, resume64: (value: bigint, failed: number) => bigint, result_type: (slot: number) => number, function_param_type: (index: number, slot: number) => number, function_result_type: (index: number, slot: number) => number, global_type: (p: number, n: number) => number, argument_high_base: () => number, pending_high_args: () => number, result_high_base: () => number, result_base: () => number, global_high: (p: number, n: number) => bigint, set_global_high: (p: number, n: number, value: bigint) => number, get_global64: (p: number, n: number) => bigint, set_global64: (p: number, n: number, value: bigint) => number}} */ (exports);
   let loaded = false;
   let invoking = false;
   let generation = 0;
@@ -28,13 +57,14 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
   let externalValues = [null], externalIds = new Map();
 
   function ensure(/** @type {number} */ required) {
+    if (ensureMemory) return ensureMemory(required);
     if (required > e.memory.buffer.byteLength) e.memory.grow(Math.ceil((required - e.memory.buffer.byteLength) / 65536));
   }
   function write(/** @type {string} */ text, /** @type {number} */ at) {
     const bytes = text instanceof Uint8Array ? text : new TextEncoder().encode(text);
     const required = at + bytes.length;
     ensure(required);
-    new Uint8Array(e.memory.buffer, at, bytes.length).set(bytes);
+    new Uint8Array(e.memory.buffer, memoryOffset + at, bytes.length).set(bytes);
     return bytes.length;
   }
   function check(/** @type {number} */ code) {
@@ -64,7 +94,7 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
     }
   }
   function readText(/** @type {number} */ p, /** @type {number} */ n) {
-    return new TextDecoder('utf-8', {ignoreBOM: true}).decode(new Uint8Array(e.memory.buffer, p, n));
+    return new TextDecoder('utf-8', {ignoreBOM: true}).decode(new Uint8Array(e.memory.buffer, memoryOffset + p, n));
   }
   const scalarNames = [null, 'i32', 'i64', 'f32', 'f64', 'funcref', 'externref', 'v128'];
   function decodedValue(/** @type {bigint} */ bits, /** @type {number} */ type) {
@@ -145,10 +175,10 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       if (state.kind === 1) {
         const delta = state.pages - e.guest_memory_pages();
         if (delta > 0 && e.grow_guest_memory(delta) < 0) throw new Error('shared memory growth exceeds capacity');
-        new Uint8Array(e.memory.buffer, e.guest_memory_base(), state.bytes.length).set(state.bytes);
+        new Uint8Array(e.memory.buffer, memoryOffset + e.guest_memory_base(), state.bytes.length).set(state.bytes);
       } else if (state.kind === 2) {
         const bits = (state.type === 5 || state.type === 6) ? typedValue(state.value, state.type) : state.bits;
-        const view = new DataView(e.memory.buffer), at = e.global_info(binding.index);
+        const view = new DataView(e.memory.buffer, memoryOffset), at = e.global_info(binding.index);
         view.setBigInt64(at + 24, BigInt.asIntN(64, bits), true);
         view.setBigInt64(at + 72, state.type === 7 ? BigInt.asIntN(64, bits >> 64n) : 0n, true);
       } else {
@@ -156,7 +186,7 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
         if (delta > 0 && e.grow_guest_table(binding.index, delta) < 0) throw new Error('shared table growth exceeds capacity');
         state.entries.forEach((entry, index) => {
           const target = state.type === 5 ? (entry ? tableFunctionIndex(entry) : -1) : Number(typedValue(entry, 6)) - 1;
-          new DataView(e.memory.buffer).setInt32(e.table_base(binding.index) + index * 4, target, true);
+          new DataView(e.memory.buffer, memoryOffset).setInt32(e.table_base(binding.index) + index * 4, target, true);
         });
       }
     }
@@ -166,13 +196,13 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       const state = binding.state;
       if (state.kind === 1) {
         state.pages = e.guest_memory_pages();
-        state.bytes = new Uint8Array(e.memory.buffer, e.guest_memory_base(), state.pages * 65536).slice();
+        state.bytes = new Uint8Array(e.memory.buffer, memoryOffset + e.guest_memory_base(), state.pages * 65536).slice();
       } else if (state.kind === 2) {
-        state.bits = new DataView(e.memory.buffer).getBigInt64(e.global_info(binding.index) + 24, true);
-        if (state.type === 7) state.bits = BigInt.asUintN(64, state.bits) | (BigInt.asUintN(64, new DataView(e.memory.buffer).getBigInt64(e.global_info(binding.index) + 72, true)) << 64n);
+        state.bits = new DataView(e.memory.buffer, memoryOffset).getBigInt64(e.global_info(binding.index) + 24, true);
+        if (state.type === 7) state.bits = BigInt.asUintN(64, state.bits) | (BigInt.asUintN(64, new DataView(e.memory.buffer, memoryOffset).getBigInt64(e.global_info(binding.index) + 72, true)) << 64n);
         if ((state.type === 5 || state.type === 6)) state.value = decodedValue(state.bits, state.type);
       } else state.entries = Array.from({length: e.table_size(binding.index)}, (_, index) => {
-        const target = new DataView(e.memory.buffer).getInt32(e.table_base(binding.index) + index * 4, true);
+        const target = new DataView(e.memory.buffer, memoryOffset).getInt32(e.table_base(binding.index) + index * 4, true);
         return state.type === 6 ? decodedValue(BigInt(target + 1), 6) : target < 0 ? null : functionReference(target);
       });
     }
@@ -186,7 +216,7 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
   }
   function functionReference(index) {
     if (tableFunctions.has(index)) return tableFunctions.get(index);
-    const descriptor = e.function_info(index), view = new DataView(e.memory.buffer);
+    const descriptor = e.function_info(index), view = new DataView(e.memory.buffer, memoryOffset);
     if (view.getInt32(descriptor + 8, true) === -1) {
       const binding = bindings[view.getInt32(descriptor + 12, true)];
       const forwarding = binding && functionTypes.get(binding.callback);
@@ -219,12 +249,12 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
     if (foreignFunctions.has(reference)) return foreignFunctions.get(reference);
     const {params, results} = reference.signature;
     const at = e.host_base(); ensure(at + params.length);
-    new Uint8Array(e.memory.buffer, at, params.length).set(params);
+    new Uint8Array(e.memory.buffer, memoryOffset + at, params.length).set(params);
     const slot = bindings.length;
     const index = e.foreign_function(params.length, Array.isArray(results) ? results[0] : results, at, slot);
     if (index >= 0 && Array.isArray(results)) {
       ensure(at + results.length);
-      new Uint8Array(e.memory.buffer, at, results.length).set(results);
+      new Uint8Array(e.memory.buffer, memoryOffset + at, results.length).set(results);
       check(e.foreign_results(index, at, results.length));
     }
     check(e.error_code());
@@ -240,14 +270,14 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
     if (!state) {
       const currentGeneration = generation;
       state = {kind, valid: () => loaded && generation === currentGeneration};
-      if (kind === 1) Object.assign(state, {pages: e.guest_memory_pages(), maximum: e.memory_max(), bytes: new Uint8Array(e.memory.buffer, e.guest_memory_base(), e.guest_memory_pages() * 65536).slice()});
+      if (kind === 1) Object.assign(state, {pages: e.guest_memory_pages(), maximum: e.memory_max(), bytes: new Uint8Array(e.memory.buffer, memoryOffset + e.guest_memory_base(), e.guest_memory_pages() * 65536).slice()});
       else if (kind === 2) {
-        const view = new DataView(e.memory.buffer), at = e.global_info(index);
+        const view = new DataView(e.memory.buffer, memoryOffset), at = e.global_info(index);
         Object.assign(state, {type: view.getInt32(at + 12, true), mutable: view.getInt32(at + 8, true), bits: view.getBigInt64(at + 24, true)});
         if (state.type === 7) state.bits = BigInt.asUintN(64, state.bits) | (BigInt.asUintN(64, view.getBigInt64(at + 72, true)) << 64n);
         if ((state.type === 5 || state.type === 6)) state.value = decodedValue(state.bits, state.type);
       } else Object.assign(state, {type: e.table_type(index), maximum: e.table_max(index), entries: Array.from({length: e.table_size(index)}, (_, slot) => {
-        const target = new DataView(e.memory.buffer).getInt32(e.table_base(index) + slot * 4, true);
+        const target = new DataView(e.memory.buffer, memoryOffset).getInt32(e.table_base(index) + slot * 4, true);
         return e.table_type(index) === 6 ? decodedValue(BigInt(target + 1), 6) : target < 0 ? null : functionReference(target);
       })});
       resources.push({index, state});
@@ -264,7 +294,7 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       let failure;
       let failed = false;
       try {
-        const view = new DataView(e.memory.buffer);
+        const view = new DataView(e.memory.buffer, memoryOffset);
         const at = e.pending_args();
         const pendingHigh = e.pending_high_args();
         const rawArgs = binding.params.map((type, index) => {
@@ -286,7 +316,7 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
           if (!Array.isArray(returned) || returned.length !== binding.results.length) throw new Error('import result count mismatch');
           const slots = returned.map((value, slot) => forwarding?.raw ? rawSlot(value, binding.results[slot]) : typedValue(value, binding.results[slot]));
           const resultAt = e.pending_args(); ensure(resultAt + slots.length * 8);
-          const output = new DataView(e.memory.buffer);
+          const output = new DataView(e.memory.buffer, memoryOffset);
           slots.forEach((value, slot) => {
             output.setBigInt64(resultAt + slot * 8, BigInt.asIntN(64, value), true);
             output.setBigInt64(e.pending_high_args() + slot * 8, binding.results[slot] === 7 ? BigInt.asIntN(64, value >> 64n) : 0n, true);
@@ -295,7 +325,7 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
         } else if (binding.results) {
           result = forwarding?.raw ? rawSlot(returned, binding.results) : typedValue(returned, binding.results);
           if (binding.results === 7) {
-            new DataView(e.memory.buffer).setBigInt64(e.pending_high_args(), BigInt.asIntN(64, result >> 64n), true);
+            new DataView(e.memory.buffer, memoryOffset).setBigInt64(e.pending_high_args(), BigInt.asIntN(64, result >> 64n), true);
             result = BigInt.asIntN(64, result);
           }
         }
@@ -310,7 +340,7 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
     }
     check(e.error_code());
     if (e.result_count() > 1) {
-      const output = new DataView(e.memory.buffer), at = e.result_base();
+      const output = new DataView(e.memory.buffer, memoryOffset), at = e.result_base();
       return Array.from({length: e.result_count()}, (_, slot) => {
         let bits = output.getBigInt64(at + slot * 8, true);
         const type = e.result_type(slot);
@@ -318,7 +348,7 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
         return raw ? rawResult(bits, type) : decodedValue(bits, type);
       });
     }
-    if (e.result_type(0) === 7) value = BigInt.asUintN(64, value) | (BigInt.asUintN(64, new DataView(e.memory.buffer).getBigInt64(e.result_high_base(), true)) << 64n);
+    if (e.result_type(0) === 7) value = BigInt.asUintN(64, value) | (BigInt.asUintN(64, new DataView(e.memory.buffer, memoryOffset).getBigInt64(e.result_high_base(), true)) << 64n);
     return raw ? rawResult(value, e.result_type(0)) : decodedValue(value, e.result_type(0));
   }
   // Run either public scalar values or exact raw slots through the same protected invocation.
@@ -328,7 +358,7 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       const n = write(name, at);
       const argumentsAt = Math.ceil((at + n) / 8) * 8;
       ensure(argumentsAt + values.length * 8);
-      const view = new DataView(e.memory.buffer);
+      const view = new DataView(e.memory.buffer, memoryOffset);
       values.forEach((value, index) => {
         view.setBigInt64(argumentsAt + index * 8, BigInt.asIntN(64, value), true);
         view.setBigInt64(e.argument_high_base() + index * 8, value > 0n ? BigInt.asIntN(64, value >> 64n) : 0n, true);
@@ -356,9 +386,9 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       const sourceLength = write(source, 4096);
       check(binarySource ? e.load_binary(4096, sourceLength) : e.load(4096, sourceLength));
       const resolved = [], resourceBindings = [];
-      let pages = e.memory_min(), maximum = e.memory_max(), entries = e.table_size(), tableMaximum = e.table_max();
+      let pages = e.memory_min(), maximum = e.memory_max(), entries = e.table_size(0), tableMaximum = e.table_max(0);
       for (let index = 0; index < e.import_count(); index++) {
-        const view = new DataView(e.memory.buffer);
+        const view = new DataView(e.memory.buffer, memoryOffset);
         const at = e.import_info(index);
         const target = view.getInt32(at, true);
         const module = readText(view.getUint32(at + 4, true), view.getUint32(at + 8, true));
@@ -486,7 +516,7 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
       requireLoaded(); synchronizeIn();
       const namespace = Object.create(null);
       for (let index = 0; index < e.exports_count(); index++) {
-        const view = new DataView(e.memory.buffer), at = e.export_info(index);
+        const view = new DataView(e.memory.buffer, memoryOffset), at = e.export_info(index);
         const name = readText(view.getUint32(at, true), view.getUint32(at + 4, true));
         const target = view.getInt32(at + 8, true), kind = view.getInt32(at + 20, true);
         namespace[name] = kind ? exportResource(target, kind) : api.exportFunction(name);
@@ -522,13 +552,13 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
     readMemory(/** @type {number} */ offset, /** @type {number} */ length) {
       synchronizeIn();
       const at = memoryRange(offset, length);
-      return new Uint8Array(e.memory.buffer, at, length).slice();
+      return new Uint8Array(e.memory.buffer, memoryOffset + at, length).slice();
     },
     writeMemory(/** @type {number} */ offset, /** @type {Uint8Array} */ bytes) {
       synchronizeIn();
       if (!(bytes instanceof Uint8Array)) throw new Error('memory bytes must be a Uint8Array');
       const at = memoryRange(offset, bytes.length);
-      new Uint8Array(e.memory.buffer, at, bytes.length).set(bytes);
+      new Uint8Array(e.memory.buffer, memoryOffset + at, bytes.length).set(bytes);
       synchronizeOut();
     },
     growMemory(/** @type {number} */ pages) {
@@ -548,6 +578,7 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
     }
 
   };
+  engineBackends.set(api, {exports: e, memoryOffset});
   return api;
 }
 

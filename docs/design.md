@@ -422,3 +422,29 @@ scalar i64/f32/f64 operations. Widening, narrowing, pairwise sums, dot products,
 shuffles and conversions preserve lane order. Vector memory accesses validate
 the complete unsigned range before any native read or write, including lane
 stores. No native SIMD instruction or guest compilation is needed for execution.
+
+
+## Self-hosted conformance adapter
+
+The bootstrap and interpreted adapters share `wrapInterpreter`. The frontend's
+memory views use a private address origin; every ABI pointer remains relative
+to the engine's own memory. For an interpreted engine, that origin is the parent
+engine's guest-memory base. Backing growth updates the parent's logical guest
+pages before host writes. Neither the parent engine's code nor its metadata is
+inside the child engine's memory views.
+
+`createInterpretedInterpreter` loads expanded WAT into a bootstrap instance and
+proxies every exported ABI function through the parent's `invoke`. This includes
+metadata queries, parsing, validation, initialization, dispatch, host suspension
+and resumption. Low/high value slots, reference translation and shared resource
+synchronization reuse the ordinary frontend. Each script module and isolated
+negative assertion gets its own parent and WAT interpreter copy.
+
+`make audit-selfhost` runs all pinned commands on both bootstrap builds, freezes
+coverage against the same complete per-file manifest and records the interpreted
+engine source hash. Partial reports explicitly have `complete: false`; they do
+not count as a successful audit. Per-file timings identify expensive areas without
+making performance thresholds part of conformance. The guest retains the spec's
+10,000,000-instruction fuel budget; its parent receives the maximum unsigned
+32-bit budget per ABI invocation. The existing two-layer fixture tests continue
+to verify deeper inception.

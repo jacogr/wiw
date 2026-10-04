@@ -7,7 +7,7 @@ NODE = node
 
 .DELETE_ON_ERROR:
 
-.PHONY: all check check-spec audit-spec clean
+.PHONY: all check check-spec audit-spec audit-selfhost clean
 all: build/wiw-opt.wasm
 
 build:
@@ -33,6 +33,9 @@ check-spec: build/wiw.wasm build/wiw-opt.wasm
 
 audit-spec: build/wiw.wasm build/wiw-opt.wasm
 	$(NODE) scripts/spec-audit.js
+
+audit-selfhost: build/wiw.wasm build/wiw-opt.wasm
+	$(NODE) scripts/spec-selfhost.js
 
 clean:
 	rm -rf build

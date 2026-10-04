@@ -116,6 +116,16 @@ and `build/spec-audit-wiw-opt.wasm.json`; `test/spec/progress.json` records the
 matching totals and per-file counts. CI freezes all file counts in
 `test/spec/capabilities.json` and checks the pin, source hashes and license.
 
+`make audit-selfhost` runs the complete pinned suite through a WAT copy of wiw
+on each bootstrap build. Every module, spectest instance and negative assertion
+uses a separate interpreted engine. Both builds pass **54,006 commands with zero
+skips and zero failures through this copy**, in addition to the bootstrap baseline.
+The completed snapshot is `test/spec/selfhost.json`. Reports are
+`build/spec-selfhost-wiw.wasm.json` and `build/spec-selfhost-wiw-opt.wasm.json`;
+they record the engine source hash, per-file timings and completion status.
+CI runs this audit in addition to `make check` and rejects any failure, skip
+or mismatch against the frozen coverage counts.
+
 The previous `wg-1.0` milestone passed all 73 files / 19,270 commands per build
 with zero skips. See `test/spec/README.md` for the upgrade workflow and
 `docs/design.md` for architecture and ABI details.
@@ -126,3 +136,9 @@ return arrays for multiple results; raw arrays preserve individual numeric bits
 and reference identity. SIMD supports all pinned lane, arithmetic, comparison, shuffle, conversion and
 memory instructions. Its runtime uses scalar WAT operations and parallel 64-bit
 halves, so vector execution also works when wiw interprets itself.
+
+`createInterpretedInterpreter()` exposes the same Node API as `createInterpreter()`.
+It loads expanded `build/wiw.wat` into a bootstrap interpreter, then executes the
+copy's exported ABI through that parent. Text/binary guest loading, validation,
+execution and trap handling run inside the interpreted WAT copy; the shared
+Node frontend continues to handle synchronous callbacks and resource bindings.
