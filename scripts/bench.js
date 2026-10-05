@@ -89,6 +89,18 @@ cases.vectorMemory = `(module (memory 1) (func (export "run") (param i64) (resul
     (local.set 0 (i64.sub (local.get 0) (i64.const 1)))
     (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`;
 
+
+// Check all five sign extensions while measuring their non-trapping integer dispatch.
+cases.integerSignExtension = `(module (func (export "run") (param i64) (result i64)
+  (loop $again
+    i32.const 128 i32.extend8_s i32.const -128 i32.ne (if (then unreachable))
+    i32.const 32768 i32.extend16_s i32.const -32768 i32.ne (if (then unreachable))
+    i64.const 128 i64.extend8_s i64.const -128 i64.ne (if (then unreachable))
+    i64.const 32768 i64.extend16_s i64.const -32768 i64.ne (if (then unreachable))
+    i64.const 2147483648 i64.extend32_s i64.const -2147483648 i64.ne (if (then unreachable))
+    (local.set 0 (i64.sub (local.get 0) (i64.const 1)))
+    (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`;
+
 const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
 const report = {node: process.version, binaryen: execFileSync('wasm-opt', ['--version'], {encoding:'utf8'}).trim(),
   engineSourceSha256: createHash('sha256').update(await readFile(new URL('../build/wiw.wat', import.meta.url))).digest('hex'),

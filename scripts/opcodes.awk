@@ -55,7 +55,8 @@ function runtime_route(i) {
       operation[i] == "drop" || operation[i] == "nop") return 1
   # 2: integer operations whose validated scalar result cannot trap or grow the stack.
   if ((i >= 2 && i <= 4) || (i >= 9 && i <= 30) ||
-      (i >= 62 && i <= 64) || (i >= 69 && i <= 93)) return 2
+      (i >= 62 && i <= 64) || (i >= 69 && i <= 93) ||
+      (i >= 174 && i <= 178)) return 2
   # 3/4: structured scope markers, and raw global/function reference reads.
   if ((i >= 37 && i <= 41) || i == 495) return 3
   if (i == 49 || i == 195) return 4

@@ -192,6 +192,194 @@
 		)
 	)
 
+	;; Extract one unsigned 8-bit lane with a fixed mask and shift.
+	(func $vector-lane8
+		(param $lo i64)
+		(param $hi i64)
+		(param $index i32)
+		(result i64)
+		(local $shift i32)
+
+		(local.set $shift (i32.shl (local.get $index) (i32.const 3)))
+		(i64.and
+			(i64.shr_u
+				(select (local.get $hi) (local.get $lo) (i32.ge_u (local.get $shift) (i32.const 64)))
+				(i64.extend_i32_u (local.get $shift))
+			)
+			(i64.const 255)
+		)
+	)
+
+	;; Pack one masked 8-bit lane into the selected result half.
+	(func $vector-insert8
+		(param $value i64)
+		(param $index i32)
+		(local $bits i64)
+		(local $shift i32)
+
+		(local.set $shift (i32.shl (local.get $index) (i32.const 3)))
+		(local.set $bits
+			(i64.shl
+				(i64.and
+					(local.get $value)
+					(i64.const 255)
+				)
+				(i64.extend_i32_u (local.get $shift))
+			)
+		)
+		;; The lane offset selects the low or high output slot.
+		(if (i32.lt_u (local.get $shift) (i32.const 64))
+			(then
+				(global.set $vector-low (i64.or (global.get $vector-low) (local.get $bits)))
+			)
+			;; Upper lanes use the same masked shift modulo 64.
+			(else
+				(global.set $vector-high (i64.or (global.get $vector-high) (local.get $bits)))
+			)
+		)
+	)
+
+	;; Extract one unsigned 16-bit lane with a fixed mask and shift.
+	(func $vector-lane16
+		(param $lo i64)
+		(param $hi i64)
+		(param $index i32)
+		(result i64)
+		(local $shift i32)
+
+		(local.set $shift (i32.shl (local.get $index) (i32.const 4)))
+		(i64.and
+			(i64.shr_u
+				(select (local.get $hi) (local.get $lo) (i32.ge_u (local.get $shift) (i32.const 64)))
+				(i64.extend_i32_u (local.get $shift))
+			)
+			(i64.const 65535)
+		)
+	)
+
+	;; Pack one masked 16-bit lane into the selected result half.
+	(func $vector-insert16
+		(param $value i64)
+		(param $index i32)
+		(local $bits i64)
+		(local $shift i32)
+
+		(local.set $shift (i32.shl (local.get $index) (i32.const 4)))
+		(local.set $bits
+			(i64.shl
+				(i64.and
+					(local.get $value)
+					(i64.const 65535)
+				)
+				(i64.extend_i32_u (local.get $shift))
+			)
+		)
+		;; The lane offset selects the low or high output slot.
+		(if (i32.lt_u (local.get $shift) (i32.const 64))
+			(then
+				(global.set $vector-low (i64.or (global.get $vector-low) (local.get $bits)))
+			)
+			;; Upper lanes use the same masked shift modulo 64.
+			(else
+				(global.set $vector-high (i64.or (global.get $vector-high) (local.get $bits)))
+			)
+		)
+	)
+
+	;; Extract one unsigned 32-bit lane with a fixed mask and shift.
+	(func $vector-lane32
+		(param $lo i64)
+		(param $hi i64)
+		(param $index i32)
+		(result i64)
+		(local $shift i32)
+
+		(local.set $shift (i32.shl (local.get $index) (i32.const 5)))
+		(i64.and
+			(i64.shr_u
+				(select (local.get $hi) (local.get $lo) (i32.ge_u (local.get $shift) (i32.const 64)))
+				(i64.extend_i32_u (local.get $shift))
+			)
+			(i64.const 4294967295)
+		)
+	)
+
+	;; Pack one masked 32-bit lane into the selected result half.
+	(func $vector-insert32
+		(param $value i64)
+		(param $index i32)
+		(local $bits i64)
+		(local $shift i32)
+
+		(local.set $shift (i32.shl (local.get $index) (i32.const 5)))
+		(local.set $bits
+			(i64.shl
+				(i64.and
+					(local.get $value)
+					(i64.const 4294967295)
+				)
+				(i64.extend_i32_u (local.get $shift))
+			)
+		)
+		;; The lane offset selects the low or high output slot.
+		(if (i32.lt_u (local.get $shift) (i32.const 64))
+			(then
+				(global.set $vector-low (i64.or (global.get $vector-low) (local.get $bits)))
+			)
+			;; Upper lanes use the same masked shift modulo 64.
+			(else
+				(global.set $vector-high (i64.or (global.get $vector-high) (local.get $bits)))
+			)
+		)
+	)
+
+	;; Extract one unsigned 64-bit lane with a fixed mask and shift.
+	(func $vector-lane64
+		(param $lo i64)
+		(param $hi i64)
+		(param $index i32)
+		(result i64)
+		(local $shift i32)
+
+		(local.set $shift (i32.shl (local.get $index) (i32.const 6)))
+		(i64.and
+			(i64.shr_u
+				(select (local.get $hi) (local.get $lo) (i32.ge_u (local.get $shift) (i32.const 64)))
+				(i64.extend_i32_u (local.get $shift))
+			)
+			(i64.const -1)
+		)
+	)
+
+	;; Pack one masked 64-bit lane into the selected result half.
+	(func $vector-insert64
+		(param $value i64)
+		(param $index i32)
+		(local $bits i64)
+		(local $shift i32)
+
+		(local.set $shift (i32.shl (local.get $index) (i32.const 6)))
+		(local.set $bits
+			(i64.shl
+				(i64.and
+					(local.get $value)
+					(i64.const -1)
+				)
+				(i64.extend_i32_u (local.get $shift))
+			)
+		)
+		;; The lane offset selects the low or high output slot.
+		(if (i32.lt_u (local.get $shift) (i32.const 64))
+			(then
+				(global.set $vector-low (i64.or (global.get $vector-low) (local.get $bits)))
+			)
+			;; Upper lanes use the same masked shift modulo 64.
+			(else
+				(global.set $vector-high (i64.or (global.get $vector-high) (local.get $bits)))
+			)
+		)
+	)
+
 	;; Clamp a narrow arithmetic result to its signed or unsigned lane range.
 	(func $vector-clamp
 		(param $x i64)
@@ -265,23 +453,19 @@
 							(i64.add
 								(local.get $sum)
 								(i64.mul
-									(call $vector-signed
-										(call $vector-lane
+									(i64.extend8_s
+										(call $vector-lane8
 											(local.get $a)
 											(local.get $ah)
-											(i32.const 8)
 											(i32.add (i32.mul (local.get $i) (local.get $group)) (local.get $j))
 										)
-										(i32.const 8)
 									)
-									(call $vector-signed
-										(call $vector-lane
+									(i64.extend8_s
+										(call $vector-lane8
 											(local.get $b)
 											(local.get $bh)
-											(i32.const 8)
 											(i32.add (i32.mul (local.get $i) (local.get $group)) (local.get $j))
 										)
-										(i32.const 8)
 									)
 								)
 							)
@@ -477,10 +661,6 @@
 						(local.get $ah)
 						(local.get $b)
 						(local.get $bh)
-						(local.get $c)
-						(local.get $ch)
-						(local.get $imm)
-						(local.get $imm2)
 					)
 				)
 			)
@@ -495,10 +675,6 @@
 						(local.get $ah)
 						(local.get $b)
 						(local.get $bh)
-						(local.get $c)
-						(local.get $ch)
-						(local.get $imm)
-						(local.get $imm2)
 					)
 				)
 			)
@@ -519,10 +695,6 @@
 										(local.get $ah)
 										(local.get $b)
 										(local.get $bh)
-										(local.get $c)
-										(local.get $ch)
-										(local.get $imm)
-										(local.get $imm2)
 									)
 								)
 							)
@@ -538,10 +710,6 @@
 												(local.get $ah)
 												(local.get $b)
 												(local.get $bh)
-												(local.get $c)
-												(local.get $ch)
-												(local.get $imm)
-												(local.get $imm2)
 											)
 										)
 									)
@@ -554,10 +722,6 @@
 												(local.get $ah)
 												(local.get $b)
 												(local.get $bh)
-												(local.get $c)
-												(local.get $ch)
-												(local.get $imm)
-												(local.get $imm2)
 											)
 										)
 									)
@@ -580,10 +744,6 @@
 												(local.get $ah)
 												(local.get $b)
 												(local.get $bh)
-												(local.get $c)
-												(local.get $ch)
-												(local.get $imm)
-												(local.get $imm2)
 											)
 										)
 									)
@@ -596,10 +756,6 @@
 												(local.get $ah)
 												(local.get $b)
 												(local.get $bh)
-												(local.get $c)
-												(local.get $ch)
-												(local.get $imm)
-												(local.get $imm2)
 											)
 										)
 									)
@@ -617,10 +773,6 @@
 												(local.get $ah)
 												(local.get $b)
 												(local.get $bh)
-												(local.get $c)
-												(local.get $ch)
-												(local.get $imm)
-												(local.get $imm2)
 											)
 										)
 									)
@@ -633,10 +785,6 @@
 												(local.get $ah)
 												(local.get $b)
 												(local.get $bh)
-												(local.get $c)
-												(local.get $ch)
-												(local.get $imm)
-												(local.get $imm2)
 											)
 										)
 									)
@@ -664,10 +812,6 @@
 												(local.get $ah)
 												(local.get $b)
 												(local.get $bh)
-												(local.get $c)
-												(local.get $ch)
-												(local.get $imm)
-												(local.get $imm2)
 											)
 										)
 									)
@@ -680,10 +824,6 @@
 												(local.get $ah)
 												(local.get $b)
 												(local.get $bh)
-												(local.get $c)
-												(local.get $ch)
-												(local.get $imm)
-												(local.get $imm2)
 											)
 										)
 									)
@@ -701,10 +841,6 @@
 												(local.get $ah)
 												(local.get $b)
 												(local.get $bh)
-												(local.get $c)
-												(local.get $ch)
-												(local.get $imm)
-												(local.get $imm2)
 											)
 										)
 									)
@@ -717,10 +853,7 @@
 												(local.get $ah)
 												(local.get $b)
 												(local.get $bh)
-												(local.get $c)
-												(local.get $ch)
 												(local.get $imm)
-												(local.get $imm2)
 											)
 										)
 									)
@@ -745,8 +878,6 @@
 												(local.get $bh)
 												(local.get $c)
 												(local.get $ch)
-												(local.get $imm)
-												(local.get $imm2)
 											)
 										)
 									)
@@ -759,10 +890,6 @@
 												(local.get $ah)
 												(local.get $b)
 												(local.get $bh)
-												(local.get $c)
-												(local.get $ch)
-												(local.get $imm)
-												(local.get $imm2)
 											)
 										)
 									)
@@ -778,12 +905,6 @@
 												(local.get $op)
 												(local.get $a)
 												(local.get $ah)
-												(local.get $b)
-												(local.get $bh)
-												(local.get $c)
-												(local.get $ch)
-												(local.get $imm)
-												(local.get $imm2)
 											)
 										)
 									)
@@ -793,11 +914,8 @@
 											(call $vector-memory
 												(local.get $op)
 												(local.get $a)
-												(local.get $ah)
 												(local.get $b)
 												(local.get $bh)
-												(local.get $c)
-												(local.get $ch)
 												(local.get $imm)
 												(local.get $imm2)
 											)
@@ -820,12 +938,7 @@
 		(param $ah i64)
 		(param $b i64)
 		(param $bh i64)
-		(param $c i64)
-		(param $ch i64)
-		(param $imm i32)
-		(param $imm2 i32)
 		(result i64)
-		(local $p i32)
 		(local $i i32)
 		(local $x i64)
 		(local $y i64)
@@ -836,14 +949,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.eq (local.get $x) (local.get $y))))
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -858,14 +970,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.ne (local.get $x) (local.get $y))))
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -880,22 +991,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.lt_s
-									(call $vector-signed (local.get $x) (i32.const 8))
-									(call $vector-signed (local.get $y) (i32.const 8))
+									(i64.extend8_s (local.get $x))
+									(i64.extend8_s (local.get $y))
 								)
 							)
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -910,14 +1020,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.lt_u (local.get $x) (local.get $y))))
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -932,22 +1041,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.gt_s
-									(call $vector-signed (local.get $x) (i32.const 8))
-									(call $vector-signed (local.get $y) (i32.const 8))
+									(i64.extend8_s (local.get $x))
+									(i64.extend8_s (local.get $y))
 								)
 							)
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -962,14 +1070,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.gt_u (local.get $x) (local.get $y))))
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -984,22 +1091,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.le_s
-									(call $vector-signed (local.get $x) (i32.const 8))
-									(call $vector-signed (local.get $y) (i32.const 8))
+									(i64.extend8_s (local.get $x))
+									(i64.extend8_s (local.get $y))
 								)
 							)
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1014,14 +1120,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.le_u (local.get $x) (local.get $y))))
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1036,22 +1141,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.ge_s
-									(call $vector-signed (local.get $x) (i32.const 8))
-									(call $vector-signed (local.get $y) (i32.const 8))
+									(i64.extend8_s (local.get $x))
+									(i64.extend8_s (local.get $y))
 								)
 							)
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1066,14 +1170,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.ge_u (local.get $x) (local.get $y))))
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1093,12 +1196,7 @@
 		(param $ah i64)
 		(param $b i64)
 		(param $bh i64)
-		(param $c i64)
-		(param $ch i64)
-		(param $imm i32)
-		(param $imm2 i32)
 		(result i64)
-		(local $p i32)
 		(local $i i32)
 		(local $x i64)
 		(local $y i64)
@@ -1109,14 +1207,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.eq (local.get $x) (local.get $y))))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1131,14 +1228,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.ne (local.get $x) (local.get $y))))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1153,22 +1249,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.lt_s
-									(call $vector-signed (local.get $x) (i32.const 16))
-									(call $vector-signed (local.get $y) (i32.const 16))
+									(i64.extend16_s (local.get $x))
+									(i64.extend16_s (local.get $y))
 								)
 							)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1183,14 +1278,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.lt_u (local.get $x) (local.get $y))))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1205,22 +1299,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.gt_s
-									(call $vector-signed (local.get $x) (i32.const 16))
-									(call $vector-signed (local.get $y) (i32.const 16))
+									(i64.extend16_s (local.get $x))
+									(i64.extend16_s (local.get $y))
 								)
 							)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1235,14 +1328,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.gt_u (local.get $x) (local.get $y))))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1257,22 +1349,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.le_s
-									(call $vector-signed (local.get $x) (i32.const 16))
-									(call $vector-signed (local.get $y) (i32.const 16))
+									(i64.extend16_s (local.get $x))
+									(i64.extend16_s (local.get $y))
 								)
 							)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1287,14 +1378,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.le_u (local.get $x) (local.get $y))))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1309,22 +1399,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.ge_s
-									(call $vector-signed (local.get $x) (i32.const 16))
-									(call $vector-signed (local.get $y) (i32.const 16))
+									(i64.extend16_s (local.get $x))
+									(i64.extend16_s (local.get $y))
 								)
 							)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1339,14 +1428,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.ge_u (local.get $x) (local.get $y))))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1366,12 +1454,7 @@
 		(param $ah i64)
 		(param $b i64)
 		(param $bh i64)
-		(param $c i64)
-		(param $ch i64)
-		(param $imm i32)
-		(param $imm2 i32)
 		(result i64)
-		(local $p i32)
 		(local $i i32)
 		(local $x i64)
 		(local $y i64)
@@ -1382,14 +1465,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.eq (local.get $x) (local.get $y))))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1404,14 +1486,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.ne (local.get $x) (local.get $y))))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1426,22 +1507,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.lt_s
-									(call $vector-signed (local.get $x) (i32.const 32))
-									(call $vector-signed (local.get $y) (i32.const 32))
+									(i64.extend32_s (local.get $x))
+									(i64.extend32_s (local.get $y))
 								)
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1456,14 +1536,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.lt_u (local.get $x) (local.get $y))))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1478,22 +1557,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.gt_s
-									(call $vector-signed (local.get $x) (i32.const 32))
-									(call $vector-signed (local.get $y) (i32.const 32))
+									(i64.extend32_s (local.get $x))
+									(i64.extend32_s (local.get $y))
 								)
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1508,14 +1586,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.gt_u (local.get $x) (local.get $y))))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1530,22 +1607,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.le_s
-									(call $vector-signed (local.get $x) (i32.const 32))
-									(call $vector-signed (local.get $y) (i32.const 32))
+									(i64.extend32_s (local.get $x))
+									(i64.extend32_s (local.get $y))
 								)
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1560,14 +1636,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.le_u (local.get $x) (local.get $y))))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1582,22 +1657,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.ge_s
-									(call $vector-signed (local.get $x) (i32.const 32))
-									(call $vector-signed (local.get $y) (i32.const 32))
+									(i64.extend32_s (local.get $x))
+									(i64.extend32_s (local.get $y))
 								)
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1612,14 +1686,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.ge_u (local.get $x) (local.get $y))))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1639,12 +1712,7 @@
 		(param $ah i64)
 		(param $b i64)
 		(param $bh i64)
-		(param $c i64)
-		(param $ch i64)
-		(param $imm i32)
-		(param $imm2 i32)
 		(result i64)
-		(local $p i32)
 		(local $i i32)
 		(local $x i64)
 		(local $y i64)
@@ -1655,14 +1723,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub (i64.const 0) (call $float-apply (i32.const 121) (local.get $x) (local.get $y)))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1677,14 +1744,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub (i64.const 0) (call $float-apply (i32.const 122) (local.get $x) (local.get $y)))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1699,14 +1765,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub (i64.const 0) (call $float-apply (i32.const 123) (local.get $x) (local.get $y)))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1721,14 +1786,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub (i64.const 0) (call $float-apply (i32.const 124) (local.get $x) (local.get $y)))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1743,14 +1807,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub (i64.const 0) (call $float-apply (i32.const 125) (local.get $x) (local.get $y)))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1765,14 +1828,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub (i64.const 0) (call $float-apply (i32.const 126) (local.get $x) (local.get $y)))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1787,14 +1849,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.sub (i64.const 0) (call $float-apply (i32.const 142) (local.get $x) (local.get $y)))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1809,14 +1870,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.sub (i64.const 0) (call $float-apply (i32.const 143) (local.get $x) (local.get $y)))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1831,14 +1891,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.sub (i64.const 0) (call $float-apply (i32.const 144) (local.get $x) (local.get $y)))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1853,14 +1912,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.sub (i64.const 0) (call $float-apply (i32.const 145) (local.get $x) (local.get $y)))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1875,14 +1933,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.sub (i64.const 0) (call $float-apply (i32.const 146) (local.get $x) (local.get $y)))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1897,14 +1954,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.sub (i64.const 0) (call $float-apply (i32.const 147) (local.get $x) (local.get $y)))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1924,12 +1980,7 @@
 		(param $ah i64)
 		(param $b i64)
 		(param $bh i64)
-		(param $c i64)
-		(param $ch i64)
-		(param $imm i32)
-		(param $imm2 i32)
 		(result i64)
-		(local $p i32)
 		(local $i i32)
 		(local $x i64)
 		(local $y i64)
@@ -1940,18 +1991,17 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(select
-							(i64.sub (i64.const 0) (call $vector-signed (local.get $x) (i32.const 8)))
-							(call $vector-signed (local.get $x) (i32.const 8))
-							(i64.lt_s (call $vector-signed (local.get $x) (i32.const 8)) (i64.const 0))
+							(i64.sub (i64.const 0) (i64.extend8_s (local.get $x)))
+							(i64.extend8_s (local.get $x))
+							(i64.lt_s (i64.extend8_s (local.get $x)) (i64.const 0))
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -1966,12 +2016,12 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert (i64.sub (i64.const 0) (local.get $x)) (i32.const 8) (local.get $i))
+					(call $vector-insert8 (i64.sub (i64.const 0) (local.get $x)) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 16)))
 				)
@@ -1984,12 +2034,12 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert (i64.popcnt (local.get $x)) (i32.const 8) (local.get $i))
+					(call $vector-insert8 (i64.popcnt (local.get $x)) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 16)))
 				)
@@ -2002,14 +2052,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply (i32.const 109) (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2024,14 +2073,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply (i32.const 110) (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2046,14 +2094,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply (i32.const 111) (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2068,14 +2115,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply (i32.const 112) (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2090,14 +2136,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(i64.shl (local.get $x) (i64.and (local.get $b) (i64.const 7)))
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2112,17 +2157,16 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(i64.shr_s
-							(call $vector-signed (local.get $x) (i32.const 8))
+							(i64.extend8_s (local.get $x))
 							(i64.and (local.get $b) (i64.const 7))
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2137,14 +2181,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(i64.shr_u (local.get $x) (i64.and (local.get $b) (i64.const 7)))
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2159,12 +2202,12 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert (i64.add (local.get $x) (local.get $y)) (i32.const 8) (local.get $i))
+					(call $vector-insert8 (i64.add (local.get $x) (local.get $y)) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 16)))
 				)
@@ -2177,21 +2220,20 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(call $vector-clamp
 							(i64.add
-								(call $vector-signed (local.get $x) (i32.const 8))
-								(call $vector-signed (local.get $y) (i32.const 8))
+								(i64.extend8_s (local.get $x))
+								(i64.extend8_s (local.get $y))
 							)
 							(i64.const -128)
 							(i64.const 127)
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2206,14 +2248,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(call $vector-clamp (i64.add (local.get $x) (local.get $y)) (i64.const 0) (i64.const 255))
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2228,12 +2269,12 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert (i64.sub (local.get $x) (local.get $y)) (i32.const 8) (local.get $i))
+					(call $vector-insert8 (i64.sub (local.get $x) (local.get $y)) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 16)))
 				)
@@ -2246,21 +2287,20 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(call $vector-clamp
 							(i64.sub
-								(call $vector-signed (local.get $x) (i32.const 8))
-								(call $vector-signed (local.get $y) (i32.const 8))
+								(i64.extend8_s (local.get $x))
+								(i64.extend8_s (local.get $y))
 							)
 							(i64.const -128)
 							(i64.const 127)
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2275,14 +2315,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(call $vector-clamp (i64.sub (local.get $x) (local.get $y)) (i64.const 0) (i64.const 255))
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2297,14 +2336,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply (i32.const 130) (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2319,14 +2357,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply (i32.const 131) (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2341,21 +2378,20 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(select
-							(call $vector-signed (local.get $x) (i32.const 8))
-							(call $vector-signed (local.get $y) (i32.const 8))
+							(i64.extend8_s (local.get $x))
+							(i64.extend8_s (local.get $y))
 							(i64.lt_s
-								(call $vector-signed (local.get $x) (i32.const 8))
-								(call $vector-signed (local.get $y) (i32.const 8))
+								(i64.extend8_s (local.get $x))
+								(i64.extend8_s (local.get $y))
 							)
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2370,14 +2406,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(select (local.get $x) (local.get $y) (i64.lt_u (local.get $x) (local.get $y)))
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2392,21 +2427,20 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(select
-							(call $vector-signed (local.get $x) (i32.const 8))
-							(call $vector-signed (local.get $y) (i32.const 8))
+							(i64.extend8_s (local.get $x))
+							(i64.extend8_s (local.get $y))
 							(i64.gt_s
-								(call $vector-signed (local.get $x) (i32.const 8))
-								(call $vector-signed (local.get $y) (i32.const 8))
+								(i64.extend8_s (local.get $x))
+								(i64.extend8_s (local.get $y))
 							)
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2421,14 +2455,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(select (local.get $x) (local.get $y) (i64.gt_u (local.get $x) (local.get $y)))
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2443,14 +2476,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply (i32.const 132) (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2465,14 +2497,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+						(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert8
 						(i64.shr_u (i64.add (i64.add (local.get $x) (local.get $y)) (i64.const 1)) (i64.const 1))
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2492,12 +2523,7 @@
 		(param $ah i64)
 		(param $b i64)
 		(param $bh i64)
-		(param $c i64)
-		(param $ch i64)
-		(param $imm i32)
-		(param $imm2 i32)
 		(result i64)
-		(local $p i32)
 		(local $i i32)
 		(local $x i64)
 		(local $y i64)
@@ -2508,18 +2534,17 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(select
-							(i64.sub (i64.const 0) (call $vector-signed (local.get $x) (i32.const 16)))
-							(call $vector-signed (local.get $x) (i32.const 16))
-							(i64.lt_s (call $vector-signed (local.get $x) (i32.const 16)) (i64.const 0))
+							(i64.sub (i64.const 0) (i64.extend16_s (local.get $x)))
+							(i64.extend16_s (local.get $x))
+							(i64.lt_s (i64.extend16_s (local.get $x)) (i64.const 0))
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2534,12 +2559,12 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert (i64.sub (i64.const 0) (local.get $x)) (i32.const 16) (local.get $i))
+					(call $vector-insert16 (i64.sub (i64.const 0) (local.get $x)) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
 				)
@@ -2552,14 +2577,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.shl (local.get $x) (i64.and (local.get $b) (i64.const 15)))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2574,17 +2598,16 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.shr_s
-							(call $vector-signed (local.get $x) (i32.const 16))
+							(i64.extend16_s (local.get $x))
 							(i64.and (local.get $b) (i64.const 15))
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2599,14 +2622,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.shr_u (local.get $x) (i64.and (local.get $b) (i64.const 15)))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2621,14 +2643,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.add (local.get $x) (local.get $y))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2643,21 +2664,20 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(call $vector-clamp
 							(i64.add
-								(call $vector-signed (local.get $x) (i32.const 16))
-								(call $vector-signed (local.get $y) (i32.const 16))
+								(i64.extend16_s (local.get $x))
+								(i64.extend16_s (local.get $y))
 							)
 							(i64.const -32768)
 							(i64.const 32767)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2672,18 +2692,17 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(call $vector-clamp
 							(i64.add (local.get $x) (local.get $y))
 							(i64.const 0)
 							(i64.const 65535)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2698,14 +2717,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.sub (local.get $x) (local.get $y))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2720,21 +2738,20 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(call $vector-clamp
 							(i64.sub
-								(call $vector-signed (local.get $x) (i32.const 16))
-								(call $vector-signed (local.get $y) (i32.const 16))
+								(i64.extend16_s (local.get $x))
+								(i64.extend16_s (local.get $y))
 							)
 							(i64.const -32768)
 							(i64.const 32767)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2749,18 +2766,17 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(call $vector-clamp
 							(i64.sub (local.get $x) (local.get $y))
 							(i64.const 0)
 							(i64.const 65535)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2775,14 +2791,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply (i32.const 133) (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2797,14 +2812,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.mul (local.get $x) (local.get $y))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2819,21 +2833,20 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(select
-							(call $vector-signed (local.get $x) (i32.const 16))
-							(call $vector-signed (local.get $y) (i32.const 16))
+							(i64.extend16_s (local.get $x))
+							(i64.extend16_s (local.get $y))
 							(i64.lt_s
-								(call $vector-signed (local.get $x) (i32.const 16))
-								(call $vector-signed (local.get $y) (i32.const 16))
+								(i64.extend16_s (local.get $x))
+								(i64.extend16_s (local.get $y))
 							)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2848,14 +2861,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(select (local.get $x) (local.get $y) (i64.lt_u (local.get $x) (local.get $y)))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2870,21 +2882,20 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(select
-							(call $vector-signed (local.get $x) (i32.const 16))
-							(call $vector-signed (local.get $y) (i32.const 16))
+							(i64.extend16_s (local.get $x))
+							(i64.extend16_s (local.get $y))
 							(i64.gt_s
-								(call $vector-signed (local.get $x) (i32.const 16))
-								(call $vector-signed (local.get $y) (i32.const 16))
+								(i64.extend16_s (local.get $x))
+								(i64.extend16_s (local.get $y))
 							)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2899,14 +2910,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(select (local.get $x) (local.get $y) (i64.gt_u (local.get $x) (local.get $y)))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2921,14 +2931,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+						(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.shr_u (i64.add (i64.add (local.get $x) (local.get $y)) (i64.const 1)) (i64.const 1))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2948,12 +2957,7 @@
 		(param $ah i64)
 		(param $b i64)
 		(param $bh i64)
-		(param $c i64)
-		(param $ch i64)
-		(param $imm i32)
-		(param $imm2 i32)
 		(result i64)
-		(local $p i32)
 		(local $i i32)
 		(local $x i64)
 		(local $y i64)
@@ -2964,14 +2968,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.add (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2986,18 +2989,17 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(select
-							(i64.sub (i64.const 0) (call $vector-signed (local.get $x) (i32.const 32)))
-							(call $vector-signed (local.get $x) (i32.const 32))
-							(i64.lt_s (call $vector-signed (local.get $x) (i32.const 32)) (i64.const 0))
+							(i64.sub (i64.const 0) (i64.extend32_s (local.get $x)))
+							(i64.extend32_s (local.get $x))
+							(i64.lt_s (i64.extend32_s (local.get $x)) (i64.const 0))
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3012,12 +3014,12 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert (i64.sub (i64.const 0) (local.get $x)) (i32.const 32) (local.get $i))
+					(call $vector-insert32 (i64.sub (i64.const 0) (local.get $x)) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
 				)
@@ -3030,14 +3032,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.shl (local.get $x) (i64.and (local.get $b) (i64.const 31)))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3052,17 +3053,16 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.shr_s
-							(call $vector-signed (local.get $x) (i32.const 32))
+							(i64.extend32_s (local.get $x))
 							(i64.and (local.get $b) (i64.const 31))
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3077,14 +3077,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.shr_u (local.get $x) (i64.and (local.get $b) (i64.const 31)))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3099,14 +3098,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.sub (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3121,14 +3119,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.mul (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3143,21 +3140,20 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(select
-							(call $vector-signed (local.get $x) (i32.const 32))
-							(call $vector-signed (local.get $y) (i32.const 32))
+							(i64.extend32_s (local.get $x))
+							(i64.extend32_s (local.get $y))
 							(i64.lt_s
-								(call $vector-signed (local.get $x) (i32.const 32))
-								(call $vector-signed (local.get $y) (i32.const 32))
+								(i64.extend32_s (local.get $x))
+								(i64.extend32_s (local.get $y))
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3172,14 +3168,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(select (local.get $x) (local.get $y) (i64.lt_u (local.get $x) (local.get $y)))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3194,21 +3189,20 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(select
-							(call $vector-signed (local.get $x) (i32.const 32))
-							(call $vector-signed (local.get $y) (i32.const 32))
+							(i64.extend32_s (local.get $x))
+							(i64.extend32_s (local.get $y))
 							(i64.gt_s
-								(call $vector-signed (local.get $x) (i32.const 32))
-								(call $vector-signed (local.get $y) (i32.const 32))
+								(i64.extend32_s (local.get $x))
+								(i64.extend32_s (local.get $y))
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3223,14 +3217,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(select (local.get $x) (local.get $y) (i64.gt_u (local.get $x) (local.get $y)))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3250,12 +3243,7 @@
 		(param $ah i64)
 		(param $b i64)
 		(param $bh i64)
-		(param $c i64)
-		(param $ch i64)
-		(param $imm i32)
-		(param $imm2 i32)
 		(result i64)
-		(local $p i32)
 		(local $i i32)
 		(local $x i64)
 		(local $y i64)
@@ -3266,14 +3254,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.add (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3288,18 +3275,17 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(select
-							(i64.sub (i64.const 0) (call $vector-signed (local.get $x) (i32.const 64)))
-							(call $vector-signed (local.get $x) (i32.const 64))
-							(i64.lt_s (call $vector-signed (local.get $x) (i32.const 64)) (i64.const 0))
+							(i64.sub (i64.const 0) (local.get $x))
+							(local.get $x)
+							(i64.lt_s (local.get $x) (i64.const 0))
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3314,12 +3300,12 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert (i64.sub (i64.const 0) (local.get $x)) (i32.const 64) (local.get $i))
+					(call $vector-insert64 (i64.sub (i64.const 0) (local.get $x)) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
 				)
@@ -3332,14 +3318,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.shl (local.get $x) (i64.and (local.get $b) (i64.const 63)))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3354,17 +3339,16 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.shr_s
-							(call $vector-signed (local.get $x) (i32.const 64))
+							(local.get $x)
 							(i64.and (local.get $b) (i64.const 63))
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3379,14 +3363,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.shr_u (local.get $x) (i64.and (local.get $b) (i64.const 63)))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3401,14 +3384,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.sub (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3423,14 +3405,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.mul (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3445,14 +3426,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.eq (local.get $x) (local.get $y))))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3467,14 +3447,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.sub (i64.const 0) (i64.extend_i32_u (i64.ne (local.get $x) (local.get $y))))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3489,22 +3468,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.lt_s
-									(call $vector-signed (local.get $x) (i32.const 64))
-									(call $vector-signed (local.get $y) (i32.const 64))
+									(local.get $x)
+									(local.get $y)
 								)
 							)
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3519,22 +3497,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.gt_s
-									(call $vector-signed (local.get $x) (i32.const 64))
-									(call $vector-signed (local.get $y) (i32.const 64))
+									(local.get $x)
+									(local.get $y)
 								)
 							)
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3549,22 +3526,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.le_s
-									(call $vector-signed (local.get $x) (i32.const 64))
-									(call $vector-signed (local.get $y) (i32.const 64))
+									(local.get $x)
+									(local.get $y)
 								)
 							)
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3579,22 +3555,21 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.sub
 							(i64.const 0)
 							(i64.extend_i32_u
 								(i64.ge_s
-									(call $vector-signed (local.get $x) (i32.const 64))
-									(call $vector-signed (local.get $y) (i32.const 64))
+									(local.get $x)
+									(local.get $y)
 								)
 							)
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3614,12 +3589,7 @@
 		(param $ah i64)
 		(param $b i64)
 		(param $bh i64)
-		(param $c i64)
-		(param $ch i64)
-		(param $imm i32)
-		(param $imm2 i32)
 		(result i64)
-		(local $p i32)
 		(local $i i32)
 		(local $x i64)
 		(local $y i64)
@@ -3630,14 +3600,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply (i32.const 107) (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3652,14 +3621,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply (i32.const 108) (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3674,14 +3642,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply (i32.const 113) (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3696,14 +3663,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply (i32.const 114) (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3718,14 +3684,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply (i32.const 115) (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3740,14 +3705,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply (i32.const 116) (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3762,14 +3726,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply (i32.const 117) (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3784,14 +3747,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply (i32.const 118) (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3806,14 +3768,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply (i32.const 119) (local.get $x) (local.get $y))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3828,12 +3789,12 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(select
 							(local.get $y)
 							(local.get $x)
@@ -3842,7 +3803,6 @@
 								(f32.reinterpret_i32 (i32.wrap_i64 (local.get $x)))
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3857,12 +3817,12 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+						(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert32
 						(select
 							(local.get $y)
 							(local.get $x)
@@ -3871,7 +3831,6 @@
 								(f32.reinterpret_i32 (i32.wrap_i64 (local.get $x)))
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3891,12 +3850,7 @@
 		(param $ah i64)
 		(param $b i64)
 		(param $bh i64)
-		(param $c i64)
-		(param $ch i64)
-		(param $imm i32)
-		(param $imm2 i32)
 		(result i64)
-		(local $p i32)
 		(local $i i32)
 		(local $x i64)
 		(local $y i64)
@@ -3907,14 +3861,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply (i32.const 128) (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3929,14 +3882,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply (i32.const 129) (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3951,14 +3903,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply (i32.const 134) (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3973,14 +3924,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply (i32.const 135) (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -3995,14 +3945,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply (i32.const 136) (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4017,14 +3966,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply (i32.const 137) (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4039,14 +3987,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply (i32.const 138) (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4061,14 +4008,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply (i32.const 139) (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4083,14 +4029,13 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply (i32.const 140) (local.get $x) (local.get $y))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4105,18 +4050,17 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(select
 							(local.get $y)
 							(local.get $x)
 							(f64.lt (f64.reinterpret_i64 (local.get $y)) (f64.reinterpret_i64 (local.get $x)))
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4131,18 +4075,17 @@
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
 					(local.set $x
-						(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 					)
 					(local.set $y
-						(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+						(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 					)
-					(call $vector-insert
+					(call $vector-insert64
 						(select
 							(local.get $y)
 							(local.get $x)
 							(f64.gt (f64.reinterpret_i64 (local.get $y)) (f64.reinterpret_i64 (local.get $x)))
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4162,23 +4105,17 @@
 		(param $ah i64)
 		(param $b i64)
 		(param $bh i64)
-		(param $c i64)
-		(param $ch i64)
 		(param $imm i32)
-		(param $imm2 i32)
 		(result i64)
-		(local $p i32)
 		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
 		;; Interpret i8x16.shuffle using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const 335))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-lane
+					(call $vector-insert8
+						(call $vector-lane8
 							(select
 								(local.get $b)
 								(local.get $a)
@@ -4189,10 +4126,8 @@
 								(local.get $ah)
 								(i32.ge_u (i32.load8_u (i32.add (local.get $imm) (local.get $i))) (i32.const 16))
 							)
-							(i32.const 8)
 							(i32.and (i32.load8_u (i32.add (local.get $imm) (local.get $i))) (i32.const 15))
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4206,25 +4141,23 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert8
 						(select
-							(call $vector-lane
+							(call $vector-lane8
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 8)
 								(i32.wrap_i64
-									(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+									(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 								)
 							)
 							(i64.const 0)
 							(i32.lt_u
 								(i32.wrap_i64
-									(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+									(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 								)
 								(i32.const 16)
 							)
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4238,7 +4171,7 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert (local.get $a) (i32.const 8) (local.get $i))
+					(call $vector-insert8 (local.get $a) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 16)))
 				)
@@ -4250,7 +4183,7 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert (local.get $a) (i32.const 16) (local.get $i))
+					(call $vector-insert16 (local.get $a) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
 				)
@@ -4262,7 +4195,7 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert (local.get $a) (i32.const 32) (local.get $i))
+					(call $vector-insert32 (local.get $a) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
 				)
@@ -4274,7 +4207,7 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert (local.get $a) (i32.const 64) (local.get $i))
+					(call $vector-insert64 (local.get $a) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
 				)
@@ -4286,7 +4219,7 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert (local.get $a) (i32.const 32) (local.get $i))
+					(call $vector-insert32 (local.get $a) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
 				)
@@ -4298,7 +4231,7 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert (local.get $a) (i32.const 64) (local.get $i))
+					(call $vector-insert64 (local.get $a) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
 				)
@@ -4311,9 +4244,8 @@
 				(global.set $vector-low
 					(i64.extend_i32_s
 						(i32.wrap_i64
-							(call $vector-signed
-								(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $imm))
-								(i32.const 8)
+							(i64.extend8_s
+								(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $imm))
 							)
 						)
 					)
@@ -4327,7 +4259,7 @@
 				(global.set $vector-low
 					(i64.extend_i32_s
 						(i32.wrap_i64
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $imm))
+							(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $imm))
 						)
 					)
 				)
@@ -4339,13 +4271,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert8
 						(select
 							(local.get $b)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+							(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 							(i32.eq (local.get $i) (local.get $imm))
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4360,9 +4291,8 @@
 				(global.set $vector-low
 					(i64.extend_i32_s
 						(i32.wrap_i64
-							(call $vector-signed
-								(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $imm))
-								(i32.const 16)
+							(i64.extend16_s
+								(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $imm))
 							)
 						)
 					)
@@ -4376,7 +4306,7 @@
 				(global.set $vector-low
 					(i64.extend_i32_s
 						(i32.wrap_i64
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $imm))
+							(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $imm))
 						)
 					)
 				)
@@ -4388,13 +4318,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert16
 						(select
 							(local.get $b)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+							(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 							(i32.eq (local.get $i) (local.get $imm))
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4409,7 +4338,7 @@
 				(global.set $vector-low
 					(i64.extend_i32_s
 						(i32.wrap_i64
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $imm))
+							(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $imm))
 						)
 					)
 				)
@@ -4421,13 +4350,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(select
 							(local.get $b)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+							(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 							(i32.eq (local.get $i) (local.get $imm))
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4440,7 +4368,7 @@
 		(if (i32.eq (local.get $op) (i32.const 351))
 			(then
 				(global.set $vector-low
-					(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $imm))
+					(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $imm))
 				)
 				(return (global.get $vector-low))
 			)
@@ -4450,13 +4378,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert64
 						(select
 							(local.get $b)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+							(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 							(i32.eq (local.get $i) (local.get $imm))
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4469,7 +4396,7 @@
 		(if (i32.eq (local.get $op) (i32.const 353))
 			(then
 				(global.set $vector-low
-					(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $imm))
+					(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $imm))
 				)
 				(return (global.get $vector-low))
 			)
@@ -4479,13 +4406,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(select
 							(local.get $b)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+							(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 							(i32.eq (local.get $i) (local.get $imm))
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4498,7 +4424,7 @@
 		(if (i32.eq (local.get $op) (i32.const 355))
 			(then
 				(global.set $vector-low
-					(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $imm))
+					(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $imm))
 				)
 				(return (global.get $vector-low))
 			)
@@ -4508,13 +4434,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert64
 						(select
 							(local.get $b)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+							(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 							(i32.eq (local.get $i) (local.get $imm))
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4536,13 +4461,8 @@
 		(param $bh i64)
 		(param $c i64)
 		(param $ch i64)
-		(param $imm i32)
-		(param $imm2 i32)
 		(result i64)
-		(local $p i32)
 		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
 		;; Interpret v128.not using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const 357))
@@ -4618,13 +4538,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply
 							(i32.const 168)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+							(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 							(i64.const 0)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4638,13 +4557,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply
 							(i32.const 169)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+							(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 							(i64.const 0)
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4664,15 +4582,8 @@
 		(param $ah i64)
 		(param $b i64)
 		(param $bh i64)
-		(param $c i64)
-		(param $ch i64)
-		(param $imm i32)
-		(param $imm2 i32)
 		(result i64)
-		(local $p i32)
 		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
 		;; Interpret i8x16.all_true using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const 366))
@@ -4685,7 +4596,7 @@
 							(global.get $vector-low)
 							(i64.extend_i32_u
 								(i64.ne
-									(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+									(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 									(i64.const 0)
 								)
 							)
@@ -4707,7 +4618,7 @@
 							(global.get $vector-low)
 							(i64.shl
 								(i64.shr_u
-									(call $vector-lane (local.get $a) (local.get $ah) (i32.const 8) (local.get $i))
+									(call $vector-lane8 (local.get $a) (local.get $ah) (local.get $i))
 									(i64.const 7)
 								)
 								(i64.extend_i32_u (local.get $i))
@@ -4725,33 +4636,28 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert8
 						(call $vector-clamp
 							(select
-								(call $vector-signed
-									(call $vector-lane
+								(i64.extend16_s
+									(call $vector-lane16
 										(local.get $a)
 										(local.get $ah)
-										(i32.const 16)
 										(i32.rem_u (local.get $i) (i32.const 8))
 									)
-									(i32.const 16)
 								)
-								(call $vector-signed
-									(call $vector-lane
+								(i64.extend16_s
+									(call $vector-lane16
 										(local.get $b)
 										(local.get $bh)
-										(i32.const 16)
 										(i32.rem_u (local.get $i) (i32.const 8))
 									)
-									(i32.const 16)
 								)
 								(i32.lt_u (local.get $i) (i32.const 8))
 							)
 							(i64.const -128)
 							(i64.const 127)
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4765,33 +4671,28 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert8
 						(call $vector-clamp
 							(select
-								(call $vector-signed
-									(call $vector-lane
+								(i64.extend16_s
+									(call $vector-lane16
 										(local.get $a)
 										(local.get $ah)
-										(i32.const 16)
 										(i32.rem_u (local.get $i) (i32.const 8))
 									)
-									(i32.const 16)
 								)
-								(call $vector-signed
-									(call $vector-lane
+								(i64.extend16_s
+									(call $vector-lane16
 										(local.get $b)
 										(local.get $bh)
-										(i32.const 16)
 										(i32.rem_u (local.get $i) (i32.const 8))
 									)
-									(i32.const 16)
 								)
 								(i32.lt_u (local.get $i) (i32.const 8))
 							)
 							(i64.const 0)
 							(i64.const 255)
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4805,28 +4706,23 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.add
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend8_s
+								(call $vector-lane8
 									(local.get $a)
 									(local.get $ah)
-									(i32.const 8)
 									(i32.mul (local.get $i) (i32.const 2))
 								)
-								(i32.const 8)
 							)
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend8_s
+								(call $vector-lane8
 									(local.get $a)
 									(local.get $ah)
-									(i32.const 8)
 									(i32.add (i32.mul (local.get $i) (i32.const 2)) (i32.const 1))
 								)
-								(i32.const 8)
 							)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4840,22 +4736,19 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.add
-							(call $vector-lane
+							(call $vector-lane8
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 8)
 								(i32.mul (local.get $i) (i32.const 2))
 							)
-							(call $vector-lane
+							(call $vector-lane8
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 8)
 								(i32.add (i32.mul (local.get $i) (i32.const 2)) (i32.const 1))
 							)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4869,28 +4762,23 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.add
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend16_s
+								(call $vector-lane16
 									(local.get $a)
 									(local.get $ah)
-									(i32.const 16)
 									(i32.mul (local.get $i) (i32.const 2))
 								)
-								(i32.const 16)
 							)
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend16_s
+								(call $vector-lane16
 									(local.get $a)
 									(local.get $ah)
-									(i32.const 16)
 									(i32.add (i32.mul (local.get $i) (i32.const 2)) (i32.const 1))
 								)
-								(i32.const 16)
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4904,22 +4792,19 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.add
-							(call $vector-lane
+							(call $vector-lane16
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 16)
 								(i32.mul (local.get $i) (i32.const 2))
 							)
-							(call $vector-lane
+							(call $vector-lane16
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 16)
 								(i32.add (i32.mul (local.get $i) (i32.const 2)) (i32.const 1))
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4933,18 +4818,16 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert16
 						(call $vector-clamp
 							(i64.shr_s
 								(i64.add
 									(i64.mul
-										(call $vector-signed
-											(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
-											(i32.const 16)
+										(i64.extend16_s
+											(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 										)
-										(call $vector-signed
-											(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
-											(i32.const 16)
+										(i64.extend16_s
+											(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 										)
 									)
 									(i64.const 16384)
@@ -4954,7 +4837,6 @@
 							(i64.const -32768)
 							(i64.const 32767)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -4974,7 +4856,7 @@
 							(global.get $vector-low)
 							(i64.extend_i32_u
 								(i64.ne
-									(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+									(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 									(i64.const 0)
 								)
 							)
@@ -4996,7 +4878,7 @@
 							(global.get $vector-low)
 							(i64.shl
 								(i64.shr_u
-									(call $vector-lane (local.get $a) (local.get $ah) (i32.const 16) (local.get $i))
+									(call $vector-lane16 (local.get $a) (local.get $ah) (local.get $i))
 									(i64.const 15)
 								)
 								(i64.extend_i32_u (local.get $i))
@@ -5014,33 +4896,28 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert16
 						(call $vector-clamp
 							(select
-								(call $vector-signed
-									(call $vector-lane
+								(i64.extend32_s
+									(call $vector-lane32
 										(local.get $a)
 										(local.get $ah)
-										(i32.const 32)
 										(i32.rem_u (local.get $i) (i32.const 4))
 									)
-									(i32.const 32)
 								)
-								(call $vector-signed
-									(call $vector-lane
+								(i64.extend32_s
+									(call $vector-lane32
 										(local.get $b)
 										(local.get $bh)
-										(i32.const 32)
 										(i32.rem_u (local.get $i) (i32.const 4))
 									)
-									(i32.const 32)
 								)
 								(i32.lt_u (local.get $i) (i32.const 4))
 							)
 							(i64.const -32768)
 							(i64.const 32767)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5054,33 +4931,28 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert16
 						(call $vector-clamp
 							(select
-								(call $vector-signed
-									(call $vector-lane
+								(i64.extend32_s
+									(call $vector-lane32
 										(local.get $a)
 										(local.get $ah)
-										(i32.const 32)
 										(i32.rem_u (local.get $i) (i32.const 4))
 									)
-									(i32.const 32)
 								)
-								(call $vector-signed
-									(call $vector-lane
+								(i64.extend32_s
+									(call $vector-lane32
 										(local.get $b)
 										(local.get $bh)
-										(i32.const 32)
 										(i32.rem_u (local.get $i) (i32.const 4))
 									)
-									(i32.const 32)
 								)
 								(i32.lt_u (local.get $i) (i32.const 4))
 							)
 							(i64.const 0)
 							(i64.const 65535)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5094,17 +4966,14 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-signed
-							(call $vector-lane
+					(call $vector-insert16
+						(i64.extend8_s
+							(call $vector-lane8
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 8)
 								(i32.add (local.get $i) (i32.const 0))
 							)
-							(i32.const 8)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5118,17 +4987,14 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-signed
-							(call $vector-lane
+					(call $vector-insert16
+						(i64.extend8_s
+							(call $vector-lane8
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 8)
 								(i32.add (local.get $i) (i32.const 8))
 							)
-							(i32.const 8)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5142,14 +5008,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-lane
+					(call $vector-insert16
+						(call $vector-lane8
 							(local.get $a)
 							(local.get $ah)
-							(i32.const 8)
 							(i32.add (local.get $i) (i32.const 0))
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5163,14 +5027,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-lane
+					(call $vector-insert16
+						(call $vector-lane8
 							(local.get $a)
 							(local.get $ah)
-							(i32.const 8)
 							(i32.add (local.get $i) (i32.const 8))
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5184,28 +5046,23 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.mul
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend8_s
+								(call $vector-lane8
 									(local.get $a)
 									(local.get $ah)
-									(i32.const 8)
 									(i32.add (local.get $i) (i32.const 0))
 								)
-								(i32.const 8)
 							)
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend8_s
+								(call $vector-lane8
 									(local.get $b)
 									(local.get $bh)
-									(i32.const 8)
 									(i32.add (local.get $i) (i32.const 0))
 								)
-								(i32.const 8)
 							)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5219,28 +5076,23 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.mul
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend8_s
+								(call $vector-lane8
 									(local.get $a)
 									(local.get $ah)
-									(i32.const 8)
 									(i32.add (local.get $i) (i32.const 8))
 								)
-								(i32.const 8)
 							)
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend8_s
+								(call $vector-lane8
 									(local.get $b)
 									(local.get $bh)
-									(i32.const 8)
 									(i32.add (local.get $i) (i32.const 8))
 								)
-								(i32.const 8)
 							)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5254,22 +5106,19 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.mul
-							(call $vector-lane
+							(call $vector-lane8
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 8)
 								(i32.add (local.get $i) (i32.const 0))
 							)
-							(call $vector-lane
+							(call $vector-lane8
 								(local.get $b)
 								(local.get $bh)
-								(i32.const 8)
 								(i32.add (local.get $i) (i32.const 0))
 							)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5283,22 +5132,19 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.mul
-							(call $vector-lane
+							(call $vector-lane8
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 8)
 								(i32.add (local.get $i) (i32.const 8))
 							)
-							(call $vector-lane
+							(call $vector-lane8
 								(local.get $b)
 								(local.get $bh)
-								(i32.const 8)
 								(i32.add (local.get $i) (i32.const 8))
 							)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5318,7 +5164,7 @@
 							(global.get $vector-low)
 							(i64.extend_i32_u
 								(i64.ne
-									(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+									(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 									(i64.const 0)
 								)
 							)
@@ -5340,7 +5186,7 @@
 							(global.get $vector-low)
 							(i64.shl
 								(i64.shr_u
-									(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+									(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 									(i64.const 31)
 								)
 								(i64.extend_i32_u (local.get $i))
@@ -5358,17 +5204,14 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-signed
-							(call $vector-lane
+					(call $vector-insert32
+						(i64.extend16_s
+							(call $vector-lane16
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 16)
 								(i32.add (local.get $i) (i32.const 0))
 							)
-							(i32.const 16)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5382,17 +5225,14 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-signed
-							(call $vector-lane
+					(call $vector-insert32
+						(i64.extend16_s
+							(call $vector-lane16
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 16)
 								(i32.add (local.get $i) (i32.const 4))
 							)
-							(i32.const 16)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5406,14 +5246,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-lane
+					(call $vector-insert32
+						(call $vector-lane16
 							(local.get $a)
 							(local.get $ah)
-							(i32.const 16)
 							(i32.add (local.get $i) (i32.const 0))
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5427,14 +5265,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-lane
+					(call $vector-insert32
+						(call $vector-lane16
 							(local.get $a)
 							(local.get $ah)
-							(i32.const 16)
 							(i32.add (local.get $i) (i32.const 4))
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5448,50 +5284,41 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.add
 							(i64.mul
-								(call $vector-signed
-									(call $vector-lane
+								(i64.extend16_s
+									(call $vector-lane16
 										(local.get $a)
 										(local.get $ah)
-										(i32.const 16)
 										(i32.mul (local.get $i) (i32.const 2))
 									)
-									(i32.const 16)
 								)
-								(call $vector-signed
-									(call $vector-lane
+								(i64.extend16_s
+									(call $vector-lane16
 										(local.get $b)
 										(local.get $bh)
-										(i32.const 16)
 										(i32.mul (local.get $i) (i32.const 2))
 									)
-									(i32.const 16)
 								)
 							)
 							(i64.mul
-								(call $vector-signed
-									(call $vector-lane
+								(i64.extend16_s
+									(call $vector-lane16
 										(local.get $a)
 										(local.get $ah)
-										(i32.const 16)
 										(i32.add (i32.mul (local.get $i) (i32.const 2)) (i32.const 1))
 									)
-									(i32.const 16)
 								)
-								(call $vector-signed
-									(call $vector-lane
+								(i64.extend16_s
+									(call $vector-lane16
 										(local.get $b)
 										(local.get $bh)
-										(i32.const 16)
 										(i32.add (i32.mul (local.get $i) (i32.const 2)) (i32.const 1))
 									)
-									(i32.const 16)
 								)
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5505,28 +5332,23 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.mul
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend16_s
+								(call $vector-lane16
 									(local.get $a)
 									(local.get $ah)
-									(i32.const 16)
 									(i32.add (local.get $i) (i32.const 0))
 								)
-								(i32.const 16)
 							)
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend16_s
+								(call $vector-lane16
 									(local.get $b)
 									(local.get $bh)
-									(i32.const 16)
 									(i32.add (local.get $i) (i32.const 0))
 								)
-								(i32.const 16)
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5540,28 +5362,23 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.mul
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend16_s
+								(call $vector-lane16
 									(local.get $a)
 									(local.get $ah)
-									(i32.const 16)
 									(i32.add (local.get $i) (i32.const 4))
 								)
-								(i32.const 16)
 							)
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend16_s
+								(call $vector-lane16
 									(local.get $b)
 									(local.get $bh)
-									(i32.const 16)
 									(i32.add (local.get $i) (i32.const 4))
 								)
-								(i32.const 16)
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5575,22 +5392,19 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.mul
-							(call $vector-lane
+							(call $vector-lane16
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 16)
 								(i32.add (local.get $i) (i32.const 0))
 							)
-							(call $vector-lane
+							(call $vector-lane16
 								(local.get $b)
 								(local.get $bh)
-								(i32.const 16)
 								(i32.add (local.get $i) (i32.const 0))
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5604,22 +5418,19 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.mul
-							(call $vector-lane
+							(call $vector-lane16
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 16)
 								(i32.add (local.get $i) (i32.const 4))
 							)
-							(call $vector-lane
+							(call $vector-lane16
 								(local.get $b)
 								(local.get $bh)
-								(i32.const 16)
 								(i32.add (local.get $i) (i32.const 4))
 							)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5639,7 +5450,7 @@
 							(global.get $vector-low)
 							(i64.extend_i32_u
 								(i64.ne
-									(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+									(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 									(i64.const 0)
 								)
 							)
@@ -5661,7 +5472,7 @@
 							(global.get $vector-low)
 							(i64.shl
 								(i64.shr_u
-									(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+									(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 									(i64.const 63)
 								)
 								(i64.extend_i32_u (local.get $i))
@@ -5679,17 +5490,14 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-signed
-							(call $vector-lane
+					(call $vector-insert64
+						(i64.extend32_s
+							(call $vector-lane32
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 32)
 								(i32.add (local.get $i) (i32.const 0))
 							)
-							(i32.const 32)
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5703,17 +5511,14 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-signed
-							(call $vector-lane
+					(call $vector-insert64
+						(i64.extend32_s
+							(call $vector-lane32
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 32)
 								(i32.add (local.get $i) (i32.const 2))
 							)
-							(i32.const 32)
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5727,14 +5532,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-lane
+					(call $vector-insert64
+						(call $vector-lane32
 							(local.get $a)
 							(local.get $ah)
-							(i32.const 32)
 							(i32.add (local.get $i) (i32.const 0))
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5748,14 +5551,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-lane
+					(call $vector-insert64
+						(call $vector-lane32
 							(local.get $a)
 							(local.get $ah)
-							(i32.const 32)
 							(i32.add (local.get $i) (i32.const 2))
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5769,28 +5570,23 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.mul
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend32_s
+								(call $vector-lane32
 									(local.get $a)
 									(local.get $ah)
-									(i32.const 32)
 									(i32.add (local.get $i) (i32.const 0))
 								)
-								(i32.const 32)
 							)
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend32_s
+								(call $vector-lane32
 									(local.get $b)
 									(local.get $bh)
-									(i32.const 32)
 									(i32.add (local.get $i) (i32.const 0))
 								)
-								(i32.const 32)
 							)
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5804,28 +5600,23 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.mul
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend32_s
+								(call $vector-lane32
 									(local.get $a)
 									(local.get $ah)
-									(i32.const 32)
 									(i32.add (local.get $i) (i32.const 2))
 								)
-								(i32.const 32)
 							)
-							(call $vector-signed
-								(call $vector-lane
+							(i64.extend32_s
+								(call $vector-lane32
 									(local.get $b)
 									(local.get $bh)
-									(i32.const 32)
 									(i32.add (local.get $i) (i32.const 2))
 								)
-								(i32.const 32)
 							)
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5839,22 +5630,19 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.mul
-							(call $vector-lane
+							(call $vector-lane32
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 32)
 								(i32.add (local.get $i) (i32.const 0))
 							)
-							(call $vector-lane
+							(call $vector-lane32
 								(local.get $b)
 								(local.get $bh)
-								(i32.const 32)
 								(i32.add (local.get $i) (i32.const 0))
 							)
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5868,22 +5656,19 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.mul
-							(call $vector-lane
+							(call $vector-lane32
 								(local.get $a)
 								(local.get $ah)
-								(i32.const 32)
 								(i32.add (local.get $i) (i32.const 2))
 							)
-							(call $vector-lane
+							(call $vector-lane32
 								(local.get $b)
 								(local.get $bh)
-								(i32.const 32)
 								(i32.add (local.get $i) (i32.const 2))
 							)
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5901,30 +5686,20 @@
 		(param $op i32)
 		(param $a i64)
 		(param $ah i64)
-		(param $b i64)
-		(param $bh i64)
-		(param $c i64)
-		(param $ch i64)
-		(param $imm i32)
-		(param $imm2 i32)
 		(result i64)
-		(local $p i32)
 		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
 		;; Interpret i32x4.trunc_sat_f32x4_s using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const 408))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply
 							(i32.const 179)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+							(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 							(i64.const 0)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5938,13 +5713,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply
 							(i32.const 180)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+							(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 							(i64.const 0)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5958,13 +5732,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply
 							(i32.const 160)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+							(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 							(i64.const 0)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5978,13 +5751,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply
 							(i32.const 161)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+							(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 							(i64.const 0)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -5998,13 +5770,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply
 							(i32.const 181)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+							(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 							(i64.const 0)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -6018,13 +5789,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(call $float-apply
 							(i32.const 182)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 64) (local.get $i))
+							(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $i))
 							(i64.const 0)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -6038,13 +5808,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply
 							(i32.const 164)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+							(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 							(i64.const 0)
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -6058,13 +5827,12 @@
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert64
 						(call $float-apply
 							(i32.const 165)
-							(call $vector-lane (local.get $a) (local.get $ah) (i32.const 32) (local.get $i))
+							(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $i))
 							(i64.const 0)
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -6081,18 +5849,13 @@
 	(func $vector-memory
 		(param $op i32)
 		(param $a i64)
-		(param $ah i64)
 		(param $b i64)
 		(param $bh i64)
-		(param $c i64)
-		(param $ch i64)
 		(param $imm i32)
 		(param $imm2 i32)
 		(result i64)
 		(local $p i32)
 		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
 		;; Interpret v128.load with an atomic unsigned memory bound check.
 		(if (i32.eq (local.get $op) (i32.const 416))
@@ -6123,12 +5886,10 @@
 				)
 				;; Expand or splat the raw memory lanes into all output lanes.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-signed
+					(call $vector-insert16
+						(i64.extend8_s
 							(i64.load8_u (i32.add (local.get $p) (i32.mul (local.get $i) (i32.const 1))))
-							(i32.const 8)
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -6150,9 +5911,8 @@
 				)
 				;; Expand or splat the raw memory lanes into all output lanes.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert16
 						(i64.load8_u (i32.add (local.get $p) (i32.mul (local.get $i) (i32.const 1))))
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -6174,12 +5934,10 @@
 				)
 				;; Expand or splat the raw memory lanes into all output lanes.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-signed
+					(call $vector-insert32
+						(i64.extend16_s
 							(i64.load16_u (i32.add (local.get $p) (i32.mul (local.get $i) (i32.const 2))))
-							(i32.const 16)
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -6201,9 +5959,8 @@
 				)
 				;; Expand or splat the raw memory lanes into all output lanes.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(i64.load16_u (i32.add (local.get $p) (i32.mul (local.get $i) (i32.const 2))))
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -6225,12 +5982,10 @@
 				)
 				;; Expand or splat the raw memory lanes into all output lanes.
 				(loop $lanes
-					(call $vector-insert
-						(call $vector-signed
+					(call $vector-insert64
+						(i64.extend32_s
 							(i64.load32_u (i32.add (local.get $p) (i32.mul (local.get $i) (i32.const 4))))
-							(i32.const 32)
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -6252,9 +6007,8 @@
 				)
 				;; Expand or splat the raw memory lanes into all output lanes.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert64
 						(i64.load32_u (i32.add (local.get $p) (i32.mul (local.get $i) (i32.const 4))))
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -6276,7 +6030,7 @@
 				)
 				;; Expand or splat the raw memory lanes into all output lanes.
 				(loop $lanes
-					(call $vector-insert (i64.load8_u (local.get $p)) (i32.const 8) (local.get $i))
+					(call $vector-insert8 (i64.load8_u (local.get $p)) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 16)))
 				)
@@ -6296,7 +6050,7 @@
 				)
 				;; Expand or splat the raw memory lanes into all output lanes.
 				(loop $lanes
-					(call $vector-insert (i64.load16_u (local.get $p)) (i32.const 16) (local.get $i))
+					(call $vector-insert16 (i64.load16_u (local.get $p)) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
 				)
@@ -6316,7 +6070,7 @@
 				)
 				;; Expand or splat the raw memory lanes into all output lanes.
 				(loop $lanes
-					(call $vector-insert (i64.load32_u (local.get $p)) (i32.const 32) (local.get $i))
+					(call $vector-insert32 (i64.load32_u (local.get $p)) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
 				)
@@ -6336,7 +6090,7 @@
 				)
 				;; Expand or splat the raw memory lanes into all output lanes.
 				(loop $lanes
-					(call $vector-insert (i64.load (local.get $p)) (i32.const 64) (local.get $i))
+					(call $vector-insert64 (i64.load (local.get $p)) (local.get $i))
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
 					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
 				)
@@ -6402,13 +6156,12 @@
 				)
 				;; Retain every input lane except the selected memory lane.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert8
 						(select
 							(i64.load8_u (local.get $p))
-							(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $i))
+							(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $i))
 							(i32.eq (local.get $i) (local.get $imm2))
 						)
-						(i32.const 8)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -6430,13 +6183,12 @@
 				)
 				;; Retain every input lane except the selected memory lane.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert16
 						(select
 							(i64.load16_u (local.get $p))
-							(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $i))
+							(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $i))
 							(i32.eq (local.get $i) (local.get $imm2))
 						)
-						(i32.const 16)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -6458,13 +6210,12 @@
 				)
 				;; Retain every input lane except the selected memory lane.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert32
 						(select
 							(i64.load32_u (local.get $p))
-							(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $i))
+							(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $i))
 							(i32.eq (local.get $i) (local.get $imm2))
 						)
-						(i32.const 32)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -6486,13 +6237,12 @@
 				)
 				;; Retain every input lane except the selected memory lane.
 				(loop $lanes
-					(call $vector-insert
+					(call $vector-insert64
 						(select
 							(i64.load (local.get $p))
-							(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $i))
+							(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $i))
 							(i32.eq (local.get $i) (local.get $imm2))
 						)
-						(i32.const 64)
 						(local.get $i)
 					)
 					(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -6514,7 +6264,7 @@
 				)
 				(i64.store8
 					(local.get $p)
-					(call $vector-lane (local.get $b) (local.get $bh) (i32.const 8) (local.get $imm2))
+					(call $vector-lane8 (local.get $b) (local.get $bh) (local.get $imm2))
 				)
 				(return (global.get $vector-low))
 			)
@@ -6532,7 +6282,7 @@
 				)
 				(i64.store16
 					(local.get $p)
-					(call $vector-lane (local.get $b) (local.get $bh) (i32.const 16) (local.get $imm2))
+					(call $vector-lane16 (local.get $b) (local.get $bh) (local.get $imm2))
 				)
 				(return (global.get $vector-low))
 			)
@@ -6550,7 +6300,7 @@
 				)
 				(i64.store32
 					(local.get $p)
-					(call $vector-lane (local.get $b) (local.get $bh) (i32.const 32) (local.get $imm2))
+					(call $vector-lane32 (local.get $b) (local.get $bh) (local.get $imm2))
 				)
 				(return (global.get $vector-low))
 			)
@@ -6568,7 +6318,7 @@
 				)
 				(i64.store
 					(local.get $p)
-					(call $vector-lane (local.get $b) (local.get $bh) (i32.const 64) (local.get $imm2))
+					(call $vector-lane64 (local.get $b) (local.get $bh) (local.get $imm2))
 				)
 				(return (global.get $vector-low))
 			)

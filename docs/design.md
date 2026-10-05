@@ -1009,3 +1009,52 @@ timing variation; it compares preceding runs without a same-session unchanged
 full control. The retained gain is supported by the paired isolated SIMD
 benchmarks and matching instruction-count reductions. Measurements, profiles,
 source and binary hashes are retained in `test/performance.json`.
+
+
+Fixed-width SIMD lane helpers fold their masks and width multiplication into
+constants and shifts. They retain the original unsigned half selection and
+modulo-sixty-four bit shifts, while accepting only the two vector halves and
+lane index for extraction, or the value and lane index for packing. Dynamic
+widths continue to use the existing generic helpers. Constant signed lanes use
+the existing scalar sign-extension instructions. Family handlers take only
+referenced operands and immediates, and unused local declarations are removed.
+All lane arithmetic, saturation, rounding, memory bounds and relaxed choices
+retain their existing scalar implementations.
+
+The five non-trapping sign-extension opcodes also use the existing direct
+integer route. Their validated unary result replaces the consumed slot in
+place, with canonical i32 sign extension and a cleared high half. The original
+numeric implementation still computes their bits; source positions, fuel,
+operand capacity and trap recovery retain their normal rules. Opcode IDs,
+packed-table layout and guest interpretation remain unchanged.
+
+Regressions check every lane position at all four widths in both runtimes,
+including signed minima/maxima and replacement without changing neighboring
+bits. Scalar sign-extension checks cover upper input bits, exact source/fuel
+boundaries, exhaustion/recovery and a completely full operand stack. Existing
+native-oracle SIMD checks and the full spec cover text/binary loading, relaxed
+operations, floats and memory traps. `make bench` includes a checked loop over
+all five sign extensions.
+
+Paired isolated hosted timings improve by about 21% for sign-extension dispatch
+and 4–5% for the four SIMD workloads, with scalar workloads and loader timings
+remaining similar. For 100 checked iterations, diagnostic bootstrap instruction
+counts fall from 775,438 to 580,438 for sign extensions, 713,138 to 669,938 for
+vector arithmetic, 659,438 to 617,538 for mixed operands, 728,638 to 689,238 for
+selection, and 731,138 to 691,338 for memory. Loader instruction counts remain
+identical. Expanded engine WAT shrinks from 1,500,473 to 1,489,807 bytes.
+
+An experiment expanding lane expressions directly into handlers was discarded.
+It improved SIMD invocation by 8–10%, but larger engine WAT increased the full
+audit to 276,794 ms versus a same-session unchanged control of 269,234 ms.
+The retained implementation uses small fixed-width helpers instead. The rejected
+measurement and its successful conformance checks remain in the performance
+history, and its boundary regressions remain in the suite.
+
+All 170 tests pass, including nested self-hosting, and both runtimes pass all
+65,199 frozen commands across 258 files with zero skips and failures. The retained
+hosted audit takes 262,270 ms (4.37 minutes), versus the same-session unchanged
+control's 269,234 ms (4.49 minutes), a measured 2.6% reduction. Local timings vary;
+paired isolated benchmarks and instruction-count reductions support the gain.
+The source/binary hashes, control audit, discarded experiment and retained
+measurements are recorded in `test/performance.json`.

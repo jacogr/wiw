@@ -174,7 +174,8 @@ Node frontend continues to handle synchronous callbacks and resource bindings.
 
 
 `make bench` measures direct, indirect and typed-reference tail calls, indirect
-calls with many declared types and alternating table entries, reference calls
+calls with many declared types and alternating table entries, sign-extension
+loops, reference calls
 through a mutable global, a call with multiple parameters and locals, a scalar
 loop, alternating conditional arms, memory reads/writes, and SIMD arithmetic,
 mixed scalar/vector operands, three-vector selection and vector loads/stores
