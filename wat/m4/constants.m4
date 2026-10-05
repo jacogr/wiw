@@ -138,3 +138,9 @@ m4_define(<!M4_BYTE_CR!>,<!13!>)m4_dnl
 m4_dnl Bytes that can introduce WAT comments or annotations.
 m4_define(<!M4_BYTE_LPAREN!>,<!40!>)m4_dnl
 m4_define(<!M4_BYTE_SEMICOLON!>,<!59!>)m4_dnl
+m4_dnl ASCII digit decoding uses unsigned ranges and the ASCII lowercase case bit.
+m4_define(<!M4_ASCII_ZERO!>,<!48!>)m4_dnl
+m4_define(<!M4_DECIMAL_LAST_DIGIT!>,<!9!>)m4_dnl
+m4_define(<!M4_ASCII_CASE_BIT!>,<!32!>)m4_dnl
+m4_define(<!M4_ASCII_LOWER_A!>,<!97!>)m4_dnl
+m4_define(<!M4_HEX_LAST_LETTER!>,<!5!>)m4_dnl

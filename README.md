@@ -204,6 +204,9 @@ Exact float rounding reuses shifted trial denominators, and significands batch
 both decimal and hexadecimal digits. The latest isolated long-hex loader drops
 from 103 ms to 63 ms (39%); see `docs/design.md` and the performance history for
 phase measurements and full-audit tradeoffs.
+The integer decoder also caches i64 overflow thresholds, uses a direct path for
+single numeric digits, and checks decimal digits before folding hexadecimal
+letters. The wide-integer loader measures about 10% faster in paired samples.
 The atom scanner also uses local cursors and guarded comment lookahead; the
 latest paired integer, short-float, vector and many-function loader samples
 improve by roughly 10–21% across text and binary inputs.

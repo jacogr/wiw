@@ -88,6 +88,25 @@
 				)
 			)
 		)
+		;; A single numeric digit needs no separator scan or overflow arithmetic in either radix.
+		(if (i32.eq (i32.sub (local.get $end) (local.get $p)) (i32.const 1))
+			(then
+				(local.set $digit (i32.sub (i32.load8_u (local.get $p)) (i32.const M4_ASCII_ZERO)))
+				;; Only decimal digit bytes use this shortcut; hexadecimal letters follow the general path.
+				(if (i32.le_u (local.get $digit) (i32.const M4_DECIMAL_LAST_DIGIT))
+					(then
+						(call $next)
+						(return
+							(select
+								(i32.sub (i32.const 0) (local.get $digit))
+								(local.get $digit)
+								(local.get $negative)
+							)
+						)
+					)
+				)
+			)
+		)
 		;; Accumulate digits, checking separators and overflow as we go.
 		;; Exit the digit scan when the cursor reaches the end of this atom.
 		(block $done
@@ -110,35 +129,26 @@
 						(br $digits)
 					)
 				)
-				(local.set $digit (i32.const 255))
-				;; Convert an ASCII decimal digit to its numeric value.
-				(if
-					(i32.and
-						(i32.ge_u (local.get $c) (i32.const 48))
-						(i32.le_u (local.get $c) (i32.const 57))
-					)
+				;; Decimal digits use one unsigned range check after subtracting ASCII zero.
+				(local.set $digit (i32.sub (local.get $c) (i32.const M4_ASCII_ZERO)))
+				;; Only non-decimal bytes need hexadecimal letter decoding.
+				(if (i32.gt_u (local.get $digit) (i32.const M4_DECIMAL_LAST_DIGIT))
 					(then
-						(local.set $digit (i32.sub (local.get $c) (i32.const 48)))
-					)
-				)
-				;; Convert a lowercase hexadecimal letter to a value from 10 through 15.
-				(if
-					(i32.and
-						(i32.ge_u (local.get $c) (i32.const 97))
-						(i32.le_u (local.get $c) (i32.const 102))
-					)
-					(then
-						(local.set $digit (i32.sub (local.get $c) (i32.const 87)))
-					)
-				)
-				;; Convert an uppercase hexadecimal letter to a value from 10 through 15.
-				(if
-					(i32.and
-						(i32.ge_u (local.get $c) (i32.const 65))
-						(i32.le_u (local.get $c) (i32.const 70))
-					)
-					(then
-						(local.set $digit (i32.sub (local.get $c) (i32.const 55)))
+						;; Folding ASCII case maps A-F and a-f to the same six-byte range.
+						(local.set $digit
+							(i32.sub
+								(i32.or (local.get $c) (i32.const M4_ASCII_CASE_BIT))
+								(i32.const M4_ASCII_LOWER_A)
+							)
+						)
+						;; Reject every folded byte outside a-f before adding the decimal digit offset.
+						(if (i32.gt_u (local.get $digit) (i32.const M4_HEX_LAST_LETTER))
+							(then
+								(call $fail (i32.const M4_ERR_SYNTAX))
+								(return (i32.const 0))
+							)
+						)
+						(local.set $digit (i32.add (local.get $digit) (i32.const M4_DECIMAL_RADIX)))
 					)
 				)
 				;; Reject invalid characters and digits that are unavailable in the selected radix.
@@ -206,6 +216,8 @@
 		(local $count i32)
 		(local $underscore i32)
 		(local $v i64)
+		(local $limit i64)
+		(local $last i64)
 
 		;; Integer decoding requires an atom rather than punctuation, a string or EOF.
 		(if (i32.ne (global.get $kind) (i32.const 3))
@@ -243,6 +255,28 @@
 				)
 			)
 		)
+		;; A single numeric digit needs no separator scan or overflow arithmetic in either radix.
+		(if (i32.eq (i32.sub (local.get $end) (local.get $p)) (i32.const 1))
+			(then
+				(local.set $digit (i32.sub (i32.load8_u (local.get $p)) (i32.const M4_ASCII_ZERO)))
+				;; Only decimal digit bytes use this shortcut; hexadecimal letters follow the general path.
+				(if (i32.le_u (local.get $digit) (i32.const M4_DECIMAL_LAST_DIGIT))
+					(then
+						(call $next)
+						(return
+							(select
+								(i64.sub (i64.const 0) (i64.extend_i32_u (local.get $digit)))
+								(i64.extend_i32_u (local.get $digit))
+								(local.get $negative)
+							)
+						)
+					)
+				)
+			)
+		)
+		;; The radix stays fixed for this token; cache its unsigned overflow thresholds once.
+		(local.set $limit (i64.div_u (i64.const -1) (i64.extend_i32_u (local.get $base))))
+		(local.set $last (i64.rem_u (i64.const -1) (i64.extend_i32_u (local.get $base))))
 		;; Accumulate digits, checking separators and overflow as we go.
 		;; Exit the digit scan when the cursor reaches the end of this atom.
 		(block $done
@@ -265,35 +299,26 @@
 						(br $digits)
 					)
 				)
-				(local.set $digit (i32.const 255))
-				;; Convert an ASCII decimal digit to its numeric value.
-				(if
-					(i32.and
-						(i32.ge_u (local.get $c) (i32.const 48))
-						(i32.le_u (local.get $c) (i32.const 57))
-					)
+				;; Decimal digits use one unsigned range check after subtracting ASCII zero.
+				(local.set $digit (i32.sub (local.get $c) (i32.const M4_ASCII_ZERO)))
+				;; Only non-decimal bytes need hexadecimal letter decoding.
+				(if (i32.gt_u (local.get $digit) (i32.const M4_DECIMAL_LAST_DIGIT))
 					(then
-						(local.set $digit (i32.sub (local.get $c) (i32.const 48)))
-					)
-				)
-				;; Convert a lowercase hexadecimal letter to a value from 10 through 15.
-				(if
-					(i32.and
-						(i32.ge_u (local.get $c) (i32.const 97))
-						(i32.le_u (local.get $c) (i32.const 102))
-					)
-					(then
-						(local.set $digit (i32.sub (local.get $c) (i32.const 87)))
-					)
-				)
-				;; Convert an uppercase hexadecimal letter to a value from 10 through 15.
-				(if
-					(i32.and
-						(i32.ge_u (local.get $c) (i32.const 65))
-						(i32.le_u (local.get $c) (i32.const 70))
-					)
-					(then
-						(local.set $digit (i32.sub (local.get $c) (i32.const 55)))
+						;; Folding ASCII case maps A-F and a-f to the same six-byte range.
+						(local.set $digit
+							(i32.sub
+								(i32.or (local.get $c) (i32.const M4_ASCII_CASE_BIT))
+								(i32.const M4_ASCII_LOWER_A)
+							)
+						)
+						;; Reject every folded byte outside a-f before adding the decimal digit offset.
+						(if (i32.gt_u (local.get $digit) (i32.const M4_HEX_LAST_LETTER))
+							(then
+								(call $fail (i32.const M4_ERR_SYNTAX))
+								(return (i64.const 0))
+							)
+						)
+						(local.set $digit (i32.add (local.get $digit) (i32.const M4_DECIMAL_RADIX)))
 					)
 				)
 				;; Reject invalid characters and digits that are unavailable in the selected radix.
@@ -306,12 +331,12 @@
 				;; Check the next digit against the unsigned i64 limit before multiplication can wrap.
 				(if
 					(i32.or
-						(i64.gt_u (local.get $v) (i64.div_u (i64.const -1) (i64.extend_i32_u (local.get $base))))
+						(i64.gt_u (local.get $v) (local.get $limit))
 						(i32.and
-							(i64.eq (local.get $v) (i64.div_u (i64.const -1) (i64.extend_i32_u (local.get $base))))
+							(i64.eq (local.get $v) (local.get $limit))
 							(i64.gt_u
 								(i64.extend_i32_u (local.get $digit))
-								(i64.rem_u (i64.const -1) (i64.extend_i32_u (local.get $base)))
+								(local.get $last)
 							)
 						)
 					)

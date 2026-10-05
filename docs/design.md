@@ -1570,3 +1570,54 @@ The standalone hosted audit takes 251,385.417 ms (4.19 minutes), compared with
 unchanged. Performance history records hashes, paired loading/construction
 samples, instruction counts and complete coverage. Local measurements are
 diagnostic and impose no CI timing thresholds.
+
+### Integer digit paths and cached i64 overflow thresholds
+
+Integer parsing first subtracts ASCII zero and checks the resulting unsigned
+value against nine. Only non-decimal bytes need letter decoding: folding the
+ASCII case bit maps A-F/a-f into a single six-byte range. The existing radix
+check still rejects letters in decimal literals. The decoder introduces named
+M4 constants for ASCII boundaries and keeps separator validation unchanged.
+
+The i64 parser computes UINT64_MAX divided by the radix and its remainder once
+after sign/prefix handling. Each digit compares against those cached thresholds
+before multiplication, preserving unsigned overflow detection and the later
+negative signed-range check. A single numeric digit returns directly after
+advancing the lexer; signs and lowercase 0x prefixes are already consumed, and
+hexadecimal letters continue through the general path.
+
+Private probes in temporary native/interpreted engines check atoms ending at
+linear memory's exact boundary. Independent BigInt expectations cover signed
+and unsigned endpoints, one-beyond limits, deterministic magnitudes, both
+radices, signs, separators and leading zeroes. Every raw byte is tested as a
+sole decimal digit and after a hex prefix. Malformed input, EOF advancement and
+recovery are checked. The integersWide loader case adds repeated full-width
+decimal/hex constants without guest compilation.
+
+Sequential isolated hosted loader samples (three repeats, five samples) show:
+
+| Loader workload | Before | Integer digit paths | Time reduction | Instruction reduction |
+| --- | ---: | ---: | ---: | ---: |
+| Wide decimal/hex integers | 16.17 ms | 14.63 ms | 9.5% | 8.5% |
+| Text small integers | 20.13 ms | 19.80 ms | 1.6% | 2.4% |
+| Text vectors | 14.88 ms | 14.47 ms | 2.8% | 3.3% |
+| Text many functions | 42.09 ms | 41.61 ms | 1.2% | 2.0% |
+| Binary integers | 27.88 ms | 27.30 ms | 2.1% | 1.7% |
+| Binary vectors | 26.91 ms | 25.85 ms | 3.9% | 3.6% |
+| Binary many functions | 55.47 ms | 54.58 ms | 1.6% | 1.5% |
+
+Wide integer loading improves by 9.5% in time and 8.5% in bootstrap instructions.
+Other affected cases have smaller gains. Text-float instruction counts remain
+identical; their timing changes are recorded in the full phase report rather
+than treated as integer-parsing gains. Counts cover the full hosted load,
+excluding construction and invocation, with no markers in the child source.
+Fresh construction measures 15.46 ms before and 15.60 ms after, approximately
+unchanged. Expanded source grows by 1,202 bytes (0.07%).
+
+All 185 tests pass, including nested self-hosting. Both runtimes pass all 65,199
+pinned wg-3.0 commands across 258 files with zero skips or failures. The standalone
+hosted audit takes 249,391.934 ms (4.16 minutes), compared with 251,385.417 ms
+(4.19 minutes), a 0.8% reduction; overall timing remains roughly unchanged.
+Performance history records hashes, paired loading/construction samples,
+instruction counts and complete coverage. Local measurements remain diagnostic,
+with no CI timing thresholds.
