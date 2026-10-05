@@ -144,3 +144,8 @@ m4_define(<!M4_DECIMAL_LAST_DIGIT!>,<!9!>)m4_dnl
 m4_define(<!M4_ASCII_CASE_BIT!>,<!32!>)m4_dnl
 m4_define(<!M4_ASCII_LOWER_A!>,<!97!>)m4_dnl
 m4_define(<!M4_HEX_LAST_LETTER!>,<!5!>)m4_dnl
+m4_dnl Runtime control records contain eight 32-bit fields.
+m4_define(<!M4_CONTROL_BYTES!>,<!32!>)m4_dnl
+
+m4_dnl Shapes below this address encode void or one value type; larger shapes are vectors.
+m4_define(<!M4_SHAPE_VECTOR_MIN!>,<!1048576!>)m4_dnl

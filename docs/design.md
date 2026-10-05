@@ -1674,3 +1674,80 @@ The change is retained for its small decoding gains. Performance history
 records complete coverage, hashes, paired loading/construction samples and
 instruction counts. Local measurements remain diagnostic, with no CI timing
 thresholds.
+
+### Bulk frame initialization and shorter execution entry paths
+
+Call-frame initialization copies parameter spans and clears non-parameter spans
+with separate bulk operations for the low and high slot arrays. One parameter
+uses two direct raw loads/stores. Empty signatures skip source-address mapping;
+all local spans remain bounded by the validated 1,088-slot frame capacity. Bulk
+clearing stops before the implicit root label and clears both halves on every
+ordinary or tail entry.
+
+Defined calls to functions with one parameter and no extra locals enter directly
+from the already resolved descriptor. They preserve raw scalar, reference and
+vector bits, the normal frame bound, and the complete implicit root record.
+Other signatures use the general initializer. Host/root entry retains the same
+public ABI. Runtime block/loop/if/try_table entry also writes its complete control
+record directly, checking capacity before any record write. Parameter shapes
+are written once rather than initialized and overwritten through a second
+address lookup. Neither path changes guest instruction fuel or suspension.
+
+Constant/local dispatch prioritizes local reads, then the adjacent set/tee
+operations. Nop and drop keep their original effects and fuel but occur after
+those frequent paths. Publication still checks operand capacity and writes
+both raw halves. Scalar constants retain their separate immediate words;
+source-offset storage is unchanged.
+
+The generated integer helpers retain zero tests and add/subtract/multiply as
+short paths, then search the remaining ordered opcode IDs in a balanced tree.
+Each leaf still checks exact equality, so holes and unknown IDs keep the zero
+fallback. Width conversions, comparison extension and trapping checks remain
+unchanged. The generator documents each branch and emits the same opcode IDs
+and m4 definitions.
+
+New tests cover all 1,088 local slots, poisoning the first and last vector locals
+before repeated tail entry and verifying both halves clear. A recursive workload
+fills the 4,096-control arena while staying below the call-frame limit; the next
+single-parameter call traps, and subsequent valid invocations recover. Existing
+numeric oracle tests cover every scalar opcode, conversion and trap category;
+full tests include nested self-hosting, imported tail suspension and exact fuel.
+
+Scope entry decodes compact parameter shapes directly. Function completion reads
+its result shape from the still-readable implicit root record, avoiding a second
+function-descriptor lookup. Both sites retain stored vector counts. Branch
+unwinding also decodes its shape directly; empty branches set their operand
+floor without calling the result-copy helper. Nonempty results keep the existing
+copy path. The shared m4 shape boundary now names the original scalar/vector
+threshold used by all three shape helpers.
+
+Sequential isolated invocation samples (5,000 iterations, five samples) show:
+
+| Hosted workload | Before | After | Time reduction | Instruction reduction |
+| --- | ---: | ---: | ---: | ---: |
+| direct | 35.67 ms | 32.23 ms | 9.6% | 11.9% |
+| indirect | 46.44 ms | 43.64 ms | 6.0% | 9.1% |
+| reference | 39.20 ms | 35.42 ms | 9.6% | 10.8% |
+| ordinary | 405.34 ms | 363.31 ms | 10.4% | 10.1% |
+| parameters | 84.20 ms | 66.79 ms | 20.7% | 21.5% |
+| conditions | 60.18 ms | 52.97 ms | 12.0% | 13.2% |
+| loop | 33.02 ms | 30.25 ms | 8.4% | 9.9% |
+| integerSignExtension | 165.88 ms | 139.91 ms | 15.7% | 18.8% |
+
+Instruction counts cover complete hosted invocation, including host adapter
+calls but excluding construction/loading; the child source contains no profiling
+markers. Counts alone do not measure the different costs of calls, branches and
+bulk operations. All eighteen workloads use unchanged guest inputs. The native
+bootstrap parameter workload has a small absolute regression from about 0.34 ms
+to 0.56 ms, while hosted parameter execution improves by about 21%; bulk memory
+avoids interpreting frame-initialization loops at hosted depth. Other hosted
+workloads improve by roughly 4–16%. Expanded engine source grows by under 1%.
+
+All 190 tests pass, including the complete spec and nested self-hosting, in
+239,143.607 ms (3m59.14s). A subsequent isolated hosted audit passes all 65,199
+pinned wg-3.0 commands across 258 files with zero skips/failures in 239,723.820 ms
+(3m59.72s), down 4.5% from 250,954.784 ms. The bootstrap audit also passes the
+same frozen coverage. These local runs cross four minutes with little margin;
+they are measurements, not CI thresholds. Performance history records complete
+coverage, hashes, paired invocation samples/counts and full-suite duration. The
+original million-call stress inputs remain unchanged.

@@ -3,7 +3,7 @@
 		(param $index i32)
 		(result i32)
 
-		(i32.add (global.get $control-base) (i32.mul (local.get $index) (i32.const 32)))
+		(i32.add (global.get $control-base) (i32.mul (local.get $index) (i32.const M4_CONTROL_BYTES)))
 	)
 
 	;; Push a typed control: opcode, entry height, result type, unreachable flag and else flag.

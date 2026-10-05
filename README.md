@@ -192,6 +192,13 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
+The latest complete `make check` run passes all 190 tests in 239,143.607 ms
+(3m59.14s). Bulk frame initialization, inline call/scope entry, compact shape
+decoding and balanced integer searches improve hosted invocation samples by
+roughly 4–21%. The local four-minute result has a narrow margin; these remain
+diagnostic measurements with unchanged spec coverage and stress inputs.
+The isolated hosted spec audit also passes all 65,199 commands in 239,723.820 ms
+(3m59.72s), with zero failures or skips.
 
 
 `make bench-load` measures parsing and validation separately from invocation,

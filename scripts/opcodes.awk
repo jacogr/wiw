@@ -152,6 +152,57 @@ function binary_dispatch(low, high, tabs, middle, code, i, text, j, width, entry
   printf "%s\t)\n%s)\n", tabs, tabs
 }
 
+# Emit an exact arithmetic leaf, preserving width conversions and raw result bits.
+function arithmetic_leaf(i, wide, tabs, expr) {
+  if (!wide) {
+    expr = "(" operation[i] " (local.get $a)"
+    if (inputs[i] == 2) expr = expr " (local.get $b)"
+    expr = expr ")"
+  } else {
+    if (i == 91) expr = "(i64.extend_i32_s (i32.wrap_i64 (local.get $a)))"
+    else if (operation[i] == "integerextend" && inputtype[i] == 1)
+      expr = "(i64.extend_i32_s (" name[i] " (i32.wrap_i64 (local.get $a))))"
+    else if (i == 92 || i == 93) expr = "(" name[i] " (i32.wrap_i64 (local.get $a)))"
+    else {
+      expr = "(" name[i] " (local.get $a)"
+      if (inputs[i] == 2) expr = expr " (local.get $b)"
+      expr = expr ")"
+    }
+    if (i >= 77 && i <= 87) expr = "(i64.extend_i32_u " expr ")"
+  }
+  printf "%s;; Execute %s only for its exact interpreter opcode.\n", tabs, name[i]
+  printf "%s(if (i32.eq (local.get $op) (i32.const %d))\n%s\t(then (return %s))\n%s)\n", tabs, i, tabs, expr, tabs
+}
+
+# Search the remaining ordered integer opcodes with bounded comparison depth.
+function arithmetic_dispatch(low, high, wide, tabs, middle, entry) {
+  if (high - low < 3) {
+    for (entry = low; entry <= high; entry++) arithmetic_leaf(arithmetic_order[entry], wide, tabs)
+    return
+  }
+  middle = int((low + high) / 2)
+  printf "%s;; Smaller integer opcode IDs search the lower half.\n", tabs
+  printf "%s(if (i32.le_u (local.get $op) (i32.const %d))\n%s\t(then\n", tabs, arithmetic_order[middle], tabs
+  arithmetic_dispatch(low, middle, wide, tabs "\t\t")
+  printf "%s\t)\n%s\t;; Larger integer opcode IDs search the upper half.\n%s\t(else\n", tabs, tabs, tabs
+  arithmetic_dispatch(middle + 1, high, wide, tabs "\t\t")
+  printf "%s\t)\n%s)\n", tabs, tabs
+}
+
+# Keep frequent zero tests/add/sub/mul first; balance the less frequent operations.
+function integer_dispatch(wide, i, first, last, used, eligible) {
+  first = wide ? 62 : 2
+  last = wide ? count : 30
+  arithmetic_leaf(wide ? 87 : 27, wide, "\t\t")
+  for (i = first; i < first + 3; i++) arithmetic_leaf(i, wide, "\t\t")
+  used = 0
+  for (i = first + 3; i <= last; i++) {
+    eligible = wide ? (i <= 93 || operation[i] == "integerextend") : 1
+    if (eligible && i != (wide ? 87 : 27)) arithmetic_order[++used] = i
+  }
+  arithmetic_dispatch(1, used, wide, "\t\t")
+}
+
 END {
   if (invalid) exit 1
   # Generate the checked-in m4 names from the same IDs used by WAT dispatch.
@@ -264,18 +315,7 @@ END {
   print "\t\t(i32.and (i32.load8_u (i32.add (i32.const 3072) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 15))\n\t)"
   print "\n\t;; Apply a unary or binary integer operation after the runtime checks trap conditions."
   print "\t(func $apply\n\t\t(param $op i32)\n\t\t(param $a i32)\n\t\t(param $b i32)\n\t\t(result i32)\n"
-  # Zero tests are frequent control predicates; emit them before the general numeric scan.
-  for (priority = 1; priority <= 2; priority++) {
-    for (i = 1; i <= count; i++) {
-      if ((name[i] == "i32.eqz") != (priority == 1)) continue
-      if (i > 60 || operation[i] == "const" || operation[i] == "drop" || operation[i] == "nop" || operation[i] == "local" || operation[i] == "call" || operation[i] == "control" || operation[i] == "resource") continue
-      printf "\t\t;; Execute %s using operands in source stack order.\n", name[i]
-      printf "\t\t(if (i32.eq (local.get $op) (i32.const %d))\n", id[i]
-      printf "\t\t\t(then\n\t\t\t\t(return (%s (local.get $a)", operation[i]
-      if (inputs[i] == 2) printf " (local.get $b)"
-      print "))\n\t\t\t)\n\t\t)"
-    }
-  }
+  integer_dispatch(0)
   print "\t\t(i32.const 0)\n\t)"
 
   print "\n\t;; Return an opcode's scalar operand type; stores use their address type for the second pop."
@@ -319,26 +359,7 @@ END {
   print "\t\t(i32.and (i32.load8_u (i32.add (i32.const 3073) (i32.mul (local.get $op) (i32.const 2)))) (i32.const 15))\n\t)"
   print "\n\t;; Apply an i64 numeric operation or width conversion after runtime trap checks."
   print "\t(func $apply64\n\t\t(param $op i32)\n\t\t(param $a i64)\n\t\t(param $b i64)\n\t\t(result i64)"
-  # Zero tests are frequent control predicates; emit them before the general numeric scan.
-  for (priority = 1; priority <= 2; priority++) {
-    for (i = 62; i <= count; i++) {
-      if ((name[i] == "i64.eqz") != (priority == 1)) continue
-      if (i > 93 && operation[i] != "integerextend") continue
-      printf "\t\t;; Execute %s with full-width integer operands.\n", name[i]
-      printf "\t\t(if (i32.eq (local.get $op) (i32.const %d))\n\t\t\t(then\n\t\t\t\t(return ", i
-      if (i >= 77 && i <= 87) printf "(i64.extend_i32_u "
-      if (i == 91) printf "(i64.extend_i32_s (i32.wrap_i64 (local.get $a)))"
-      else if (operation[i] == "integerextend" && inputtype[i] == 1) printf "(i64.extend_i32_s (%s (i32.wrap_i64 (local.get $a))))", name[i]
-      else if (i == 92 || i == 93) printf "(%s (i32.wrap_i64 (local.get $a)))", name[i]
-      else {
-        printf "(%s (local.get $a)", name[i]
-        if (inputs[i] == 2) printf " (local.get $b)"
-        printf ")"
-      }
-      if (i >= 77 && i <= 87) printf ")"
-      print ")\n\t\t\t)\n\t\t)"
-    }
-  }
+  integer_dispatch(1)
   print "\t\t(i64.const 0)\n\t)"
   print "\n\t;; Recognize stores whose address is popped after their typed value."
   print "\t(func $store-op\n\t\t(param $op i32)\n\t\t(result i32)"

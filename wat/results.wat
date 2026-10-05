@@ -4,7 +4,7 @@
 		(result i32)
 
 		;; Small shape codes are ordinary value types and avoid vector allocation.
-		(if (i32.lt_u (local.get $shape) (i32.const 1048576))
+		(if (i32.lt_u (local.get $shape) (i32.const M4_SHAPE_VECTOR_MIN))
 			(then
 				(return (i32.ne (local.get $shape) (i32.const 0)))
 			)
@@ -19,7 +19,7 @@
 		(result i32)
 
 		;; Singleton signatures keep their original compact scalar representation.
-		(if (i32.lt_u (local.get $shape) (i32.const 1048576))
+		(if (i32.lt_u (local.get $shape) (i32.const M4_SHAPE_VECTOR_MIN))
 			(then
 				(return (local.get $shape))
 			)
@@ -53,7 +53,7 @@
 		)
 		(local.set $record (local.get $shape))
 		;; A second type moves the singleton into a dedicated record.
-		(if (i32.lt_u (local.get $shape) (i32.const 1048576))
+		(if (i32.lt_u (local.get $shape) (i32.const M4_SHAPE_VECTOR_MIN))
 			(then
 				;; Avoid writing past the result-vector arena.
 				(if (i32.ge_u (global.get $result-shape-count) (i32.const 4096))
