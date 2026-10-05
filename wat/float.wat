@@ -553,6 +553,7 @@
 		(local $step i32)
 		(local $chunk i32)
 		(local $chunk-radix i32)
+		(local $chunk-limit i32)
 
 		;; A float literal must be an atom, with a bounded token length independent of numeric range.
 		(if (i32.ne (global.get $kind) (i32.const 3))
@@ -725,6 +726,12 @@
 				)
 			)
 		)
+		;; Decimal and hexadecimal chunks each keep both multiplier and addend in one unsigned word.
+		(local.set $chunk-limit
+			(select (i32.const M4_DECIMAL_CHUNK_RADIX) (i32.const M4_HEX_CHUNK_RADIX)
+				(i32.eq (local.get $base) (i32.const M4_DECIMAL_RADIX))
+			)
+		)
 		(local.set $chunk-radix (i32.const 1))
 		(call $big-small (local.get $a) (i32.const 0))
 		(call $big-small (local.get $b) (i32.const 1))
@@ -780,23 +787,14 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Decimal digits accumulate locally before one exact nine-digit limb pass.
-				(if (i32.eq (local.get $base) (i32.const M4_DECIMAL_RADIX))
+				(local.set $chunk (i32.add (i32.mul (local.get $chunk) (local.get $base)) (local.get $d)))
+				(local.set $chunk-radix (i32.mul (local.get $chunk-radix) (local.get $base)))
+				;; Nine decimal or seven hex digits form a complete chunk below its unsigned radix.
+				(if (i32.eq (local.get $chunk-radix) (local.get $chunk-limit))
 					(then
-						(local.set $chunk (i32.add (i32.mul (local.get $chunk) (i32.const M4_DECIMAL_RADIX)) (local.get $d)))
-						(local.set $chunk-radix (i32.mul (local.get $chunk-radix) (i32.const M4_DECIMAL_RADIX)))
-						;; A complete chunk fits below its radix and cannot overflow an unsigned limb.
-						(if (i32.eq (local.get $chunk-radix) (i32.const M4_DECIMAL_CHUNK_RADIX))
-							(then
-								(call $big-mul (local.get $a) (local.get $chunk-radix) (local.get $chunk))
-								(local.set $chunk (i32.const 0))
-								(local.set $chunk-radix (i32.const 1))
-							)
-						)
-					)
-					;; Hexadecimal significands retain their existing per-digit accumulation.
-					(else
-						(call $big-mul (local.get $a) (local.get $base) (local.get $d))
+						(call $big-mul (local.get $a) (local.get $chunk-radix) (local.get $chunk))
+						(local.set $chunk (i32.const 0))
+						(local.set $chunk-radix (i32.const 1))
 					)
 				)
 				;; Bounded limb exhaustion is reported before further lexical accumulation.
@@ -830,7 +828,7 @@
 				(return (i64.const 0))
 			)
 		)
-		;; Commit a short decimal tail before range classification or exact-zero detection.
+		;; Commit a short significand tail before range classification or exact-zero detection.
 		(if (i32.ne (local.get $chunk-radix) (i32.const 1))
 			(then
 				;; A short significand or a zero prefix needs only one unsigned word.

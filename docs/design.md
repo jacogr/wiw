@@ -1419,3 +1419,48 @@ measured float-loading improvement; repeated interpreter construction still
 limits the relevance of total audit time to individual execution phases.
 Performance history records both timings, source/binary hashes and instruction
 counts. These local measurements have no CI thresholds.
+
+### Batched hexadecimal significands
+
+Float significands now use a shared digit accumulator for both radices. Nine
+decimal digits retain the existing multiplier of 10^9; seven hexadecimal digits
+use 16^7 (268,435,456). Both the multiplier and the chunk fit in one unsigned
+limb, and the chunk remains below its multiplier. A partial tail keeps its actual
+radix. Each complete chunk performs one exact big-integer multiply/add instead
+of seven passes for hexadecimal digits.
+
+The radix limit is chosen once before scanning. Decimal points and separators
+still receive per-character validation, and fractional digit counts still set
+the exact scale. Leading zeroes, signed zero, range classification and final
+nearest-even rounding remain unchanged. The new hexadecimal limit has an M4
+name. No extra buffer, shared state or public API is introduced.
+
+A regression checks six/seven/eight digit boundaries and later chunk boundaries,
+long compensated significands, uppercase digits, leading zeroes, separators and
+points crossing chunks. Independent IEEE-bit expectations cover halfway values
+and underflow in both widths and runtimes. Token/resource limits and recovery
+after malformed input are also checked. The hexDigits loader benchmark adds long
+compensated significands to isolate accumulation from range classification.
+
+Sequential isolated hosted loader samples (three repeats, five samples) show:
+
+| Loader workload | Per-digit hex | Batched hex | Time reduction | Instruction reduction |
+| --- | ---: | ---: | ---: | ---: |
+| Long hexadecimal digits | 103.05 ms | 63.04 ms | 38.8% | 36.4% |
+| Hexadecimal ratios | 105.76 ms | 103.99 ms | 1.7% | 0.9% |
+| Decimal scales | 131.58 ms | 130.62 ms | 0.7% | 0.1% |
+| Long decimal digits | 58.18 ms | 57.36 ms | 1.4% | 0.9% |
+| Binary floats | 108.70 ms | 105.30 ms | 3.1% | 3.4% |
+
+The long-hex workload improves by 38.8% in time and 36.4% in bootstrap instruction
+count. Short hex workloads are dominated by other parsing and rounding work.
+Integer, vector and many-function counts remain identical. Counts cover the full
+hosted load, excluding construction and invocation, with no profiling markers
+in the child source. Expanded engine source shrinks by 65 bytes.
+
+All 181 tests pass, including nested self-hosting. Both runtimes pass all 65,199
+pinned wg-3.0 commands across 258 files with zero skips and failures. The
+standalone hosted audit takes 251,066.404 ms (4.18 minutes), compared with
+257,997.765 ms (4.30 minutes), a 2.7% reduction. The performance history records
+source/binary hashes, paired samples, instruction counts and complete coverage.
+These local measurements are diagnostic, with no CI timing thresholds.

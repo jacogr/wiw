@@ -218,6 +218,42 @@ for (const binary of ['wiw-opt.wasm']) {
     }
   });
 
+  test(`${binary}: batched hex digits retain tails, separators and exact IEEE rounding`, async () => {
+    const literals = ['0x0', '-0x0', '0x00000001', '0xabcdef0_1', '0xABCDEF0.1234567',
+      '0x1.000001p0', '0x1.00000100000000000001p0', '0x1.000003p0',
+      '0x1.00000000000008p0', '0x1.00000000000008000000000001p0',
+      '0x1p-150', '0x1.00000000000001p-150', '0x1p-1075', '0x1.00000000000001p-1075'];
+    for (const length of [6, 7, 8, 13, 14, 15, 20, 21, 22, 64, 253, 256, 1000]) {
+      const digits = '123456789abcdef0'.repeat(Math.ceil(length / 16)).slice(0, length);
+      literals.push(`0x${digits}p-${4 * length}`, `-0x${'f'.repeat(length)}p-${4 * length}`);
+      for (const point of [1, Math.min(7, length), length]) {
+        const literal = `0x${digits.slice(0, point)}.${digits.slice(point)}p-${4 * point}`;
+        literals.push(literal, `0x${digits.slice(0, point).split('').join('_')}.${digits.slice(point).split('').join('_')}p-${4 * point}`);
+      }
+    }
+    for (const create of [createBootstrapInterpreter, createInterpreter]) {
+      const engine = await create(url);
+      for (const type of ['f32', 'f64']) {
+        const width = type === 'f32' ? 32 : 64, integer = type === 'f32' ? 'i32' : 'i64';
+        engine.load(`(module ${literals.map((literal, n) =>
+          `(func (export "f${n}") (result ${integer}) ${type}.const ${literal} ${integer}.reinterpret_${type})`).join('\n')})`);
+        for (const [n, literal] of literals.entries()) {
+          const bits = BigInt.asIntN(width, floatBits(literal, width));
+          assert.equal(engine.invoke(`f${n}`), width === 32 ? Number(bits) : bits, `${create.name}/${type}/${literal}`);
+        }
+        engine.load(sourceFor(`${type}.const 0x${'0'.repeat(8190)} ${integer}.reinterpret_${type}`, integer));
+        assert.equal(engine.invoke('run'), width === 32 ? 0 : 0n);
+        assert.throws(() => engine.load(sourceFor(`${type}.const 0x${'0'.repeat(8191)}`, type)), /resource limit/);
+        assert.throws(() => engine.load(sourceFor(`${type}.const 0x${'f'.repeat(8190)}`, type)), /resource limit/);
+        for (const literal of ['0x1234567__8', '0x1234567_', '0x1234567._8', '0x12345678p_1']) {
+          assert.throws(() => engine.load(sourceFor(`${type}.const ${literal}`, type)), /syntax/);
+        }
+        engine.load(sourceFor(`${type}.const -0x0 ${integer}.reinterpret_${type}`, integer));
+        assert.equal(engine.invoke('run'), width === 32 ? -2147483648 : -9223372036854775808n);
+      }
+    }
+  });
+
   test(`${binary}: typed float locals, control, memory, globals, imports and forwarding`, async () => {
     const engine = await createInterpreter(url);
     engine.load(`(module

@@ -33,6 +33,10 @@ cases.decimalDigits = `(module (func (export "run") (result f64)
 cases.floatsHex = `(module (func (export "run") (result f64)
   ${'f64.const 0x1.123456789abcdep-100 f64.const 0x1.fffffffffffffp900 f64.copysign drop '.repeat(128)} f64.const 0))`;
 
+// Long compensated hex significands exercise chunk accumulation across many words.
+cases.hexDigits = `(module (func (export "run") (result f64)
+  ${`f64.const 0x1${'23456789abcdef0'.repeat(18)}p-1008 drop f64.const -0x${'f'.repeat(256)}p-1024 drop `.repeat(32)} f64.const 0))`;
+
 // Hand-encode binary equivalents so the benchmark never compiles guest modules.
 const uleb=value=>{
   const bytes=[];

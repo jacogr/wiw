@@ -128,3 +128,5 @@ m4_dnl Exact integer scratch buffers contain a header and 32-bit limbs.
 m4_define(<!M4_BIG_LIMB_BYTES!>,<!4!>)m4_dnl
 m4_define(<!M4_BIG_LIMB_BITS!>,<!32!>)m4_dnl
 m4_define(<!M4_BIG_LIMB_CAPACITY!>,<!1023!>)m4_dnl
+m4_dnl Seven hexadecimal digits form a multiplier of 16^7 within one unsigned limb.
+m4_define(<!M4_HEX_CHUNK_RADIX!>,<!268435456!>)m4_dnl

@@ -200,10 +200,10 @@ modules in both runtimes, plus text workloads with large decimal scales, long si
 without compiling guest modules. It records
 per-load sample timings, medians, input formats and source/binary hashes in `build/bench-load.json`.
 `BENCH_LOAD_REPEATS=10 BENCH_SAMPLES=7 make bench-load` adjusts the bounded workload.
-Exact float rounding reuses shifted trial denominators; the latest isolated
-float loader workloads improve by 8–12%, while the full hosted audit remains
-about 4.3 minutes. See `docs/design.md` and the performance history for phase
-measurements and tradeoffs.
+Exact float rounding reuses shifted trial denominators, and significands batch
+both decimal and hexadecimal digits. The latest isolated long-hex loader drops
+from 103 ms to 63 ms (39%); see `docs/design.md` and the performance history for
+phase measurements and full-audit tradeoffs.
 `make bench-create` measures fresh construction with preloaded engine source, checks each
 instance with a guest, and records first-use and warm median timings in
 `build/bench-create.json`. It uses no cached interpreter state.
