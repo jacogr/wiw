@@ -1104,3 +1104,53 @@ retained change is supported by smaller call bookkeeping, paired call benchmarks
 and deterministic instruction reductions. `test/performance.json` records both
 comparisons, artifact hashes, full coverage and diagnostic profiles without CI
 performance thresholds.
+
+
+### Binary opcode lookup and mnemonic emission
+
+The generated `$binary-opname` sorts the existing wire IDs into 32 groups of at
+most 16 exact candidates. Five unsigned range decisions select a group, followed
+by exact comparisons; unsupported values and namespace holes still return zero.
+Nullable GC test/cast variants share only their mnemonic with their non-null
+variants, retaining their original immediate decoding. The opcode table, IDs,
+reserved data, effects, runtime routes, ABI and memory layout remain unchanged.
+
+Extended mnemonics and their trailing space are emitted in packed four-byte words
+and narrow two-/one-byte tails. `$binary-word` checks that the complete fragment
+fits before storing, and uses narrow stores for short tails. `$binary-copy` checks
+a reserved mnemonic and its separator together, then uses the existing bulk-memory
+copy operation. Both preserve the first decoder failure and the 1 MiB text limit.
+A failed expansion may retain a shorter private partial prefix; failed text never
+reaches the ordinary WAT parser. Guest binaries still decode into text and use the
+same parser, validator and runtime, with no native guest compilation or fallback.
+
+A full per-leaf tree was discarded because it enlarged the engine source. Small
+groups instead reduce expanded WAT from 1,490,333 to 1,445,170 bytes, saving 45,163
+bytes (3.0%). Constructor behavior retains the original fresh parsing path.
+
+New tests expose test-only hooks on the interpreter, compile only the instrumented
+bootstrap with `-O4 --converge`, and also run its WAT through the production
+bootstrap. They verify all 498 wire mappings including nullable aliases, every
+namespace hole through the final mapping, large unsigned invalid keys, exact
+mnemonic bytes and separators, adjacent sentinels, exact-capacity writes, one-byte
+short buffers, narrow tails and preservation of the first decoder error. Existing
+numeric/control/memory/table/start and every-SIMD binary oracle tests remain intact.
+`make bench-load` now measures equivalent text and hand-encoded binary workloads,
+checking guest results after every sample without compiling guest modules.
+
+Diagnostic whole hosted binary loads execute 7,379,687 to 6,459,682 bootstrap
+instructions for integers, 25,517,412 to 24,010,847 for floats, 7,594,393 to 6,228,726
+for vectors, and 13,903,667 to 12,920,169 for many functions: reductions of
+12.5%, 5.9%, 18.0% and 7.1%. Construction and guest invocation are excluded, and
+the interpreted child contains no profiling markers.
+
+Final paired hosted binary-load medians improve by 10.9% for integers, 4.0% for
+floats, 14.1% for vectors and 6.9% for many functions. Text-load timings remain
+within about 1.4% of their unchanged control. These final samples run sequentially
+without test/audit overlap; earlier overlapping benchmark samples are excluded.
+All 174 tests pass, including nested self-hosting, and both runtimes pass all
+65,199 commands across the unchanged 258 files with zero skips and failures. The
+standalone hosted audit takes 247,938.874 ms (4.13 minutes), against the previous
+270,648.823 ms (4.51 minutes): 8.4% less time. `test/performance.json` records
+artifact hashes, benchmarks and instruction profiles, and `test/spec/selfhost.json`
+records the new baseline. Local performance results carry no CI thresholds.

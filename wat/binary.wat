@@ -192,24 +192,75 @@
 		(global.set $bin-used (i32.add (global.get $bin-used) (i32.const 1)))
 	)
 
-	;; Copy existing mnemonic bytes into the decoded source and terminate the token with a space.
+	;; Append a packed one-, two-, or four-byte mnemonic fragment without crossing the output bound.
+	(func $binary-word
+		(param $word i32)
+		(param $width i32)
+		(local $at i32)
+
+		;; Preserve the first decoder failure before examining the output cursor.
+		(if (global.get $error)
+			(then
+				(return)
+			)
+		)
+		;; A complete fragment must fit before any byte in it is written.
+		(if (i32.gt_u (global.get $bin-used) (i32.sub (i32.const 1048576) (local.get $width)))
+			(then
+				(call $fail (i32.const 6))
+				(return)
+			)
+		)
+		(local.set $at (i32.add (global.get $bin-out) (global.get $bin-used)))
+		;; Full words copy four little-endian ASCII bytes at once.
+		(if (i32.eq (local.get $width) (i32.const 4))
+			(then
+				(i32.store (local.get $at) (local.get $word))
+			)
+			;; Short tails use narrow stores so neighboring bytes remain untouched.
+			(else
+				;; Two-byte tails copy exactly one halfword.
+				(if (i32.eq (local.get $width) (i32.const 2))
+					(then
+						(i32.store16 (local.get $at) (local.get $word))
+					)
+					;; The remaining generated tail is one byte.
+					(else
+						(i32.store8 (local.get $at) (local.get $word))
+					)
+				)
+			)
+		)
+		(global.set $bin-used (i32.add (global.get $bin-used) (local.get $width)))
+	)
+
+	;; Copy a reserved mnemonic span in one bounded transfer and append its separating space.
 	(func $binary-copy
 		(param $p i32)
 		(param $n i32)
-		(local $i i32)
+		(local $at i32)
 
-		;; Copy exactly the supplied mnemonic span.
-		(block $done
-			;; Output errors stop copying before any further memory write.
-			(loop $bytes
-				(br_if $done (global.get $error))
-				(br_if $done (i32.eq (local.get $i) (local.get $n)))
-				(call $binary-byte (i32.load8_u (i32.add (local.get $p) (local.get $i))))
-				(local.set $i (i32.add (local.get $i) (i32.const 1)))
-				(br $bytes)
+		;; Preserve the original decoder error before copying any mnemonic bytes.
+		(if (global.get $error)
+			(then
+				(return)
 			)
 		)
-		(call $binary-byte (i32.const 32))
+		;; Include the trailing space in the output bound and reject oversized spans without overflow.
+		(if
+			(i32.or
+				(i32.gt_u (local.get $n) (i32.const 1048575))
+				(i32.gt_u (global.get $bin-used) (i32.sub (i32.const 1048575) (local.get $n)))
+			)
+			(then
+				(call $fail (i32.const 6))
+				(return)
+			)
+		)
+		(local.set $at (i32.add (global.get $bin-out) (global.get $bin-used)))
+		(memory.copy (local.get $at) (local.get $p) (local.get $n))
+		(i32.store8 (i32.add (local.get $at) (local.get $n)) (i32.const 32))
+		(global.set $bin-used (i32.add (global.get $bin-used) (i32.add (local.get $n) (i32.const 1))))
 	)
 
 	;; Start a parenthesized WAT form with a mnemonic already stored in reserved memory.

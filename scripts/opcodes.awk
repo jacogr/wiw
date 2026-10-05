@@ -23,6 +23,7 @@ function decoded(type, arg) {
 }
 # Mnemonics contain only these ASCII bytes; pack words in Wasm's little-endian order.
 function mnemonic_byte(c, n) {
+  if (c == " ") return 32
   n = index("abcdefghijklmnopqrstuvwxyz0123456789._", c)
   return n <= 26 ? n + 96 : (n <= 36 ? n + 21 : (n == 37 ? 46 : 95))
 }
@@ -120,6 +121,37 @@ function effect_dispatch(field, i, key, g, groups, tabs, expr, effect_group, eff
   print "\t\t)"
 }
 
+# Search ordered wire IDs with bounded depth; holes still require an exact leaf match.
+function binary_dispatch(low, high, tabs, middle, code, i, text, j, width, entry) {
+  if (high - low < 16) {
+    for (entry = low; entry <= high; entry++) {
+      code = wire_order[entry]
+      i = wire_id[code]
+      printf "%s;; Emit %s only for its exact wire ID.\n", tabs, name[i]
+      printf "%s(if (i32.eq (local.get $byte) (i32.const %d))\n%s\t(then\n", tabs, code, tabs
+      if (i <= 202) {
+        printf "%s\t\t(call $binary-copy (i32.const %d) (i32.const %d))\n", tabs, address[i], length(name[i])
+      } else {
+        text = name[i] " "
+        for (j = 1; j <= length(text); j += width) {
+          width = length(text) - j + 1
+          width = width >= 4 ? 4 : (width >= 2 ? 2 : 1)
+          printf "%s\t\t(call $binary-word (i32.const %d) (i32.const %d))\n", tabs, mnemonic_word(text, j, width), width
+        }
+      }
+      printf "%s\t\t(return (i32.const 1))\n%s\t)\n%s)\n", tabs, tabs, tabs
+    }
+    return
+  }
+  middle = int((low + high) / 2)
+  printf "%s;; Search wire IDs at or below %d in the lower half.\n", tabs, wire_order[middle]
+  printf "%s(if (i32.le_u (local.get $byte) (i32.const %d))\n%s\t(then\n", tabs, wire_order[middle], tabs
+  binary_dispatch(low, middle, tabs "\t\t")
+  printf "%s\t)\n%s\t;; Larger wire IDs search the upper half.\n%s\t(else\n", tabs, tabs, tabs
+  binary_dispatch(middle + 1, high, tabs "\t\t")
+  printf "%s\t)\n%s)\n", tabs, tabs
+}
+
 END {
   if (invalid) exit 1
   print "\t;; Opcode keyword bytes occupy reserved memory below the host source buffers."
@@ -190,26 +222,21 @@ END {
   print "\t\t(i32.const 0)\n\t)"
   print "\n\t;; Decode a wire opcode to its WAT mnemonic without compiling guest instructions."
   print "\t(func $binary-opname\n\t\t(param $byte i32)\n\t\t(result i32)"
+  maximum_wire = 0
   for (i = 1; i <= count; i++) {
     if (binary[i] < 0) continue
-    if (i > 202) {
-      printf "\t\t;; Decode the SIMD mnemonic %s.\n", name[i]
-      printf "\t\t(if (i32.eq (local.get $byte) (i32.const %d))\n\t\t\t(then\n", binary[i]
-      for (j = 1; j <= length(name[i]); j++) {
-        c = index("abcdefghijklmnopqrstuvwxyz0123456789._", substr(name[i], j, 1))
-        ascii = c <= 26 ? c + 96 : (c <= 36 ? c + 21 : (c == 37 ? 46 : 95))
-        printf "\t\t\t\t(call $binary-byte (i32.const %d))\n", ascii
-      }
-      print "\t\t\t\t(call $binary-byte (i32.const 32))\n\t\t\t\t(return (i32.const 1))\n\t\t\t)\n\t\t)"
-      continue
-    }
-    printf "\t\t;; Emit the instruction mnemonic for binary opcode %d (%s).\n", binary[i], name[i]
-    printf "\t\t(if (i32.eq (local.get $byte) (i32.const %d))\n", binary[i]
-    printf "\t\t\t(then (call $binary-copy (i32.const %d) (i32.const %d)) (return (i32.const 1)))\n\t\t)\n", address[i], length(name[i])
+    if (binary[i] in wire_id) exit 1
+    wire_id[binary[i]] = i
+    if (binary[i] > maximum_wire) maximum_wire = binary[i]
   }
-  print "\t\t;; Nullable test and cast variants share mnemonics with non-null variants."
-  print "\t\t(if (i32.eq (local.get $byte) (i32.const 1045)) (then (return (call $binary-opname (i32.const 1044)))))"
-  print "\t\t(if (i32.eq (local.get $byte) (i32.const 1047)) (then (return (call $binary-opname (i32.const 1046)))))"
+  # Nullable GC variants retain their original immediate decoding, sharing only mnemonic text.
+  wire_id[1045] = wire_id[1044]
+  wire_id[1047] = wire_id[1046]
+  wire_count = 0
+  for (code = 0; code <= maximum_wire; code++) {
+    if (code in wire_id) wire_order[++wire_count] = code
+  }
+  binary_dispatch(1, wire_count, "\t\t")
   print "\t\t(i32.const 0)\n\t)"
   print "\n\t;; Return the number of operands consumed by a known opcode."
   print "\t(func $inputs\n\t\t(param $op i32)\n\t\t(result i32)\n"

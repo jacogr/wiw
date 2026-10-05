@@ -3,7 +3,7 @@
   "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
   "runtime": "interpreted",
   "interpreterDepth": 1,
-  "engineSourceSha256": "11d157bab8811bcd46214f64d53ee95286fc35f5b4e7e3ac3b83d287fc281493",
+  "engineSourceSha256": "d88546b2dbbe65598df6162e82e7e7ea3454826230eed8b43237ae252fc4f4e6",
   "passed": 65199,
   "skipped": 0,
   "failed": 0,
@@ -13,27 +13,27 @@
     {
       "binary": "wiw-opt.wasm",
       "optimization": "-O4 --converge",
-      "elapsedMs": 270648.822833,
+      "elapsedMs": 247938.87391599998,
       "slowestFiles": [
         {
           "file": "return_call_ref.wast",
-          "elapsedMs": 35681.368875000015
+          "elapsedMs": 35498.38075000001
         },
         {
           "file": "return_call.wast",
-          "elapsedMs": 31685.26808400001
+          "elapsedMs": 31582.61287500002
         },
         {
           "file": "simd/simd_const.wast",
-          "elapsedMs": 11063.971833000018
+          "elapsedMs": 9622.072583000001
         },
         {
           "file": "const.wast",
-          "elapsedMs": 10795.181666999997
+          "elapsedMs": 9385.683250000002
         },
         {
           "file": "memory_grow.wast",
-          "elapsedMs": 6933.354791999998
+          "elapsedMs": 6898.5486669999955
         }
       ]
     }
