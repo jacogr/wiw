@@ -71,7 +71,11 @@ local nine-digit chunks before exact radix-and-chunk updates. A short tail
 uses a direct single-word write when the integer prefix is zero. Points and
 separators retain their original grammar and fractional digit counts.
 The multiplier and its carry fit the existing
-32-bit limb and 64-bit product representation. Float-to-integer operations
+32-bit limb and 64-bit product representation. Integer loops walk cached word
+cursors and endpoints; comparison and trimming walk from the high word down.
+The subtraction loop checks its cached source endpoint before reading, so absent
+words contribute only the borrow. Shift capacity checks precede output writes.
+Float-to-integer operations
 check NaN and range before native conversions. `invokeRaw` and typed forwarding
 retain signaling NaNs; plain Number callbacks have JavaScript's Number boundary.
 
@@ -1322,3 +1326,52 @@ The standalone hosted audit takes 256,798.989 ms (4.28 minutes), versus the
 previous 256,606.437 ms, a 0.08% increase: overall timing is essentially unchanged.
 The change is retained for the measured long-literal loading gain. There are no
 CI timing thresholds.
+
+### Cursor walks in exact integer arithmetic
+
+Exact integer multiplication, shifting, comparison, subtraction and trimming
+now walk local word cursors. Loop endpoints come from the original used counts;
+loads and stores reuse the current cursor rather than repeatedly calling a limb
+address helper. Subtraction still checks the source endpoint before reading,
+so missing high words contribute only the borrow. Comparison and trimming start
+at the high word and stop before reading the header. Bit-length lookup computes
+its single high-word address directly. The unused limb helper is removed.
+
+Carry/borrow arithmetic, normalization, the shift's conservative capacity check
+and resource status stay unchanged. Shift capacity failure precedes output
+writes, and multiplication checks capacity before appending a carry. The word
+width and capacity now have M4 names. This adds only local cursors and endpoints;
+there is no new buffer, shared state or API. Expanded source grows by 937 bytes.
+
+A new arithmetic test exposes helpers only in temporary native/interpreted test
+engines. Independent BigInt expectations cover multiword carries and borrows,
+equal-buffer subtraction, maximum-length equality and low-word differences,
+normalization and zero bit lengths. Unused words and both buffer borders are
+poisoned. Tests check carry overflow and unchanged shift destinations on
+capacity failure, including the existing zero-value shortcut for huge shifts.
+Existing float tests retain independent IEEE-bit expectations and rounding
+boundary coverage. All 179 tests pass, including nested self-hosting; both
+runtimes pass all 65,199 pinned wg-3.0 commands across 258 files with zero skips
+or failures.
+
+The floatsHex loader workload adds nontrivial dyadic ratios with positive and
+negative binary exponents. Isolated hosted samples with three repeats and five
+samples show:
+
+| Loader workload | Indexed limbs | Cursor walks | Reduction |
+| --- | ---: | ---: | ---: |
+| Decimal scales | 210.84 ms | 151.51 ms | 28.1% |
+| Long decimal digits | 87.12 ms | 64.08 ms | 26.4% |
+| Hexadecimal literals | 174.16 ms | 120.16 ms | 31.0% |
+| Binary floats | 139.43 ms | 126.24 ms | 9.5% |
+
+Diagnostic bootstrap instruction counts fall by 29.0%, 26.8%, 29.8% and 6.9%
+respectively. The child source contains no profiling markers, and construction
+and invocation are excluded. Integer, vector and many-function instruction
+counts stay identical; short float literals stay near 30 ms per hosted load.
+All timing samples ran sequentially without tests or audits in parallel.
+
+The standalone hosted audit takes 253,734.891 ms (4.23 minutes), compared with
+the previous 256,798.989 ms (4.28 minutes), a 1.2% reduction. The source/binary
+hashes, phase samples, instruction counts and complete coverage are recorded
+in the performance history. Local timings are diagnostic, with no CI thresholds.

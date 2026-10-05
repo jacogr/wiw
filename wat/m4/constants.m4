@@ -124,3 +124,7 @@ m4_define(<!M4_LANE32_SHIFT!>,<!5!>)m4_dnl
 m4_define(<!M4_LANE64_SHIFT!>,<!6!>)m4_dnl
 m4_define(<!M4_U8_MAX!>,<!255!>)m4_dnl
 m4_define(<!M4_U16_MAX!>,<!65535!>)m4_dnl
+m4_dnl Exact integer scratch buffers contain a header and 32-bit limbs.
+m4_define(<!M4_BIG_LIMB_BYTES!>,<!4!>)m4_dnl
+m4_define(<!M4_BIG_LIMB_BITS!>,<!32!>)m4_dnl
+m4_define(<!M4_BIG_LIMB_CAPACITY!>,<!1023!>)m4_dnl

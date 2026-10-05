@@ -1,11 +1,3 @@
-	;; Address a little-endian limb in a 4096-byte big integer; its header stores the used limb count.
-	(func $limb
-		(param $p i32)
-		(param $i i32)
-		(result i32)
-
-		(i32.add (local.get $p) (i32.add (i32.const 4) (i32.mul (local.get $i) (i32.const 4))))
-	)
 
 	;; Replace a big integer with a single unsigned word, using length zero for the value zero.
 	(func $big-small
@@ -13,24 +5,27 @@
 		(param $v i32)
 
 		(i32.store (local.get $p) (i32.ne (local.get $v) (i32.const 0)))
-		(i32.store offset=4 (local.get $p) (local.get $v))
+		(i32.store offset=M4_BIG_LIMB_BYTES (local.get $p) (local.get $v))
 	)
 
 	;; Remove unused high zero limbs after subtraction or a bit shift.
 	(func $big-trim
 		(param $p i32)
 		(local $n i32)
+		(local $cursor i32)
 
 		(local.set $n (i32.load (local.get $p)))
+		(local.set $cursor (i32.add (local.get $p) (i32.mul (local.get $n) (i32.const M4_BIG_LIMB_BYTES))))
 		;; Stop at the first nonzero high limb or the zero-length representation.
 		(block $done
 			;; Trimming never reads before the first limb.
 			(loop $trim
 				(br_if $done (i32.eqz (local.get $n)))
 				(br_if $done
-					(i32.load (call $limb (local.get $p) (i32.sub (local.get $n) (i32.const 1))))
+					(i32.load (local.get $cursor))
 				)
 				(local.set $n (i32.sub (local.get $n) (i32.const 1)))
+				(local.set $cursor (i32.sub (local.get $cursor) (i32.const M4_BIG_LIMB_BYTES)))
 				(br $trim)
 			)
 		)
@@ -42,30 +37,33 @@
 		(param $p i32)
 		(param $m i32)
 		(param $add i32)
-		(local $i i32)
+		(local $cursor i32)
+		(local $end i32)
 		(local $n i32)
 		(local $v i64)
 		(local $carry i64)
 
 		(local.set $n (i32.load (local.get $p)))
+		(local.set $cursor (i32.add (local.get $p) (i32.const M4_BIG_LIMB_BYTES)))
+		(local.set $end (i32.add (local.get $cursor) (i32.mul (local.get $n) (i32.const M4_BIG_LIMB_BYTES))))
 		(local.set $carry (i64.extend_i32_u (local.get $add)))
 		;; Finish after processing each existing word and then append any remaining carry.
 		(block $done
 			;; A 32-bit limb times a radix at most 10^9, plus carry below that radix, fits in i64.
 			(loop $words
-				(br_if $done (i32.eq (local.get $i) (local.get $n)))
+				(br_if $done (i32.eq (local.get $cursor) (local.get $end)))
 				(local.set $v
 					(i64.add
 						(i64.mul
-							(i64.extend_i32_u (i32.load (call $limb (local.get $p) (local.get $i))))
+							(i64.extend_i32_u (i32.load (local.get $cursor)))
 							(i64.extend_i32_u (local.get $m))
 						)
 						(local.get $carry)
 					)
 				)
-				(i32.store (call $limb (local.get $p) (local.get $i)) (i32.wrap_i64 (local.get $v)))
-				(local.set $carry (i64.shr_u (local.get $v) (i64.const 32)))
-				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(i32.store (local.get $cursor) (i32.wrap_i64 (local.get $v)))
+				(local.set $carry (i64.shr_u (local.get $v) (i64.const M4_BIG_LIMB_BITS)))
+				(local.set $cursor (i32.add (local.get $cursor) (i32.const M4_BIG_LIMB_BYTES)))
 				(br $words)
 			)
 		)
@@ -73,13 +71,13 @@
 		(if (i64.ne (local.get $carry) (i64.const 0))
 			(then
 				;; The header and at most 1023 limbs must fit inside this buffer.
-				(if (i32.ge_u (local.get $n) (i32.const 1023))
+				(if (i32.ge_u (local.get $n) (i32.const M4_BIG_LIMB_CAPACITY))
 					(then
 						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 						(return)
 					)
 				)
-				(i32.store (call $limb (local.get $p) (local.get $n)) (i32.wrap_i64 (local.get $carry)))
+				(i32.store (local.get $cursor) (i32.wrap_i64 (local.get $carry)))
 				(i32.store (local.get $p) (i32.add (local.get $n) (i32.const 1)))
 			)
 		)
@@ -93,13 +91,16 @@
 		(local $words i32)
 		(local $shift i32)
 		(local $n i32)
-		(local $i i32)
+		(local $input i32)
+		(local $input-end i32)
+		(local $output i32)
+		(local $zero-end i32)
 		(local $v i64)
 		(local $carry i64)
 
 		(local.set $n (i32.load (local.get $src)))
-		(local.set $words (i32.div_u (local.get $bits) (i32.const 32)))
-		(local.set $shift (i32.rem_u (local.get $bits) (i32.const 32)))
+		(local.set $words (i32.div_u (local.get $bits) (i32.const M4_BIG_LIMB_BITS)))
+		(local.set $shift (i32.rem_u (local.get $bits) (i32.const M4_BIG_LIMB_BITS)))
 		;; Zero remains zero without allocating words for its exponent.
 		(if (i32.eqz (local.get $n))
 			(then
@@ -114,44 +115,48 @@
 					(i32.add (local.get $n) (local.get $words))
 					(i32.ne (local.get $shift) (i32.const 0))
 				)
-				(i32.const 1023)
+				(i32.const M4_BIG_LIMB_CAPACITY)
 			)
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
+		(local.set $input (i32.add (local.get $src) (i32.const M4_BIG_LIMB_BYTES)))
+		(local.set $input-end (i32.add (local.get $input) (i32.mul (local.get $n) (i32.const M4_BIG_LIMB_BYTES))))
+		(local.set $output (i32.add (local.get $dst) (i32.const M4_BIG_LIMB_BYTES)))
+		(local.set $zero-end (i32.add (local.get $output) (i32.mul (local.get $words) (i32.const M4_BIG_LIMB_BYTES))))
 		;; Finish after clearing the low words introduced by the shift.
 		(block $zeroed
 			;; Old scratch bytes cannot contribute to a new exact integer.
 			(loop $zero
-				(br_if $zeroed (i32.eq (local.get $i) (local.get $words)))
-				(i32.store (call $limb (local.get $dst) (local.get $i)) (i32.const 0))
-				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br_if $zeroed (i32.eq (local.get $output) (local.get $zero-end)))
+				(i32.store (local.get $output) (i32.const 0))
+				(local.set $output (i32.add (local.get $output) (i32.const M4_BIG_LIMB_BYTES)))
 				(br $zero)
 			)
 		)
-		(local.set $i (i32.const 0))
 		;; Finish after translating each source word into the shifted destination.
 		(block $done
 			;; Carry flows upward and each source word is read only once.
 			(loop $copy
-				(br_if $done (i32.eq (local.get $i) (local.get $n)))
+				(br_if $done (i32.eq (local.get $input) (local.get $input-end)))
 				(local.set $v
 					(i64.or
 						(i64.shl
-							(i64.extend_i32_u (i32.load (call $limb (local.get $src) (local.get $i))))
+							(i64.extend_i32_u (i32.load (local.get $input)))
 							(i64.extend_i32_u (local.get $shift))
 						)
 						(local.get $carry)
 					)
 				)
 				(i32.store
-					(call $limb (local.get $dst) (i32.add (local.get $i) (local.get $words)))
+					(local.get $output)
 					(i32.wrap_i64 (local.get $v))
 				)
-				(local.set $carry (i64.shr_u (local.get $v) (i64.const 32)))
-				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(local.set $carry (i64.shr_u (local.get $v) (i64.const M4_BIG_LIMB_BITS)))
+				(local.set $input (i32.add (local.get $input) (i32.const M4_BIG_LIMB_BYTES)))
+				(local.set $output (i32.add (local.get $output) (i32.const M4_BIG_LIMB_BYTES)))
 				(br $copy)
 			)
 		)
@@ -160,7 +165,7 @@
 		(if (i64.ne (local.get $carry) (i64.const 0))
 			(then
 				(i32.store
-					(call $limb (local.get $dst) (i32.load (local.get $dst)))
+					(local.get $output)
 					(i32.wrap_i64 (local.get $carry))
 				)
 				(i32.store (local.get $dst) (i32.add (i32.load (local.get $dst)) (i32.const 1)))
@@ -174,36 +179,44 @@
 		(param $b i32)
 		(result i32)
 		(local $n i32)
+		(local $bn i32)
+		(local $ap i32)
+		(local $bp i32)
 		(local $x i32)
 		(local $y i32)
 
+		(local.set $n (i32.load (local.get $a)))
+		(local.set $bn (i32.load (local.get $b)))
 		;; Different limb counts immediately determine the ordering.
-		(if (i32.ne (i32.load (local.get $a)) (i32.load (local.get $b)))
+		(if (i32.ne (local.get $n) (local.get $bn))
 			(then
 				(return
 					(select
 						(i32.const 1)
 						(i32.const -1)
-						(i32.gt_u (i32.load (local.get $a)) (i32.load (local.get $b)))
+						(i32.gt_u (local.get $n) (local.get $bn))
 					)
 				)
 			)
 		)
-		(local.set $n (i32.load (local.get $a)))
+		(local.set $ap (i32.add (local.get $a) (i32.mul (local.get $n) (i32.const M4_BIG_LIMB_BYTES))))
+		(local.set $bp (i32.add (local.get $b) (i32.mul (local.get $n) (i32.const M4_BIG_LIMB_BYTES))))
 		;; Equal-length numbers are equal only after every word agrees.
 		(block $done
 			;; Compare from the most significant word downward.
 			(loop $compare
 				(br_if $done (i32.eqz (local.get $n)))
 				(local.set $n (i32.sub (local.get $n) (i32.const 1)))
-				(local.set $x (i32.load (call $limb (local.get $a) (local.get $n))))
-				(local.set $y (i32.load (call $limb (local.get $b) (local.get $n))))
+				(local.set $x (i32.load (local.get $ap)))
+				(local.set $y (i32.load (local.get $bp)))
 				;; The first differing high word determines unsigned ordering.
 				(if (i32.ne (local.get $x) (local.get $y))
 					(then
 						(return (select (i32.const 1) (i32.const -1) (i32.gt_u (local.get $x) (local.get $y))))
 					)
 				)
+				(local.set $ap (i32.sub (local.get $ap) (i32.const M4_BIG_LIMB_BYTES)))
+				(local.set $bp (i32.sub (local.get $bp) (i32.const M4_BIG_LIMB_BYTES)))
 				(br $compare)
 			)
 		)
@@ -214,35 +227,43 @@
 	(func $big-sub
 		(param $a i32)
 		(param $b i32)
-		(local $i i32)
+		(local $ap i32)
+		(local $bp i32)
+		(local $a-end i32)
+		(local $b-end i32)
 		(local $x i64)
 		(local $y i64)
 		(local $borrow i64)
 
+		(local.set $ap (i32.add (local.get $a) (i32.const M4_BIG_LIMB_BYTES)))
+		(local.set $bp (i32.add (local.get $b) (i32.const M4_BIG_LIMB_BYTES)))
+		(local.set $a-end (i32.add (local.get $ap) (i32.mul (i32.load (local.get $a)) (i32.const M4_BIG_LIMB_BYTES))))
+		(local.set $b-end (i32.add (local.get $bp) (i32.mul (i32.load (local.get $b)) (i32.const M4_BIG_LIMB_BYTES))))
 		;; Finish after the original length of a, then normalize its new high word.
 		(block $done
 			;; Each unsigned word subtraction propagates a one-bit borrow upward.
 			(loop $subtract
-				(br_if $done (i32.eq (local.get $i) (i32.load (local.get $a))))
-				(local.set $x (i64.extend_i32_u (i32.load (call $limb (local.get $a) (local.get $i)))))
+				(br_if $done (i32.eq (local.get $ap) (local.get $a-end)))
+				(local.set $x (i64.extend_i32_u (i32.load (local.get $ap))))
 				(local.set $y (local.get $borrow))
 				;; Missing high words in b contribute zero rather than stale buffer bytes.
-				(if (i32.lt_u (local.get $i) (i32.load (local.get $b)))
+				(if (i32.lt_u (local.get $bp) (local.get $b-end))
 					(then
 						(local.set $y
 							(i64.add
 								(local.get $y)
-								(i64.extend_i32_u (i32.load (call $limb (local.get $b) (local.get $i))))
+								(i64.extend_i32_u (i32.load (local.get $bp)))
 							)
 						)
 					)
 				)
 				(i32.store
-					(call $limb (local.get $a) (local.get $i))
+					(local.get $ap)
 					(i32.wrap_i64 (i64.sub (local.get $x) (local.get $y)))
 				)
 				(local.set $borrow (i64.extend_i32_u (i64.lt_u (local.get $x) (local.get $y))))
-				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(local.set $ap (i32.add (local.get $ap) (i32.const M4_BIG_LIMB_BYTES)))
+				(local.set $bp (i32.add (local.get $bp) (i32.const M4_BIG_LIMB_BYTES)))
 				(br $subtract)
 			)
 		)
@@ -263,8 +284,8 @@
 			)
 		)
 		(i32.sub
-			(i32.mul (local.get $n) (i32.const 32))
-			(i32.clz (i32.load (call $limb (local.get $p) (i32.sub (local.get $n) (i32.const 1)))))
+			(i32.mul (local.get $n) (i32.const M4_BIG_LIMB_BITS))
+			(i32.clz (i32.load (i32.add (local.get $p) (i32.mul (local.get $n) (i32.const M4_BIG_LIMB_BYTES)))))
 		)
 	)
 

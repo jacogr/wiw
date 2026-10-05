@@ -29,6 +29,10 @@ cases.decimalScales = `(module (func (export "run") (result f64)
 cases.decimalDigits = `(module (func (export "run") (result f64)
   ${`f64.const 1${'234567890'.repeat(28)}e-252 drop f64.const -${'9'.repeat(256)}e-256 drop `.repeat(32)} f64.const 0))`;
 
+// Nontrivial dyadic ratios exercise hexadecimal parsing and multiword rounding in both directions.
+cases.floatsHex = `(module (func (export "run") (result f64)
+  ${'f64.const 0x1.123456789abcdep-100 f64.const 0x1.fffffffffffffp900 f64.copysign drop '.repeat(128)} f64.const 0))`;
+
 // Hand-encode binary equivalents so the benchmark never compiles guest modules.
 const uleb=value=>{
   const bytes=[];

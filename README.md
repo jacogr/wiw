@@ -196,7 +196,7 @@ baseline and subsequent measurements.
 
 `make bench-load` measures parsing and validation separately from invocation,
 using equivalent text and hand-encoded binary integer, float, SIMD and many-function
-modules in both runtimes, plus text workloads with large decimal scales and long significands,
+modules in both runtimes, plus text workloads with large decimal scales, long significands and hexadecimal ratios,
 without compiling guest modules. It records
 per-load sample timings, medians, input formats and source/binary hashes in `build/bench-load.json`.
 `BENCH_LOAD_REPEATS=10 BENCH_SAMPLES=7 make bench-load` adjusts the bounded workload.
