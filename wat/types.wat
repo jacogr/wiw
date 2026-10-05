@@ -131,7 +131,7 @@
 				;; Require the ref keyword before parsing an explicit reference type.
 				(if (i32.eqz (call $is-ref-word (i32.const 0)))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return (i32.const 0))
 					)
 				)
@@ -151,7 +151,7 @@
 				(return (local.get $type))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i32.const 0)
 	)
 
@@ -164,7 +164,7 @@
 		(i32.add
 			(global.get $local-type-base)
 			(i32.mul
-				(i32.add (i32.mul (local.get $function) (i32.const CAP_LOCALS)) (local.get $index))
+				(i32.add (i32.mul (local.get $function) (i32.const M4_CAP_LOCALS)) (local.get $index))
 				(i32.const 4)
 			)
 		)
@@ -216,7 +216,7 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 7))
+				(call $fail (i32.const M4_ERR_OPERAND_STACK))
 				(return)
 			)
 		)
@@ -243,10 +243,10 @@
 		;; Aggregate constructors are evaluated again after immutable imported values are bound.
 		(if
 			(i32.or
-				(i32.or (i32.eq (local.get $op) (i32.const 473)) (i32.eq (local.get $op) (i32.const 474)))
+				(i32.or (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_NEW)) (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_NEW_DEFAULT)))
 				(i32.and
-					(i32.ge_u (local.get $op) (i32.const 479))
-					(i32.le_u (local.get $op) (i32.const 481))
+					(i32.ge_u (local.get $op) (i32.const M4_OP_ARRAY_NEW))
+					(i32.le_u (local.get $op) (i32.const M4_OP_ARRAY_NEW_FIXED))
 				)
 			)
 			(then
@@ -259,19 +259,19 @@
 		(if
 			(i32.or
 				(i32.and
-					(i32.ge_u (local.get $op) (i32.const 2))
-					(i32.le_u (local.get $op) (i32.const 4))
+					(i32.ge_u (local.get $op) (i32.const M4_OP_I32_ADD))
+					(i32.le_u (local.get $op) (i32.const M4_OP_I32_MUL))
 				)
 				(i32.and
-					(i32.ge_u (local.get $op) (i32.const 62))
-					(i32.le_u (local.get $op) (i32.const 64))
+					(i32.ge_u (local.get $op) (i32.const M4_OP_I64_ADD))
+					(i32.le_u (local.get $op) (i32.const M4_OP_I64_MUL))
 				)
 			)
 			(then
 				;; Integer width is checked before recursive operand parsing.
 				(if (i32.ne (call $output-type (local.get $op)) (local.get $type))
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 						(return (i64.const 0))
 					)
 				)
@@ -300,12 +300,12 @@
 			)
 		)
 		;; Small integer constant expressions truncate their i32 operand to the i31 payload.
-		(if (i32.eq (local.get $op) (i32.const 470))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_REF_I31))
 			(then
 				;; The non-null i31 result must fit the declared reference type.
 				(if (i32.eqz (call $type-compatible (i32.const 21) (local.get $type)))
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 				(call $next)
@@ -322,12 +322,12 @@
 		)
 		;; Reference conversions are constant expressions and preserve opaque host identity.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 468)) (i32.eq (local.get $op) (i32.const 469)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_ANY_CONVERT_EXTERN)) (i32.eq (local.get $op) (i32.const M4_OP_EXTERN_CONVERT_ANY)))
 			(then
 				(call $next)
 				(local.set $a
 					(call $global-initializer
-						(select (i32.const 6) (i32.const 16) (i32.eq (local.get $op) (i32.const 468)))
+						(select (i32.const 6) (i32.const 16) (i32.eq (local.get $op) (i32.const M4_OP_ANY_CONVERT_EXTERN)))
 					)
 				)
 				(local.set $deferred (global.get $initializer-reference))
@@ -336,12 +336,12 @@
 				(if
 					(i32.eqz
 						(call $type-compatible
-							(select (i32.const 16) (i32.const 6) (i32.eq (local.get $op) (i32.const 468)))
+							(select (i32.const 16) (i32.const 6) (i32.eq (local.get $op) (i32.const M4_OP_ANY_CONVERT_EXTERN)))
 							(local.get $type)
 						)
 					)
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 				(global.set $initializer-reference
@@ -353,12 +353,12 @@
 			)
 		)
 		;; Vector constants initialize both raw halves without using host numeric conversions.
-		(if (i32.eq (local.get $op) (i32.const 202))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_CONST))
 			(then
 				;; The initializer result must match the declared vector type.
 				(if (i32.ne (local.get $type) (i32.const 7))
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 						(return (i64.const 0))
 					)
 				)
@@ -371,7 +371,7 @@
 			)
 		)
 		;; Imported globals are evaluated after their raw values have been bound by the host.
-		(if (i32.eq (local.get $op) (i32.const 49))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_GET))
 			(then
 				(call $read-initializer-global (local.get $type))
 				(call $expect (i32.const 2))
@@ -398,7 +398,7 @@
 			)
 		)
 		;; Function initializers may name later declarations and themselves declare that function reference.
-		(if (i32.eq (local.get $op) (i32.const 195))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_REF_FUNC))
 			(then
 				;; A function reference cannot initialize an external or numeric global.
 				(if
@@ -413,7 +413,7 @@
 						)
 					)
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 				(call $next)
@@ -438,7 +438,7 @@
 								(call $type-compatible (call $function-reference-type (local.get $op)) (local.get $type))
 							)
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 						(call $declare-function (local.get $op))
@@ -449,13 +449,13 @@
 			)
 		)
 		;; Null initializers preserve their declared reference type without needing a table.
-		(if (i32.eq (local.get $op) (i32.const 193))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_REF_NULL))
 			(then
 				(call $next)
 				;; The null heap type must agree with the global's exact reference type.
 				(if (i32.eqz (call $type-compatible (call $reference-type) (local.get $type)))
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 				(call $expect (i32.const 2))
@@ -465,24 +465,24 @@
 		;; Only scalar constants are permitted, and their result type must match the global.
 		(if
 			(i32.or
-				(i32.eq (local.get $op) (i32.const 1))
+				(i32.eq (local.get $op) (i32.const M4_OP_I32_CONST))
 				(i32.or
-					(i32.eq (local.get $op) (i32.const 61))
-					(i32.or (i32.eq (local.get $op) (i32.const 106)) (i32.eq (local.get $op) (i32.const 127)))
+					(i32.eq (local.get $op) (i32.const M4_OP_I64_CONST))
+					(i32.or (i32.eq (local.get $op) (i32.const M4_OP_F32_CONST)) (i32.eq (local.get $op) (i32.const M4_OP_F64_CONST)))
 				)
 			)
 			(then
 				;; Constants of a different type fail typed validation.
 				(if (i32.ne (call $output-type (local.get $op)) (local.get $type))
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 						(return (i64.const 0))
 					)
 				)
 			)
 			;; Other initializer expressions remain unsupported.
 			(else
-				(call $fail (i32.const 2))
+				(call $fail (i32.const M4_ERR_UNSUPPORTED))
 				(return (i64.const 0))
 			)
 		)
@@ -690,7 +690,7 @@
 				)
 			)
 		)
-		(call $fail (i32.const 1))
+		(call $fail (i32.const M4_ERR_SYNTAX))
 		(i32.const 0)
 	)
 
@@ -739,7 +739,7 @@
 								)
 							)
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 						(call $declare-function (local.get $index))
@@ -767,7 +767,7 @@
 		(if
 			(i32.or (global.get $error) (i32.ge_u (global.get $constant-depth) (i32.const 256)))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i64.const 0))
 			)
 		)

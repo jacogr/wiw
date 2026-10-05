@@ -31,7 +31,7 @@
 		(if (i32.ge_u (global.get $syntax-count) (i32.const 256))
 			(then
 				(global.set $tok (local.get $offset))
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -86,7 +86,7 @@
 
 		(local.set $end (global.get $code-count))
 		(call $emit
-			(i32.const 41)
+			(i32.const M4_OP_END)
 			(i32.load offset=4 (local.get $frame))
 			(local.get $offset)
 			(i32.const 0)
@@ -111,13 +111,13 @@
 		(if (i32.ne (i32.load offset=4 (local.get $meta)) (i32.const -1))
 			(then
 				(global.set $tok (local.get $offset))
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return)
 			)
 		)
 		(local.set $at (global.get $code-count))
 		(call $emit
-			(i32.const 40)
+			(i32.const M4_OP_ELSE)
 			(i32.load offset=4 (local.get $frame))
 			(local.get $offset)
 			(i32.const 0)
@@ -154,7 +154,7 @@
 						;; Parameter declarations cannot follow result declarations.
 						(if (local.get $shape)
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return (i32.const 0))
 							)
 						)
@@ -242,7 +242,7 @@
 		;; An unmatched identifier cannot refer to the unnamed implicit function label.
 		(if (local.get $named)
 			(then
-				(call $fail (i32.const 10))
+				(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 				(return (i32.const 0))
 			)
 		)
@@ -251,7 +251,7 @@
 		(if (i32.gt_u (local.get $value) (local.get $depth))
 			(then
 				(global.set $tok (local.get $p))
-				(call $fail (i32.const 10))
+				(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 			)
 		)
 		(local.get $value)
@@ -273,7 +273,7 @@
 						)
 					)
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 					)
 				)
 				(call $next)
@@ -294,21 +294,21 @@
 		;; Memory selectors precede folded operands and retain forward references until validation.
 		(if
 			(i32.or
-				(i32.or (i32.eq (local.get $op) (i32.const 51)) (i32.eq (local.get $op) (i32.const 52)))
-				(i32.or (i32.eq (local.get $op) (i32.const 187)) (i32.eq (local.get $op) (i32.const 188)))
+				(i32.or (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_SIZE)) (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_GROW)))
+				(i32.or (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_COPY)) (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_FILL)))
 			)
 			(then
 				(return (call $memory-immediate (local.get $op)))
 			)
 		)
 		;; Data initialization retains separate memory and segment namespaces.
-		(if (i32.eq (local.get $op) (i32.const 189))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_INIT))
 			(then
 				(return (call $memory-init-immediate))
 			)
 		)
 		;; Throws preserve late-bound tag names in a private immediate descriptor.
-		(if (i32.eq (local.get $op) (i32.const 496))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_THROW))
 			(then
 				(local.set $value (call $new-memory-immediate))
 				(i32.store offset=8 (local.get $value) (global.get $tok))
@@ -319,7 +319,7 @@
 		)
 		;; Cast branches retain their resolved label and both explicit reference types.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 493)) (i32.eq (local.get $op) (i32.const 494)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_BR_ON_CAST)) (i32.eq (local.get $op) (i32.const M4_OP_BR_ON_CAST_FAIL)))
 			(then
 				(local.set $value (call $new-memory-immediate))
 				(i32.store (local.get $value) (call $label))
@@ -331,8 +331,8 @@
 		;; Aggregate operators preserve type and field or segment immediates for late resolution.
 		(if
 			(i32.and
-				(i32.ge_u (local.get $op) (i32.const 473))
-				(i32.le_u (local.get $op) (i32.const 492))
+				(i32.ge_u (local.get $op) (i32.const M4_OP_STRUCT_NEW))
+				(i32.le_u (local.get $op) (i32.const M4_OP_ARRAY_INIT_ELEM))
 			)
 			(then
 				(return (call $gc-immediate (local.get $op)))
@@ -340,39 +340,39 @@
 		)
 		;; Casts and tests retain the complete target reference type, including nullability.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 466)) (i32.eq (local.get $op) (i32.const 467)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_REF_TEST)) (i32.eq (local.get $op) (i32.const M4_OP_REF_CAST)))
 			(then
 				(return (call $value-type))
 			)
 		)
 		;; Reference calls carry a heap type rather than a table selector.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 461)) (i32.eq (local.get $op) (i32.const 462)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_CALL_REF)) (i32.eq (local.get $op) (i32.const M4_OP_RETURN_CALL_REF)))
 			(then
 				(return (call $reference-type))
 			)
 		)
 		;; Function and element-drop references retain forward names in their immediate fields.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 195)) (i32.eq (local.get $op) (i32.const 196)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_REF_FUNC)) (i32.eq (local.get $op) (i32.const M4_OP_ELEM_DROP)))
 			(then
 				(return (call $function-reference))
 			)
 		)
 		;; Table initialization stores its independent table/element targets in the auxiliary arena.
-		(if (i32.eq (local.get $op) (i32.const 197))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_TABLE_INIT))
 			(then
 				(return (call $element-immediate))
 			)
 		)
 		;; A null instruction retains its reference type for typed stack validation.
-		(if (i32.eq (local.get $op) (i32.const 193))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_REF_NULL))
 			(then
 				(return (call $reference-type))
 			)
 		)
 		;; Select collects zero or one result type across repeated result groups.
-		(if (i32.eq (local.get $op) (i32.const 47))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_SELECT))
 			(then
 				;; Stop at the first operand group, preserving its opening token.
 				(block $done
@@ -399,7 +399,7 @@
 								;; A second type is invalid regardless of grouping.
 								(if (local.get $value)
 									(then
-										(call $fail (i32.const 7))
+										(call $fail (i32.const M4_ERR_OPERAND_STACK))
 										(br $group-done)
 									)
 								)
@@ -416,7 +416,7 @@
 			)
 		)
 		;; Vector constants preserve their 128 bits in an auxiliary immediate record.
-		(if (i32.eq (local.get $op) (i32.const 202))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_CONST))
 			(then
 				(return (call $vector-literal))
 			)
@@ -425,25 +425,25 @@
 		(if
 			(i32.or
 				(call $vector-lane-count (local.get $op))
-				(i32.eq (local.get $op) (i32.const 335))
+				(i32.eq (local.get $op) (i32.const M4_OP_I8X16_SHUFFLE))
 			)
 			(then
 				(return (call $vector-immediate (local.get $op)))
 			)
 		)
 		;; Constants use the existing signed/unsigned i32 literal decoder.
-		(if (i32.eq (local.get $op) (i32.const 1))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32_CONST))
 			(then
 				(return (call $integer))
 			)
 		)
 		;; Float constants store their exact IEEE representation in the two immediate halves.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 106)) (i32.eq (local.get $op) (i32.const 127)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_F32_CONST)) (i32.eq (local.get $op) (i32.const M4_OP_F64_CONST)))
 			(then
 				(local.set $wide
 					(call $float-literal
-						(select (i32.const 3) (i32.const 4) (i32.eq (local.get $op) (i32.const 106)))
+						(select (i32.const 3) (i32.const 4) (i32.eq (local.get $op) (i32.const M4_OP_F32_CONST)))
 					)
 				)
 				(global.set $immediate-length (i32.wrap_i64 (i64.shr_u (local.get $wide) (i64.const 32))))
@@ -453,10 +453,10 @@
 		;; Local accesses and direct calls carry an unsigned index or a named reference.
 		(if
 			(i32.or
-				(i32.eq (local.get $op) (i32.const 438))
+				(i32.eq (local.get $op) (i32.const M4_OP_RETURN_CALL))
 				(i32.and
-					(i32.ge_u (local.get $op) (i32.const 33))
-					(i32.le_u (local.get $op) (i32.const 36))
+					(i32.ge_u (local.get $op) (i32.const M4_OP_LOCAL_GET))
+					(i32.le_u (local.get $op) (i32.const M4_OP_CALL))
 				)
 			)
 			(then
@@ -476,13 +476,13 @@
 		)
 		;; Indirect calls retain a complete deferred signature without consuming their folded arguments.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 105)) (i32.eq (local.get $op) (i32.const 439)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_CALL_INDIRECT)) (i32.eq (local.get $op) (i32.const M4_OP_RETURN_CALL_INDIRECT)))
 			(then
 				(return (call $indirect-signature))
 			)
 		)
 		;; Wide constants preserve low and high halves in the instruction's existing immediate fields.
-		(if (i32.eq (local.get $op) (i32.const 61))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_CONST))
 			(then
 				(local.set $wide (call $integer64))
 				(global.set $immediate-length (i32.wrap_i64 (i64.shr_u (local.get $wide) (i64.const 32))))
@@ -491,7 +491,7 @@
 		)
 		;; Global immediates retain named references for module-wide resolution.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 49)) (i32.eq (local.get $op) (i32.const 50)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_GET)) (i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_SET)))
 			(then
 				;; Preserve a global name span instead of confusing it with a local index.
 				(if (call $named)
@@ -507,7 +507,7 @@
 		)
 		;; Data instructions accept a deferred segment index or name, including forward references.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 189)) (i32.eq (local.get $op) (i32.const 190)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_INIT)) (i32.eq (local.get $op) (i32.const M4_OP_DATA_DROP)))
 			(then
 				;; Named data references retain their exact source span until module-wide resolution.
 				(if (call $named)
@@ -524,10 +524,10 @@
 		;; Table operations retain optional targets until module-wide validation.
 		(if
 			(i32.or
-				(i32.or (i32.eq (local.get $op) (i32.const 191)) (i32.eq (local.get $op) (i32.const 192)))
+				(i32.or (i32.eq (local.get $op) (i32.const M4_OP_TABLE_SIZE)) (i32.eq (local.get $op) (i32.const M4_OP_TABLE_COPY)))
 				(i32.and
-					(i32.ge_u (local.get $op) (i32.const 198))
-					(i32.le_u (local.get $op) (i32.const 201))
+					(i32.ge_u (local.get $op) (i32.const M4_OP_TABLE_GET))
+					(i32.le_u (local.get $op) (i32.const M4_OP_TABLE_FILL))
 				)
 			)
 			(then
@@ -546,7 +546,7 @@
 						(if
 							(i32.ge_u (global.get $immediate-length) (call $vector-memory-lanes (local.get $op)))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 							)
 						)
 					)
@@ -557,15 +557,15 @@
 		;; Direct and conditional branches resolve their target label in the current control context.
 		(if
 			(i32.or
-				(i32.or (i32.eq (local.get $op) (i32.const 42)) (i32.eq (local.get $op) (i32.const 43)))
-				(i32.or (i32.eq (local.get $op) (i32.const 463)) (i32.eq (local.get $op) (i32.const 464)))
+				(i32.or (i32.eq (local.get $op) (i32.const M4_OP_BR)) (i32.eq (local.get $op) (i32.const M4_OP_BR_IF)))
+				(i32.or (i32.eq (local.get $op) (i32.const M4_OP_BR_ON_NULL)) (i32.eq (local.get $op) (i32.const M4_OP_BR_ON_NON_NULL)))
 			)
 			(then
 				(return (call $label))
 			)
 		)
 		;; Branch tables retain a contiguous vector of resolved depths, with the default entry last.
-		(if (i32.eq (local.get $op) (i32.const 46))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_BR_TABLE))
 			(then
 				(local.set $start (global.get $table-count))
 				;; Stop collecting targets once the next token is not an identifier or unsigned index.
@@ -586,9 +586,9 @@
 							)
 						)
 						;; Bound the shared branch-target arena before the host scratch region.
-						(if (i32.ge_u (global.get $table-count) (i32.const CAP_TABLE))
+						(if (i32.ge_u (global.get $table-count) (i32.const M4_CAP_TABLE))
 							(then
-								(call $fail (i32.const 6))
+								(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 								(return (i32.const 0))
 							)
 						)
@@ -604,7 +604,7 @@
 				;; A branch table requires at least its default target.
 				(if (i32.eqz (global.get $immediate-length))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 					)
 				)
 				(return (local.get $start))
@@ -685,7 +685,7 @@
 							)
 						)
 						(then
-							(call $fail (i32.const 1))
+							(call $fail (i32.const M4_ERR_SYNTAX))
 							(return)
 						)
 					)
@@ -713,7 +713,7 @@
 			;; An instruction position must contain an opcode atom, including after an opening delimiter.
 			(if (i32.ne (global.get $kind) (i32.const 3))
 				(then
-					(call $fail (i32.const 1))
+					(call $fail (i32.const M4_ERR_SYNTAX))
 					(return)
 				)
 			)
@@ -722,7 +722,7 @@
 			;; Unknown opcodes are unsupported rather than silently skipped.
 			(if (i32.eqz (local.get $op))
 				(then
-					(call $fail (i32.const 2))
+					(call $fail (i32.const M4_ERR_UNSUPPORTED))
 					(return)
 				)
 			)
@@ -733,7 +733,7 @@
 					(i32.or (i32.eqz (local.get $mode)) (i32.eq (local.get $mode) (i32.const 3)))
 				)
 				(then
-					(call $fail (i32.const 1))
+					(call $fail (i32.const M4_ERR_SYNTAX))
 					(return)
 				)
 			)
@@ -741,28 +741,28 @@
 			(if
 				(i32.or
 					(i32.eq (local.get $mode) (i32.const 7))
-					(i32.and (i32.eq (local.get $mode) (i32.const 5)) (i32.ne (local.get $op) (i32.const 40)))
+					(i32.and (i32.eq (local.get $mode) (i32.const 5)) (i32.ne (local.get $op) (i32.const M4_OP_ELSE)))
 				)
 				(then
-					(call $fail (i32.const 1))
+					(call $fail (i32.const M4_ERR_SYNTAX))
 					(return)
 				)
 			)
 			(call $next)
 			;; Folded then activates its pending if after all condition operands have been emitted.
-			(if (i32.eq (local.get $op) (i32.const 48))
+			(if (i32.eq (local.get $op) (i32.const M4_OP_THEN))
 				(then
 					;; Then wrappers belong only to a pending folded if.
 					(if (i32.eqz (i32.and (local.get $folded) (i32.eq (local.get $mode) (i32.const 3))))
 						(then
-							(call $fail (i32.const 1))
+							(call $fail (i32.const M4_ERR_SYNTAX))
 							(return)
 						)
 					)
 					(call $start-control (local.get $frame))
 					(i32.store offset=16 (local.get $frame) (i32.const 4))
 					(call $push-syntax
-						(i32.const 48)
+						(i32.const M4_OP_THEN)
 						(i32.const 0)
 						(local.get $offset)
 						(i32.const 0)
@@ -774,7 +774,7 @@
 				)
 			)
 			;; Else either opens a folded arm or separates the two arms of a flat if.
-			(if (i32.eq (local.get $op) (i32.const 40))
+			(if (i32.eq (local.get $op) (i32.const M4_OP_ELSE))
 				(then
 					;; Folded else requires a completed then wrapper in the same folded if.
 					(if (local.get $folded)
@@ -782,14 +782,14 @@
 							;; Other syntactic parents cannot own an else wrapper.
 							(if (i32.ne (local.get $mode) (i32.const 5))
 								(then
-									(call $fail (i32.const 1))
+									(call $fail (i32.const M4_ERR_SYNTAX))
 									(return)
 								)
 							)
 							(call $else-control (local.get $frame) (local.get $offset))
 							(i32.store offset=16 (local.get $frame) (i32.const 6))
 							(call $push-syntax
-								(i32.const 40)
+								(i32.const M4_OP_ELSE)
 								(i32.const 0)
 								(local.get $offset)
 								(i32.const 0)
@@ -809,7 +809,7 @@
 									)
 								)
 								(then
-									(call $fail (i32.const 1))
+									(call $fail (i32.const M4_ERR_SYNTAX))
 									(return)
 								)
 							)
@@ -821,12 +821,12 @@
 				)
 			)
 			;; Flat end closes exactly one flat control frame; folded controls use parentheses instead.
-			(if (i32.eq (local.get $op) (i32.const 41))
+			(if (i32.eq (local.get $op) (i32.const M4_OP_END))
 				(then
 					;; End markers cannot close ordinary expressions or folded scopes.
 					(if (i32.or (local.get $folded) (i32.ne (local.get $mode) (i32.const 1)))
 						(then
-							(call $fail (i32.const 1))
+							(call $fail (i32.const M4_ERR_SYNTAX))
 							(return)
 						)
 					)
@@ -852,7 +852,7 @@
 					(local.set $value (call $block-result))
 					(local.set $extra (i32.const 0))
 					;; Try-table catches target outer labels before the new try label enters scope.
-					(if (i32.eq (local.get $op) (i32.const 495))
+					(if (i32.eq (local.get $op) (i32.const M4_OP_TRY_TABLE))
 						(then
 							(local.set $extra (call $parse-try-handlers))
 						)
@@ -863,7 +863,7 @@
 						(then
 							(local.set $mode (i32.const 2))
 							;; Only folded if defers its control entry until the then wrapper.
-							(if (i32.eq (local.get $op) (i32.const 39))
+							(if (i32.eq (local.get $op) (i32.const M4_OP_IF))
 								(then
 									(local.set $mode (i32.const 3))
 								)

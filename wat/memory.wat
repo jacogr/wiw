@@ -11,21 +11,21 @@
 		)
 		;; Double-precision loads and stores access eight bytes.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 150)) (i32.eq (local.get $op) (i32.const 151)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_F64_LOAD)) (i32.eq (local.get $op) (i32.const M4_OP_F64_STORE)))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; Single-precision accesses preserve four raw IEEE bytes.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 148)) (i32.eq (local.get $op) (i32.const 149)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_F32_LOAD)) (i32.eq (local.get $op) (i32.const M4_OP_F32_STORE)))
 			(then
 				(return (i32.const 4))
 			)
 		)
 		;; Full-width i64 accesses require eight bytes and allow alignments up to eight.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 94)) (i32.eq (local.get $op) (i32.const 101)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_I64_LOAD)) (i32.eq (local.get $op) (i32.const M4_OP_I64_STORE)))
 			(then
 				(return (i32.const 8))
 			)
@@ -33,8 +33,8 @@
 		;; Narrow i64 loads/stores still check their actual accessed width.
 		(if
 			(i32.or
-				(i32.eq (local.get $op) (i32.const 99))
-				(i32.or (i32.eq (local.get $op) (i32.const 100)) (i32.eq (local.get $op) (i32.const 104)))
+				(i32.eq (local.get $op) (i32.const M4_OP_I64_LOAD32_S))
+				(i32.or (i32.eq (local.get $op) (i32.const M4_OP_I64_LOAD32_U)) (i32.eq (local.get $op) (i32.const M4_OP_I64_STORE32)))
 			)
 			(then
 				(return (i32.const 4))
@@ -43,8 +43,8 @@
 		;; Halfword i64 accesses read or write two bytes.
 		(if
 			(i32.or
-				(i32.eq (local.get $op) (i32.const 97))
-				(i32.or (i32.eq (local.get $op) (i32.const 98)) (i32.eq (local.get $op) (i32.const 103)))
+				(i32.eq (local.get $op) (i32.const M4_OP_I64_LOAD16_S))
+				(i32.or (i32.eq (local.get $op) (i32.const M4_OP_I64_LOAD16_U)) (i32.eq (local.get $op) (i32.const M4_OP_I64_STORE16)))
 			)
 			(then
 				(return (i32.const 2))
@@ -52,7 +52,7 @@
 		)
 		;; Full i32 loads and stores access four bytes.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 53)) (i32.eq (local.get $op) (i32.const 58)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_I32_LOAD)) (i32.eq (local.get $op) (i32.const M4_OP_I32_STORE)))
 			(then
 				(return (i32.const 4))
 			)
@@ -60,8 +60,8 @@
 		;; Sixteen-bit loads and stores access two bytes.
 		(if
 			(i32.or
-				(i32.eq (local.get $op) (i32.const 56))
-				(i32.or (i32.eq (local.get $op) (i32.const 57)) (i32.eq (local.get $op) (i32.const 60)))
+				(i32.eq (local.get $op) (i32.const M4_OP_I32_LOAD16_S))
+				(i32.or (i32.eq (local.get $op) (i32.const M4_OP_I32_LOAD16_U)) (i32.eq (local.get $op) (i32.const M4_OP_I32_STORE16)))
 			)
 			(then
 				(return (i32.const 2))
@@ -95,7 +95,7 @@
 		;; An empty attribute is invalid without reading beyond its token span.
 		(if (i32.eqz (global.get $len))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i32.const 0))
 			)
 		)
@@ -208,12 +208,12 @@
 		(param $index i32)
 
 		;; All memory instructions require the module to declare its default memory.
-		(if (i32.ge_u (local.get $op) (i32.const 51))
+		(if (i32.ge_u (local.get $op) (i32.const M4_OP_MEMORY_SIZE))
 			(then
 				;; A missing memory is a validation error even for dead loads/stores.
 				(if (i32.eqz (global.get $memory-present))
 					(then
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 					)
 				)
 				(return)
@@ -222,18 +222,18 @@
 		;; Resolved global indices must remain inside the global table.
 		(if (i32.ge_u (local.get $index) (global.get $global-count))
 			(then
-				(call $fail (i32.const 10))
+				(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 				(return)
 			)
 		)
 		;; global.set may only address a mutable global, including inside dead code.
 		(if
 			(i32.and
-				(i32.eq (local.get $op) (i32.const 50))
+				(i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_SET))
 				(i32.eqz (i32.load offset=8 (call $global-record (local.get $index))))
 			)
 			(then
-				(call $fail (i32.const 16))
+				(call $fail (i32.const M4_ERR_IMMUTABLE_GLOBAL))
 			)
 		)
 	)
@@ -287,7 +287,7 @@
 				(i64.mul (i64.extend_i32_u (global.get $guest-pages)) (i64.const 65536))
 			)
 			(then
-				(call $fail (i32.const 14))
+				(call $fail (i32.const M4_ERR_MEMORY_BOUNDS))
 				(return (i32.const 0))
 			)
 		)
@@ -318,7 +318,7 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 14))
+				(call $fail (i32.const M4_ERR_MEMORY_BOUNDS))
 				(return (i32.const 0))
 			)
 		)
@@ -441,13 +441,13 @@
 		(local $address i32)
 
 		;; Global reads return their persistent current value.
-		(if (i32.eq (local.get $op) (i32.const 49))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_GET))
 			(then
 				(return (i64.load offset=24 (call $canonical-global-record (local.get $immediate))))
 			)
 		)
 		;; Validated mutable globals retain writes across calls and invocations.
-		(if (i32.eq (local.get $op) (i32.const 50))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_SET))
 			(then
 				(i64.store offset=24
 					(call $canonical-global-record (local.get $immediate))
@@ -457,13 +457,13 @@
 			)
 		)
 		;; memory.size reports logical guest pages rather than native interpreter pages.
-		(if (i32.eq (local.get $op) (i32.const 51))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_SIZE))
 			(then
 				(return (i64.extend_i32_s (global.get $guest-pages)))
 			)
 		)
 		;; memory.grow returns the previous size or -1 without trapping on a limit/allocation failure.
-		(if (i32.eq (local.get $op) (i32.const 52))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_GROW))
 			(then
 				;; Wide deltas must be rejected before conversion to the physical page counter.
 				(if
@@ -492,139 +492,139 @@
 			)
 		)
 		;; Unaligned full-width loads are permitted regardless of the source alignment hint.
-		(if (i32.eq (local.get $op) (i32.const 53))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32_LOAD))
 			(then
 				(return (i64.extend_i32_s (i32.load align=1 (local.get $address))))
 			)
 		)
 		;; Signed byte loads extend bit seven to the full i32 result.
-		(if (i32.eq (local.get $op) (i32.const 54))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32_LOAD8_S))
 			(then
 				(return (i64.extend_i32_s (i32.load8_s (local.get $address))))
 			)
 		)
 		;; Unsigned byte loads zero-extend their result.
-		(if (i32.eq (local.get $op) (i32.const 55))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32_LOAD8_U))
 			(then
 				(return (i64.extend_i32_s (i32.load8_u (local.get $address))))
 			)
 		)
 		;; Signed halfword loads extend bit fifteen, including unaligned accesses.
-		(if (i32.eq (local.get $op) (i32.const 56))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32_LOAD16_S))
 			(then
 				(return (i64.extend_i32_s (i32.load16_s align=1 (local.get $address))))
 			)
 		)
 		;; Unsigned halfword loads zero-extend their result.
-		(if (i32.eq (local.get $op) (i32.const 57))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32_LOAD16_U))
 			(then
 				(return (i64.extend_i32_s (i32.load16_u align=1 (local.get $address))))
 			)
 		)
 		;; Full-width stores preserve all i32 bits in little-endian order.
-		(if (i32.eq (local.get $op) (i32.const 58))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32_STORE))
 			(then
 				(i32.store align=1 (local.get $address) (i32.wrap_i64 (local.get $b)))
 			)
 		)
 		;; Byte stores truncate the value to its low eight bits.
-		(if (i32.eq (local.get $op) (i32.const 59))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32_STORE8))
 			(then
 				(i32.store8 (local.get $address) (i32.wrap_i64 (local.get $b)))
 			)
 		)
 		;; Halfword stores truncate the value to its low sixteen bits.
-		(if (i32.eq (local.get $op) (i32.const 60))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32_STORE16))
 			(then
 				(i32.store16 align=1 (local.get $address) (i32.wrap_i64 (local.get $b)))
 			)
 		)
 		;; Execute i64.load through the checked translated guest address.
-		(if (i32.eq (local.get $op) (i32.const 94))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_LOAD))
 			(then
 				(return (i64.load align=1 (local.get $address)))
 			)
 		)
 		;; Execute i64.load8_s through the checked translated guest address.
-		(if (i32.eq (local.get $op) (i32.const 95))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_LOAD8_S))
 			(then
 				(return (i64.load8_s (local.get $address)))
 			)
 		)
 		;; Execute i64.load8_u through the checked translated guest address.
-		(if (i32.eq (local.get $op) (i32.const 96))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_LOAD8_U))
 			(then
 				(return (i64.load8_u (local.get $address)))
 			)
 		)
 		;; Execute i64.load16_s through the checked translated guest address.
-		(if (i32.eq (local.get $op) (i32.const 97))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_LOAD16_S))
 			(then
 				(return (i64.load16_s align=1 (local.get $address)))
 			)
 		)
 		;; Execute i64.load16_u through the checked translated guest address.
-		(if (i32.eq (local.get $op) (i32.const 98))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_LOAD16_U))
 			(then
 				(return (i64.load16_u align=1 (local.get $address)))
 			)
 		)
 		;; Execute i64.load32_s through the checked translated guest address.
-		(if (i32.eq (local.get $op) (i32.const 99))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_LOAD32_S))
 			(then
 				(return (i64.load32_s align=1 (local.get $address)))
 			)
 		)
 		;; Execute i64.load32_u through the checked translated guest address.
-		(if (i32.eq (local.get $op) (i32.const 100))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_LOAD32_U))
 			(then
 				(return (i64.load32_u align=1 (local.get $address)))
 			)
 		)
 		;; Execute i64.store through the checked translated guest address.
-		(if (i32.eq (local.get $op) (i32.const 101))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_STORE))
 			(then
 				(i64.store align=1 (local.get $address) (local.get $b))
 			)
 		)
 		;; Execute i64.store8 through the checked translated guest address.
-		(if (i32.eq (local.get $op) (i32.const 102))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_STORE8))
 			(then
 				(i64.store8 (local.get $address) (local.get $b))
 			)
 		)
 		;; Execute i64.store16 through the checked translated guest address.
-		(if (i32.eq (local.get $op) (i32.const 103))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_STORE16))
 			(then
 				(i64.store16 align=1 (local.get $address) (local.get $b))
 			)
 		)
 		;; Execute i64.store32 through the checked translated guest address.
-		(if (i32.eq (local.get $op) (i32.const 104))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_STORE32))
 			(then
 				(i64.store32 align=1 (local.get $address) (local.get $b))
 			)
 		)
 		;; Load single precision without evaluating or canonicalizing its NaN payload.
-		(if (i32.eq (local.get $op) (i32.const 148))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32_LOAD))
 			(then
 				(return (i64.extend_i32_u (i32.load align=1 (local.get $address))))
 			)
 		)
 		;; Store the low word of a single-precision value, including unaligned addresses.
-		(if (i32.eq (local.get $op) (i32.const 149))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32_STORE))
 			(then
 				(i32.store align=1 (local.get $address) (i32.wrap_i64 (local.get $b)))
 			)
 		)
 		;; Double precision transports all eight bits-per-byte without float arithmetic.
-		(if (i32.eq (local.get $op) (i32.const 150))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64_LOAD))
 			(then
 				(return (i64.load align=1 (local.get $address)))
 			)
 		)
 		;; Double-precision stores preserve signed zero and NaN payload bits.
-		(if (i32.eq (local.get $op) (i32.const 151))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64_STORE))
 			(then
 				(i64.store align=1 (local.get $address) (local.get $b))
 			)
@@ -772,9 +772,9 @@
 
 		;; Eight slots cannot overlap following branch vectors or other instruction immediates.
 		(if
-			(i32.gt_u (global.get $table-count) (i32.sub (i32.const CAP_TABLE) (i32.const 8)))
+			(i32.gt_u (global.get $table-count) (i32.sub (i32.const M4_CAP_TABLE) (i32.const 8)))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))
 			)
 		)
@@ -797,12 +797,12 @@
 		(if (call $table-reference (i32.add (local.get $record) (i32.const 8)))
 			(then
 				;; Copy retains its independently resolved source memory.
-				(if (i32.eq (local.get $op) (i32.const 187))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_COPY))
 					(then
 						;; Incomplete memory pairs are text syntax errors.
 						(if (i32.eqz (call $table-reference (i32.add (local.get $record) (i32.const 16))))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 							)
 						)
 					)
@@ -821,7 +821,7 @@
 		;; At least the data target is required.
 		(if (i32.eqz (call $table-reference (i32.add (local.get $record) (i32.const 24))))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (local.get $record))
 			)
 		)
@@ -861,7 +861,7 @@
 		)
 		(call $use-memory (i32.load offset=8 (local.get $record)))
 		;; Copy resolves and validates the source independently of the destination.
-		(if (i32.eq (local.get $op) (i32.const 187))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_COPY))
 			(then
 				(i32.store offset=16
 					(local.get $record)

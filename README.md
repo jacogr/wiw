@@ -48,6 +48,10 @@ operations execute in WAT, including when wiw interprets itself. Binary loading
 uses the same type system and runtime; checked-in 3.0 wire fixtures are compared
 with independent native execution.
 
+Build-time constants live in `wat/m4/`: limits use `M4_*`, interpreter opcode
+IDs use `M4_OP_*`, and shared errors, types and record fields have descriptive
+`M4_*` names. Opcode definitions are generated from `scripts/opcodes.tsv`.
+
 Guest calls use explicit frames, so guest recursion does not recurse on the
 native Wasm stack. Failures carry status codes and source offsets.
 

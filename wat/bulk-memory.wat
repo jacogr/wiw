@@ -20,7 +20,7 @@
 			)
 		)
 		;; Copy also validates its entire source before publishing destination writes.
-		(if (i32.eq (local.get $op) (i32.const 187))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_COPY))
 			(then
 				(call $use-memory (local.get $source-memory))
 				(local.set $src
@@ -53,7 +53,7 @@
 
 		(local.set $record (call $data-record (local.get $index)))
 		;; Dropping active, empty or already-dropped data is always idempotent.
-		(if (i32.eq (local.get $op) (i32.const 190))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_DATA_DROP))
 			(then
 				(i32.store offset=44 (local.get $record) (i32.const 0))
 				(return)
@@ -66,7 +66,7 @@
 				(i64.extend_i32_u (i32.load offset=44 (local.get $record)))
 			)
 			(then
-				(call $fail (i32.const 14))
+				(call $fail (i32.const M4_ERR_MEMORY_BOUNDS))
 				(return)
 			)
 		)

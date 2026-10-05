@@ -75,7 +75,7 @@
 				(return (i32.const 3))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i32.const 0)
 	)
 
@@ -152,7 +152,7 @@
 				(if (i32.ge_u (local.get $value) (global.get $guest-table-present))
 					(then
 						(global.set $tok (local.get $offset))
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 					)
 				)
 				(return (local.get $value))
@@ -184,7 +184,7 @@
 		(if (i32.ge_u (local.get $value) (local.get $count))
 			(then
 				(global.set $tok (local.get $offset))
-				(call $fail (i32.const 10))
+				(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 			)
 		)
 		(local.get $value)
@@ -212,7 +212,7 @@
 						;; A resource cannot carry two import annotations.
 						(if (global.get $parsing-import)
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return)
 							)
 						)
@@ -257,7 +257,7 @@
 		;; Each declaration owns one bounded descriptor, including imports and empty memories.
 		(if (i32.ge_u (global.get $memory-present) (i32.const 512))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -273,7 +273,7 @@
 				;; Duplicate identifiers fail before any new named descriptor is published.
 				(if (i32.ne (call $find-memory (global.get $tok) (global.get $len)) (i32.const -1))
 					(then
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 						(return)
 					)
 				)
@@ -336,7 +336,7 @@
 			)
 			(then
 				(global.set $tok (global.get $memory-offset))
-				(call $fail (i32.const 15))
+				(call $fail (i32.const M4_ERR_MEMORY_LIMITS))
 			)
 		)
 		(global.set $guest-min
@@ -431,9 +431,9 @@
 		(local.set $offset (global.get $tok))
 		(call $next)
 		;; Global capacity protects its fixed record arena.
-		(if (i32.ge_u (global.get $global-count) (i32.const CAP_GLOBALS))
+		(if (i32.ge_u (global.get $global-count) (i32.const M4_CAP_GLOBALS))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -445,7 +445,7 @@
 				;; Functions and locals may share this identifier, but another global may not.
 				(if (i32.ne (call $find-global (local.get $p) (local.get $n)) (i32.const -1))
 					(then
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 						(return)
 					)
 				)
@@ -508,7 +508,7 @@
 		(local.set $base
 			(i64.and
 				(i64.add
-					(i64.add (i64.extend_i32_u (global.get $code-base)) (i64.const OWNED_BYTES))
+					(i64.add (i64.extend_i32_u (global.get $code-base)) (i64.const M4_OWNED_BYTES))
 					(i64.const 65535)
 				)
 				(i64.const -65536)
@@ -525,10 +525,10 @@
 				(if (i32.eqz (i32.load offset=52 (local.get $record)))
 					(then
 						;; Initial storage remains subject to the implementation's physical capacity.
-						(if (i32.gt_u (i32.load offset=8 (local.get $record)) (i32.const CAP_PAGES))
+						(if (i32.gt_u (i32.load offset=8 (local.get $record)) (i32.const M4_CAP_PAGES))
 							(then
 								(global.set $tok (i32.load offset=48 (local.get $record)))
-								(call $fail (i32.const 6))
+								(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 								(return)
 							)
 						)
@@ -549,7 +549,7 @@
 		;; Keep room for subsequent host export names and argument slots, even with no guest memory.
 		(if (i32.eqz (call $ensure-bytes (i64.add (local.get $cursor) (i64.const 1024))))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -609,7 +609,7 @@
 				;; Active segments cannot target an absent default memory.
 				(if (i32.eqz (global.get $memory-present))
 					(then
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 						(return)
 					)
 				)
@@ -674,19 +674,19 @@
 		(local $i i32)
 		(local $record i32)
 
-		(global.set $error (i32.const 0))
+		(global.set $error (i32.const M4_ERR_SUCCESS))
 		(global.set $tok (local.get $p))
 		;; Host resource access requires a successfully loaded module.
 		(if (i32.eqz (global.get $ready))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i32.const 0))
 			)
 		)
 		;; Compare source names only after verifying the host input range.
 		(if (i32.eqz (call $buffer-ok (local.get $p) (local.get $n)))
 			(then
-				(call $fail (i32.const 5))
+				(call $fail (i32.const M4_ERR_INVALID_BUFFER))
 				(return (i32.const 0))
 			)
 		)
@@ -708,7 +708,7 @@
 						;; A matching name must refer to the resource kind requested by this host operation.
 						(if (i32.ne (i32.load offset=20 (local.get $record)) (local.get $category))
 							(then
-								(call $fail (i32.const 18))
+								(call $fail (i32.const M4_ERR_EXPORT_KIND))
 								(return (i32.const 0))
 							)
 						)
@@ -719,7 +719,7 @@
 				(br $exports)
 			)
 		)
-		(call $fail (i32.const 4))
+		(call $fail (i32.const M4_ERR_UNKNOWN_EXPORT))
 		(i32.const 0)
 	)
 
@@ -770,7 +770,7 @@
 		;; A narrow API cannot silently truncate an exported i64 global.
 		(if (i32.ne (call $global-type (local.get $p) (local.get $n)) (i32.const 1))
 			(then
-				(call $fail (i32.const 23))
+				(call $fail (i32.const M4_ERR_HOST_VALUE_TYPE))
 				(return (i32.const 0))
 			)
 		)
@@ -798,7 +798,7 @@
 		;; Immutable globals reject host writes independently of their width.
 		(if (i32.eqz (i32.load offset=8 (local.get $record)))
 			(then
-				(call $fail (i32.const 16))
+				(call $fail (i32.const M4_ERR_IMMUTABLE_GLOBAL))
 				(return (global.get $error))
 			)
 		)
@@ -819,7 +819,7 @@
 		;; Invalid names preserve their original diagnostic; valid wide globals fail the type check.
 		(if (i32.ne (call $global-type (local.get $p) (local.get $n)) (i32.const 1))
 			(then
-				(call $fail (i32.const 23))
+				(call $fail (i32.const M4_ERR_HOST_VALUE_TYPE))
 				(return (global.get $error))
 			)
 		)

@@ -75,7 +75,7 @@
 				;; The header and at most 1023 limbs must fit inside this buffer.
 				(if (i32.ge_u (local.get $n) (i32.const 1023))
 					(then
-						(call $fail (i32.const 6))
+						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 						(return)
 					)
 				)
@@ -117,7 +117,7 @@
 				(i32.const 1023)
 			)
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -297,7 +297,7 @@
 			)
 			(then
 				;; Every unsigned word is exactly representable in f64.
-				(if (i32.eq (local.get $type) (i32.const 4))
+				(if (i32.eq (local.get $type) (i32.const M4_TYPE_F64))
 					(then
 						(return
 							(i64.reinterpret_f64
@@ -332,13 +332,13 @@
 		)
 		(local.set $t (global.get $fp-t-base))
 		(local.set $p
-			(select (i32.const 24) (i32.const 53) (i32.eq (local.get $type) (i32.const 3)))
+			(select (i32.const 24) (i32.const 53) (i32.eq (local.get $type) (i32.const M4_TYPE_F32)))
 		)
 		(local.set $emin
-			(select (i32.const -126) (i32.const -1022) (i32.eq (local.get $type) (i32.const 3)))
+			(select (i32.const -126) (i32.const -1022) (i32.eq (local.get $type) (i32.const M4_TYPE_F32)))
 		)
 		(local.set $emax
-			(select (i32.const 127) (i32.const 1023) (i32.eq (local.get $type) (i32.const 3)))
+			(select (i32.const 127) (i32.const 1023) (i32.eq (local.get $type) (i32.const M4_TYPE_F32)))
 		)
 		(local.set $bias (i32.sub (i32.const 1) (local.get $emin)))
 		(local.set $e (i32.sub (call $big-bits (local.get $a)) (call $big-bits (local.get $b))))
@@ -430,7 +430,7 @@
 		;; Finite literals that round beyond the largest finite binade are out of range.
 		(if (i32.gt_s (local.get $e) (local.get $emax))
 			(then
-				(call $fail (i32.const 3))
+				(call $fail (i32.const M4_ERR_INTEGER_RANGE))
 				(return (i64.const 0))
 			)
 		)
@@ -480,14 +480,14 @@
 		;; A float literal must be an atom, with a bounded token length independent of numeric range.
 		(if (i32.ne (global.get $kind) (i32.const 3))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i64.const 0))
 			)
 		)
 		;; Bound literal parsing scratch work even for thousands of leading zeroes or exponent digits.
 		(if (i32.gt_u (global.get $len) (i32.const 8192))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i64.const 0))
 			)
 		)
@@ -501,14 +501,14 @@
 			(select
 				(i64.const 0x7fffff)
 				(i64.const 0xfffffffffffff)
-				(i32.eq (local.get $type) (i32.const 3))
+				(i32.eq (local.get $type) (i32.const M4_TYPE_F32))
 			)
 		)
 		(local.set $special
 			(select
 				(i64.const 0x7f800000)
 				(i64.const 0x7ff0000000000000)
-				(i32.eq (local.get $type) (i32.const 3))
+				(i32.eq (local.get $type) (i32.const M4_TYPE_F32))
 			)
 		)
 		(local.set $c (i32.load8_u (local.get $p)))
@@ -523,7 +523,7 @@
 							(select
 								(i64.const 0x80000000)
 								(i64.const 0x8000000000000000)
-								(i32.eq (local.get $type) (i32.const 3))
+								(i32.eq (local.get $type) (i32.const M4_TYPE_F32))
 							)
 						)
 					)
@@ -557,7 +557,7 @@
 							(select
 								(i64.const 0x400000)
 								(i64.const 0x8000000000000)
-								(i32.eq (local.get $type) (i32.const 3))
+								(i32.eq (local.get $type) (i32.const M4_TYPE_F32))
 							)
 						)
 					)
@@ -573,7 +573,7 @@
 								)
 							)
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return (i64.const 0))
 							)
 						)
@@ -591,7 +591,7 @@
 										;; Leading or consecutive payload separators are malformed.
 										(if (i32.or (i32.eqz (local.get $digits)) (local.get $separator))
 											(then
-												(call $fail (i32.const 1))
+												(call $fail (i32.const M4_ERR_SYNTAX))
 												(return (i64.const 0))
 											)
 										)
@@ -607,7 +607,7 @@
 										(i64.gt_u (local.get $value) (i64.shr_u (local.get $mask) (i64.const 4)))
 									)
 									(then
-										(call $fail (i32.const 3))
+										(call $fail (i32.const M4_ERR_INTEGER_RANGE))
 										(return (i64.const 0))
 									)
 								)
@@ -626,7 +626,7 @@
 								(i32.or (i64.eqz (local.get $value)) (i64.gt_u (local.get $value) (local.get $mask)))
 							)
 							(then
-								(call $fail (i32.const 3))
+								(call $fail (i32.const M4_ERR_INTEGER_RANGE))
 								(return (i64.const 0))
 							)
 						)
@@ -671,7 +671,7 @@
 						(if
 							(i32.or (i32.eqz (local.get $digits)) (i32.or (local.get $dot) (local.get $separator)))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return (i64.const 0))
 							)
 						)
@@ -686,7 +686,7 @@
 						;; A point resets the adjacent-digit flag, so 1._0 is rejected.
 						(if (i32.or (i32.eqz (local.get $expdigits)) (local.get $separator))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return (i64.const 0))
 							)
 						)
@@ -698,7 +698,7 @@
 				;; A radix excludes hexadecimal letters from decimal significands.
 				(if (i32.ge_u (local.get $d) (local.get $base))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return (i64.const 0))
 					)
 				)
@@ -730,7 +730,7 @@
 		;; Significands require digits and cannot end in a separator.
 		(if (i32.or (i32.eqz (local.get $digits)) (local.get $separator))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i64.const 0))
 			)
 		)
@@ -766,7 +766,7 @@
 								;; Leading/consecutive exponent separators are malformed.
 								(if (i32.or (i32.eqz (local.get $expdigits)) (local.get $separator))
 									(then
-										(call $fail (i32.const 1))
+										(call $fail (i32.const M4_ERR_SYNTAX))
 										(return (i64.const 0))
 									)
 								)
@@ -778,7 +778,7 @@
 						;; Exponents use decimal digits even after hexadecimal significands.
 						(if (i32.gt_u (local.get $d) (i32.const 9))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return (i64.const 0))
 							)
 						)
@@ -799,7 +799,7 @@
 				;; A marker/sign alone and trailing separators do not constitute an exponent.
 				(if (i32.or (i32.eqz (local.get $expdigits)) (local.get $separator))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return (i64.const 0))
 					)
 				)
@@ -834,7 +834,7 @@
 				;; Decimal values above 10^400 cannot round to a finite f64 or f32.
 				(if (i32.gt_s (local.get $order) (i32.const 400))
 					(then
-						(call $fail (i32.const 3))
+						(call $fail (i32.const M4_ERR_INTEGER_RANGE))
 						(return (i64.const 0))
 					)
 				)
@@ -873,7 +873,7 @@
 				;; A binary order beyond 1025 necessarily exceeds finite IEEE range.
 				(if (i32.gt_s (local.get $order) (i32.const 1025))
 					(then
-						(call $fail (i32.const 3))
+						(call $fail (i32.const M4_ERR_INTEGER_RANGE))
 						(return (i64.const 0))
 					)
 				)
@@ -933,10 +933,10 @@
 		;; f32 inputs promote exactly before checking the destination's integer bounds.
 		(if
 			(i32.or
-				(i32.lt_u (local.get $op) (i32.const 154))
+				(i32.lt_u (local.get $op) (i32.const M4_OP_I32_TRUNC_F64_S))
 				(i32.and
-					(i32.ge_u (local.get $op) (i32.const 156))
-					(i32.lt_u (local.get $op) (i32.const 158))
+					(i32.ge_u (local.get $op) (i32.const M4_OP_I64_TRUNC_F32_S))
+					(i32.lt_u (local.get $op) (i32.const M4_OP_I64_TRUNC_F64_S))
 				)
 			)
 			(then
@@ -950,13 +950,13 @@
 		;; A NaN has no integer representation, regardless of signedness.
 		(if (f64.ne (local.get $v) (local.get $v))
 			(then
-				(call $fail (i32.const 28))
+				(call $fail (i32.const M4_ERR_INVALID_CONVERSION))
 				(return (i32.const 1))
 			)
 		)
 		(local.set $v (f64.trunc (local.get $v)))
 		;; Select exact power-of-two bounds for the destination width and signedness.
-		(if (i32.lt_u (local.get $op) (i32.const 156))
+		(if (i32.lt_u (local.get $op) (i32.const M4_OP_I64_TRUNC_F32_S))
 			(then
 				(local.set $lower (f64.const -2147483648))
 				(local.set $upper (f64.const 2147483648))
@@ -988,7 +988,7 @@
 				(f64.ge (local.get $v) (local.get $upper))
 			)
 			(then
-				(call $fail (i32.const 9))
+				(call $fail (i32.const M4_ERR_INTEGER_OVERFLOW))
 				(return (i32.const 1))
 			)
 		)

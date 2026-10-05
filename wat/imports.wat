@@ -16,14 +16,14 @@
 		;; Text imports precede all definitions, including definitions in other index spaces.
 		(if (global.get $definitions-started)
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return)
 			)
 		)
 		;; Keep every import category within the shared descriptor arena.
-		(if (i32.ge_u (global.get $import-count) (i32.const CAP_IMPORTS))
+		(if (i32.ge_u (global.get $import-count) (i32.const M4_CAP_IMPORTS))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -86,7 +86,7 @@
 		;; Only a function keyword remains valid after the resource alternatives.
 		(if (i32.eqz (call $is-word (i32.const 6) (i32.const 4)))
 			(then
-				(call $fail (i32.const 2))
+				(call $fail (i32.const M4_ERR_UNSUPPORTED))
 				(return)
 			)
 		)
@@ -116,14 +116,14 @@
 				;; Imports follow only earlier imports in the same index space.
 				(if (i32.and (global.get $definitions-started) (local.get $mask))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
 				;; Keep every import category within the shared descriptor arena.
-				(if (i32.ge_u (global.get $import-count) (i32.const CAP_IMPORTS))
+				(if (i32.ge_u (global.get $import-count) (i32.const M4_CAP_IMPORTS))
 					(then
-						(call $fail (i32.const 6))
+						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 						(return)
 					)
 				)
@@ -171,7 +171,7 @@
 		;; A root import consumes one fuel unit just like an imported call instruction.
 		(if (i64.eqz (global.get $fuel-limit))
 			(then
-				(call $fail (i32.const 12))
+				(call $fail (i32.const M4_ERR_EXHAUSTED_FUEL))
 				(return (i64.const 0))
 			)
 		)
@@ -294,11 +294,11 @@
 		(local $count i32)
 		(local $high i64)
 
-		(global.set $error (i32.const 0))
+		(global.set $error (i32.const M4_ERR_SUCCESS))
 		;; A result is only meaningful while an imported call is suspended.
 		(if (i32.lt_s (global.get $pending-import) (i32.const 0))
 			(then
-				(call $fail (i32.const 21))
+				(call $fail (i32.const M4_ERR_INVALID_RESUME))
 				(return (call $finish-start (i64.const 0)))
 			)
 		)
@@ -308,7 +308,7 @@
 		;; Host exceptions and invalid results become an explicit guest call-site trap.
 		(if (local.get $failed)
 			(then
-				(call $fail (i32.const 20))
+				(call $fail (i32.const M4_ERR_HOST_IMPORT))
 				(return (call $finish-start (i64.const 0)))
 			)
 		)
@@ -359,9 +359,9 @@
 			(then
 				;; Check capacity before publishing the new cursor to dispatch.
 				(if
-					(i32.gt_u (i32.add (global.get $sp) (local.get $count)) (i32.const CAP_OPERANDS))
+					(i32.gt_u (i32.add (global.get $sp) (local.get $count)) (i32.const M4_CAP_OPERANDS))
 					(then
-						(call $fail (i32.const 6))
+						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 					)
 					;; The host validates every type and canonicalizes scalar result slots.
 					(else
@@ -406,8 +406,8 @@
 						(i32.ge_u (local.get $type) (i32.const 2))
 					)
 					(then
-						(global.set $error (i32.const 0))
-						(call $fail (i32.const 23))
+						(global.set $error (i32.const M4_ERR_SUCCESS))
+						(call $fail (i32.const M4_ERR_HOST_VALUE_TYPE))
 						(return (i32.const 0))
 					)
 				)

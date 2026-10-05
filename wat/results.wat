@@ -47,7 +47,7 @@
 		;; Result vectors and records have independent fixed limits.
 		(if (i32.ge_u (local.get $count) (i32.const 128))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (local.get $shape))
 			)
 		)
@@ -58,7 +58,7 @@
 				;; Avoid writing past the result-vector arena.
 				(if (i32.ge_u (global.get $result-shape-count) (i32.const 4096))
 					(then
-						(call $fail (i32.const 6))
+						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 						(return (local.get $shape))
 					)
 				)
@@ -174,7 +174,7 @@
 						;; Only an unreachable control floor may supply unknown missing operands.
 						(if (i32.eqz (i32.load offset=12 (local.get $frame)))
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 					)
@@ -194,7 +194,7 @@
 						)
 					)
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 				(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -303,8 +303,8 @@
 			(global.get $call-high-base)
 			(i32.add
 				(i32.mul
-					(i32.div_u (i32.sub (local.get $frame) (global.get $call-base)) (i32.const CALL_BYTES))
-					(i32.const LOCAL_NAME_BYTES)
+					(i32.div_u (i32.sub (local.get $frame) (global.get $call-base)) (i32.const M4_CALL_BYTES))
+					(i32.const M4_LOCAL_NAME_BYTES)
 				)
 				(i32.mul (local.get $index) (i32.const 8))
 			)

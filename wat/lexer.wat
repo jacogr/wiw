@@ -115,7 +115,7 @@
 							;; EOF before the outer comment closes is a syntax error.
 							(if (i32.ge_u (global.get $pos) (global.get $end))
 								(then
-									(call $fail (i32.const 1))
+									(call $fail (i32.const M4_ERR_SYNTAX))
 									(return)
 								)
 							)
@@ -170,7 +170,7 @@
 						)
 					)
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 					)
 				)
 				(local.set $name (i32.add (global.get $data-base) (global.get $data-count)))
@@ -179,7 +179,7 @@
 				;; A quoted identifier must decode to at least one byte after its dollar prefix.
 				(if (i32.eqz (global.get $decoded-name-length))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 					)
 				)
 				(global.set $tok (local.get $name))
@@ -227,7 +227,7 @@
 				;; A quote or NUL inside an atom is invalid syntax.
 				(if (i32.or (i32.eq (local.get $c) (i32.const 34)) (i32.eqz (local.get $c)))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -248,7 +248,7 @@
 			;; EOF inside a quoted string means its closing quote is missing.
 			(if (i32.ge_u (global.get $pos) (global.get $end))
 				(then
-					(call $fail (i32.const 1))
+					(call $fail (i32.const M4_ERR_SYNTAX))
 					(return)
 				)
 			)
@@ -260,7 +260,7 @@
 					;; Adjacent strings require separating whitespace or a comment.
 					(if (i32.eq (call $peek) (i32.const 34))
 						(then
-							(call $fail (i32.const 1))
+							(call $fail (i32.const M4_ERR_SYNTAX))
 						)
 					)
 					(return)
@@ -277,7 +277,7 @@
 							(i32.or (i32.lt_u (call $peek) (i32.const 32)) (i32.eq (call $peek) (i32.const 127)))
 						)
 						(then
-							(call $fail (i32.const 1))
+							(call $fail (i32.const M4_ERR_SYNTAX))
 							(return)
 						)
 					)
@@ -289,7 +289,7 @@
 			(if
 				(i32.or (i32.lt_u (call $peek) (i32.const 32)) (i32.eq (call $peek) (i32.const 127)))
 				(then
-					(call $fail (i32.const 2))
+					(call $fail (i32.const M4_ERR_UNSUPPORTED))
 					(return)
 				)
 			)
@@ -313,7 +313,7 @@
 				(i32.or (i32.eq (call $peek) (i32.const 40)) (i32.eq (call $peek) (i32.const 41)))
 			)
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return)
 			)
 		)
@@ -325,7 +325,7 @@
 				;; Empty decoded annotation names are malformed.
 				(if (i32.eqz (global.get $decoded-name-length))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 					)
 				)
 			)
@@ -336,7 +336,7 @@
 			;; EOF or a prior lexical failure cannot complete the annotation.
 			(if (i32.or (global.get $error) (i32.ge_u (global.get $pos) (global.get $end)))
 				(then
-					(call $fail (i32.const 1))
+					(call $fail (i32.const M4_ERR_SYNTAX))
 					(return)
 				)
 			)
@@ -373,7 +373,7 @@
 							;; An unfinished block comment is malformed.
 							(if (i32.ge_u (global.get $pos) (global.get $end))
 								(then
-									(call $fail (i32.const 1))
+									(call $fail (i32.const M4_ERR_SYNTAX))
 									(return)
 								)
 							)
@@ -419,7 +419,7 @@
 					(i32.and (i32.lt_u (local.get $c) (i32.const 32)) (i32.eqz (call $space (local.get $c))))
 				)
 				(then
-					(call $fail (i32.const 1))
+					(call $fail (i32.const M4_ERR_SYNTAX))
 					(return)
 				)
 			)

@@ -306,7 +306,15 @@ and interned types occupy indices below 768; indirect signatures use a separate
 1,024-record arena.
 Global/segment metadata retain imported-initializer references until binding.
 
-`wat/limits.m4` is the source of arena offsets. All regions are disjoint and
+`wat/m4/limits.m4` is the source of arena offsets. Its constants use the
+`M4_` prefix. `wat/m4/opcodes.m4` gives interpreter opcode IDs names such as
+`M4_OP_LOCAL_GET`; make generates it from `scripts/opcodes.tsv` using the
+existing opcode generator. These IDs differ from WebAssembly wire encodings.
+`wat/m4/constants.m4` names shared status codes, type IDs, dispatch families,
+record fields and numeric boundaries. The handwritten WAT uses these names
+for opcode decisions, errors and runtime layout; m4 expands them before
+assembly, so they add no runtime work. Basic counters and arithmetic literals
+remain inline. All regions are disjoint and
 relative to the aligned end of the loaded source:
 
 | Region | Offset | Reserved bytes |

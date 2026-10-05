@@ -219,7 +219,7 @@
 		(if (i32.ge_u (local.get $value) (global.get $tag-count))
 			(then
 				(global.set $tok (local.get $source))
-				(call $fail (i32.const 10))
+				(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 			)
 		)
 		(local.get $value)
@@ -234,7 +234,7 @@
 		;; Bound tag descriptors independently from the function namespace.
 		(if (i32.ge_u (local.get $index) (i32.const 256))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -248,7 +248,7 @@
 				;; Duplicate names fail before allocating the declaration index.
 				(if (i32.ne (call $find-tag (global.get $tok) (global.get $len)) (i32.const -1))
 					(then
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 					)
 				)
 				(i32.store (local.get $record) (global.get $tok))
@@ -327,7 +327,7 @@
 				;; Exception payloads cannot contain a function result vector.
 				(if (i32.load offset=12 (local.get $signature))
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 				;; Explicit type uses retain their declared recursive group member identity.
@@ -363,9 +363,9 @@
 						(if (i32.eq (local.get $j) (global.get $signature-count))
 							(then
 								;; Bound the type namespace before copying the parameter vector.
-								(if (i32.ge_u (local.get $j) (i32.const CAP_TYPES))
+								(if (i32.ge_u (local.get $j) (i32.const M4_CAP_TYPES))
 									(then
-										(call $fail (i32.const 6))
+										(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 										(return)
 									)
 								)
@@ -380,7 +380,7 @@
 				;; Every explicit tag type must describe a function, including empty signatures.
 				(if (i32.load (call $heap-record (local.get $j)))
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 				(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -423,10 +423,10 @@
 		(result i32)
 
 		(i32.or
-			(i32.eq (local.get $op) (i32.const 495))
+			(i32.eq (local.get $op) (i32.const M4_OP_TRY_TABLE))
 			(i32.and
-				(i32.ge_u (local.get $op) (i32.const 37))
-				(i32.le_u (local.get $op) (i32.const 39))
+				(i32.ge_u (local.get $op) (i32.const M4_OP_BLOCK))
+				(i32.le_u (local.get $op) (i32.const M4_OP_IF))
 			)
 		)
 	)
@@ -546,7 +546,7 @@
 						)
 					)
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 				(local.set $i (i32.const 0))
@@ -566,7 +566,7 @@
 								)
 							)
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 						(local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -586,7 +586,7 @@
 								)
 							)
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 					)
@@ -606,7 +606,7 @@
 		(local $i i32)
 
 		;; Throw-ref consumes a nullable exception reference and may trap dynamically on null.
-		(if (i32.eq (local.get $op) (i32.const 497))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_THROW_REF))
 			(then
 				(drop (call $validation-pop (i32.const 32)))
 				(return)
@@ -727,7 +727,7 @@
 				(local.set $i (i32.sub (local.get $i) (i32.const 1)))
 				(local.set $control (call $control (local.get $i)))
 				;; Ordinary blocks and function roots cannot catch an exception.
-				(if (i32.eq (i32.load (local.get $control)) (i32.const 495))
+				(if (i32.eq (i32.load (local.get $control)) (i32.const M4_OP_TRY_TABLE))
 					(then
 						(local.set $node
 							(i32.load (i32.load offset=24 (call $metadata (i32.load offset=4 (local.get $control)))))
@@ -755,13 +755,13 @@
 											;; A caller's root control index precedes every region in that caller.
 											(loop $calls
 												(br_if $owner-found
-													(i32.le_u (i32.load offset=CALL_ROOT_OFFSET (local.get $frame)) (local.get $i))
+													(i32.le_u (i32.load offset=M4_CALL_ROOT_OFFSET (local.get $frame)) (local.get $i))
 												)
 												(local.set $calls (i32.sub (local.get $calls) (i32.const 1)))
 												(local.set $frame
 													(i32.add
 														(global.get $call-base)
-														(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const CALL_BYTES))
+														(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const M4_CALL_BYTES))
 													)
 												)
 												(br $calls)
@@ -820,7 +820,7 @@
 				(br $controls)
 			)
 		)
-		(call $fail (i32.const 34))
+		(call $fail (i32.const M4_ERR_UNCAUGHT_EXCEPTION))
 		(i32.const 0)
 	)
 
@@ -905,11 +905,11 @@
 		(param $value i64)
 		(result i64)
 
-		(global.set $error (i32.const 0))
+		(global.set $error (i32.const M4_ERR_SUCCESS))
 		;; Exceptions can resume only a pending import, using the same protected continuation as normal results.
 		(if (i32.lt_s (global.get $pending-import) (i32.const 0))
 			(then
-				(call $fail (i32.const 21))
+				(call $fail (i32.const M4_ERR_INVALID_RESUME))
 				(return (i64.const 0))
 			)
 		)
@@ -918,7 +918,7 @@
 		;; A directly exported import has no enclosing guest handler to search.
 		(if (i32.eqz (global.get $saved-calls))
 			(then
-				(call $fail (i32.const 34))
+				(call $fail (i32.const M4_ERR_UNCAUGHT_EXCEPTION))
 				(return (call $finish-start (i64.const 0)))
 			)
 		)

@@ -125,7 +125,7 @@
 		;; Bound the shared field arena before creating a descriptor.
 		(if (i32.ge_u (global.get $field-type-count) (i32.const 32768))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -148,7 +148,7 @@
 						)
 					)
 					(then
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 						(return)
 					)
 				)
@@ -196,7 +196,7 @@
 		;; Struct composites contain a sequence of named or anonymous field groups.
 		(if (i32.eqz (call $is-ref-word (i32.const 5)))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return)
 			)
 		)
@@ -212,7 +212,7 @@
 				;; Struct contents must consist of field declarations.
 				(if (i32.eqz (call $is-ref-word (i32.const 25)))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -269,7 +269,7 @@
 				;; Recursive groups contain type declarations rather than executable module fields.
 				(if (i32.eqz (call $is-word (i32.const 3856) (i32.const 4)))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -304,7 +304,7 @@
 				;; A type can refer to its group members and earlier groups, but never later groups.
 				(if (i32.ge_u (call $reference-heap (local.get $type)) (local.get $bound))
 					(then
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 					)
 				)
 			)
@@ -533,14 +533,14 @@
 						;; The backward supertype constraint also prevents cyclic declared subtype chains.
 						(if (i32.ge_u (local.get $super) (local.get $i))
 							(then
-								(call $fail (i32.const 10))
+								(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 								(br $done)
 							)
 						)
 						;; Final parents and incompatible field or function signatures reject the declaration.
 						(if (i32.eqz (call $heap-extends (local.get $i) (local.get $super)))
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 					)

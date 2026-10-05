@@ -9,7 +9,7 @@
 			)
 			;; Keep the unexpected token in place so the error points to it.
 			(else
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 			)
 		)
 	)
@@ -33,7 +33,7 @@
 			)
 			;; The token does not match the supported keyword at this grammar position.
 			(else
-				(call $fail (i32.const 2))
+				(call $fail (i32.const M4_ERR_UNSUPPORTED))
 			)
 		)
 	)
@@ -55,7 +55,7 @@
 		;; Integer decoding requires an atom rather than punctuation, a string or EOF.
 		(if (i32.ne (global.get $kind) (i32.const 3))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i32.const 0))
 			)
 		)
@@ -102,7 +102,7 @@
 						;; Reject a leading underscore or consecutive underscores.
 						(if (i32.or (i32.eqz (local.get $count)) (local.get $underscore))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return (i32.const 0))
 							)
 						)
@@ -144,7 +144,7 @@
 				;; Reject invalid characters and digits that are unavailable in the selected radix.
 				(if (i32.ge_u (local.get $digit) (local.get $base))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return (i32.const 0))
 					)
 				)
@@ -157,7 +157,7 @@
 				;; Reject a magnitude beyond the unsigned i32 range before it can grow further.
 				(if (i64.gt_u (local.get $v) (i64.const 4294967295))
 					(then
-						(call $fail (i32.const 3))
+						(call $fail (i32.const M4_ERR_INTEGER_RANGE))
 						(return (i32.const 0))
 					)
 				)
@@ -169,14 +169,14 @@
 		;; Require at least one digit and reject a trailing separator.
 		(if (i32.or (i32.eqz (local.get $count)) (local.get $underscore))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i32.const 0))
 			)
 		)
 		;; A negative magnitude must fit the signed i32 range, including its minimum value.
 		(if (i32.and (local.get $negative) (i64.gt_u (local.get $v) (i64.const 2147483648)))
 			(then
-				(call $fail (i32.const 3))
+				(call $fail (i32.const M4_ERR_INTEGER_RANGE))
 				(return (i32.const 0))
 			)
 		)
@@ -210,7 +210,7 @@
 		;; Integer decoding requires an atom rather than punctuation, a string or EOF.
 		(if (i32.ne (global.get $kind) (i32.const 3))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i64.const 0))
 			)
 		)
@@ -257,7 +257,7 @@
 						;; Reject a leading underscore or consecutive underscores.
 						(if (i32.or (i32.eqz (local.get $count)) (local.get $underscore))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return (i64.const 0))
 							)
 						)
@@ -299,7 +299,7 @@
 				;; Reject invalid characters and digits that are unavailable in the selected radix.
 				(if (i32.ge_u (local.get $digit) (local.get $base))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return (i64.const 0))
 					)
 				)
@@ -316,7 +316,7 @@
 						)
 					)
 					(then
-						(call $fail (i32.const 3))
+						(call $fail (i32.const M4_ERR_INTEGER_RANGE))
 						(return (i64.const 0))
 					)
 				)
@@ -334,7 +334,7 @@
 		;; Require at least one digit and reject a trailing separator.
 		(if (i32.or (i32.eqz (local.get $count)) (local.get $underscore))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i64.const 0))
 			)
 		)
@@ -342,7 +342,7 @@
 		(if
 			(i32.and (local.get $negative) (i64.gt_u (local.get $v) (i64.const -9223372036854775808)))
 			(then
-				(call $fail (i32.const 3))
+				(call $fail (i32.const M4_ERR_INTEGER_RANGE))
 				(return (i64.const 0))
 			)
 		)
@@ -376,7 +376,7 @@
 		;; Loading must not overwrite a suspended invocation.
 		(if (i32.ge_s (global.get $pending-import) (i32.const 0))
 			(then
-				(call $fail (i32.const 22))
+				(call $fail (i32.const M4_ERR_SUSPENDED_REENTRY))
 				(return (i32.const 22))
 			)
 		)
@@ -385,13 +385,13 @@
 		(global.set $memory-max-present (i32.const 0))
 		(global.set $ready (i32.const 0))
 		(global.set $last-results (i32.const 0))
-		(global.set $error (i32.const 0))
+		(global.set $error (i32.const M4_ERR_SUCCESS))
 		(global.set $offset (local.get $p))
 		(global.set $tok (local.get $p))
 		;; Reject an invalid host source buffer before reading source bytes.
 		(if (i32.eqz (call $buffer-ok (local.get $p) (local.get $n)))
 			(then
-				(call $fail (i32.const 5))
+				(call $fail (i32.const M4_ERR_INVALID_BUFFER))
 				(return (global.get $error))
 			)
 		)
@@ -503,7 +503,7 @@
 						(br $definitions)
 					)
 				)
-				(call $fail (i32.const 2))
+				(call $fail (i32.const M4_ERR_UNSUPPORTED))
 				(br $module-done)
 			)
 		)
@@ -511,7 +511,7 @@
 		;; No text tokens may follow the completed module.
 		(if (i32.ne (global.get $kind) (i32.const 0))
 			(then
-				(call $fail (i32.const 2))
+				(call $fail (i32.const M4_ERR_UNSUPPORTED))
 			)
 		)
 		;; Defer signature-dependent validation until all forward targets are available.
@@ -568,31 +568,31 @@
 		;; Another invoke cannot replace call/control stacks awaiting an import result.
 		(if (i32.ge_s (global.get $pending-import) (i32.const 0))
 			(then
-				(call $fail (i32.const 22))
+				(call $fail (i32.const M4_ERR_SUSPENDED_REENTRY))
 				(return (i64.const 0))
 			)
 		)
-		(global.set $error (i32.const 0))
+		(global.set $error (i32.const M4_ERR_SUCCESS))
 		(global.set $last-results (i32.const 0))
 		(global.set $tok (local.get $p))
 		;; The export name must be in a valid host buffer before lookup can compare bytes.
 		(if (i32.eqz (call $buffer-ok (local.get $p) (local.get $n)))
 			(then
-				(call $fail (i32.const 5))
+				(call $fail (i32.const M4_ERR_INVALID_BUFFER))
 				(return (i64.const 0))
 			)
 		)
 		;; Invocation requires the latest load to have succeeded.
 		(if (i32.eqz (global.get $ready))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i64.const 0))
 			)
 		)
 		;; Exports cannot run before the start has completed or while it is initializing.
 		(if (global.get $start-state)
 			(then
-				(call $fail (i32.const 29))
+				(call $fail (i32.const M4_ERR_NOT_INITIALIZED))
 				(return (i64.const 0))
 			)
 		)
@@ -614,7 +614,7 @@
 						;; Resource exports cannot be invoked as functions.
 						(if (i32.load offset=20 (local.get $record))
 							(then
-								(call $fail (i32.const 18))
+								(call $fail (i32.const M4_ERR_EXPORT_KIND))
 								(return (i64.const 0))
 							)
 						)
@@ -622,7 +622,7 @@
 						;; Host arity must exactly match the declared parameter count.
 						(if (i32.ne (local.get $count) (i32.load offset=16 (local.get $f)))
 							(then
-								(call $fail (i32.const 11))
+								(call $fail (i32.const M4_ERR_ARGUMENT_MISMATCH))
 								(return (i64.const 0))
 							)
 						)
@@ -638,7 +638,7 @@
 										)
 									)
 									(then
-										(call $fail (i32.const 5))
+										(call $fail (i32.const M4_ERR_INVALID_BUFFER))
 										(return (i64.const 0))
 									)
 								)
@@ -651,7 +651,7 @@
 								(i32.ge_u (i32.load offset=24 (local.get $f)) (i32.const 2))
 							)
 							(then
-								(call $fail (i32.const 23))
+								(call $fail (i32.const M4_ERR_HOST_VALUE_TYPE))
 								(return (i64.const 0))
 							)
 						)
@@ -677,7 +677,7 @@
 												(i32.const 1)
 											)
 											(then
-												(call $fail (i32.const 23))
+												(call $fail (i32.const M4_ERR_HOST_VALUE_TYPE))
 												(return (i64.const 0))
 											)
 										)
@@ -710,7 +710,7 @@
 				(br $lookup)
 			)
 		)
-		(call $fail (i32.const 4))
+		(call $fail (i32.const M4_ERR_UNKNOWN_EXPORT))
 		(i64.const 0)
 	)
 

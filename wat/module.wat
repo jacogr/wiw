@@ -40,7 +40,7 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i32.const 0))
 			)
 		)
@@ -104,7 +104,7 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i64.const 0))
 			)
 		)
@@ -129,7 +129,7 @@
 		(i32.add
 			(global.get $local-name-base)
 			(i32.add
-				(i32.mul (global.get $current-function) (i32.const LOCAL_NAME_BYTES))
+				(i32.mul (global.get $current-function) (i32.const M4_LOCAL_NAME_BYTES))
 				(i32.mul (local.get $index) (i32.const 8))
 			)
 		)
@@ -228,7 +228,7 @@
 		;; Bound the export table before its next entry could reach the call-frame region.
 		(if (i32.ge_u (global.get $export-count) (i32.const 512))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -248,7 +248,7 @@
 					)
 					(then
 						(global.set $tok (local.get $offset))
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 						(return)
 					)
 				)
@@ -284,10 +284,10 @@
 		(if
 			(i32.ge_u
 				(local.get $count)
-				(select (i32.const 128) (i32.const CAP_LOCALS) (local.get $parameter))
+				(select (i32.const 128) (i32.const M4_CAP_LOCALS) (local.get $parameter))
 			)
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -297,7 +297,7 @@
 				;; The shared namespace covers both parameters and declared locals.
 				(if (i32.ne (call $find-local (local.get $p) (local.get $n)) (i32.const -1))
 					(then
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 						(return)
 					)
 				)
@@ -374,9 +374,9 @@
 		(local.set $offset (global.get $tok))
 		(call $next)
 		;; Function capacity bounds every related function/local-name table.
-		(if (i32.ge_u (global.get $function-count) (i32.const CAP_FUNCTIONS))
+		(if (i32.ge_u (global.get $function-count) (i32.const M4_CAP_FUNCTIONS))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -388,7 +388,7 @@
 				;; Function names must be unique across the module.
 				(if (i32.ne (call $find-function (local.get $p) (local.get $n)) (i32.const -1))
 					(then
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 						(return)
 					)
 				)
@@ -422,7 +422,7 @@
 						;; An import annotation occurs once and precedes all signature declarations.
 						(if (i32.or (local.get $phase) (global.get $parsing-import))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return)
 							)
 						)
@@ -439,7 +439,7 @@
 						;; Export annotations may precede the type use, but signature/local declarations may not.
 						(if (local.get $phase)
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return)
 							)
 						)
@@ -482,7 +482,7 @@
 				;; Later header categories cannot be followed by earlier ones.
 				(if (i32.lt_u (local.get $category) (local.get $phase))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -496,7 +496,7 @@
 						)
 					)
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -565,7 +565,7 @@
 				;; Function imports must precede defined functions independently of other resources.
 				(if (i32.and (global.get $definitions-started) (i32.const 1))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -646,7 +646,7 @@
 		(if (i32.ge_u (local.get $value) (global.get $function-count))
 			(then
 				(global.set $tok (local.get $offset))
-				(call $fail (i32.const 10))
+				(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 			)
 		)
 		(local.get $value)

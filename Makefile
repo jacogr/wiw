@@ -1,5 +1,5 @@
 DIR_BUILD = build
-WAT_SRC := $(wildcard wat/*.wat wat/*.m4)
+WAT_SRC := $(wildcard wat/*.wat wat/m4/*.m4)
 M4 = m4
 WAT2WASM = wat2wasm
 WASM_OPT = wasm-opt
@@ -36,7 +36,11 @@ FORCE:
 build/opcodes.wat: scripts/opcodes.tsv scripts/opcodes.awk | build
 	awk -f scripts/opcodes.awk scripts/opcodes.tsv > $@
 
-build/wiw.wat: $(WAT_SRC) Makefile build/opcodes.wat build/flags | build
+wat/m4/opcodes.m4: scripts/opcodes.tsv scripts/opcodes.awk
+	awk -v emit_m4=1 -f scripts/opcodes.awk scripts/opcodes.tsv > $@.tmp
+	@if cmp -s $@.tmp $@; then rm $@.tmp; else mv $@.tmp $@; fi
+
+build/wiw.wat: $(WAT_SRC) Makefile build/opcodes.wat wat/m4/opcodes.m4 build/flags | build
 	$(M4) $(FLAGS_M4) -Iwat -Ibuild wat/main.wat > $@
 
 build/wiw.wasm: build/wiw.wat

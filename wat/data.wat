@@ -49,7 +49,7 @@
 		;; Data capacity is independent from the logical memory size and source length.
 		(if (i32.ge_u (global.get $data-count) (i32.const 65536))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -150,7 +150,7 @@
 				;; A trailing backslash cannot encode a complete escape.
 				(if (i32.eq (local.get $p) (local.get $end))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -163,7 +163,7 @@
 						;; Require the second byte before attempting to read it.
 						(if (i32.eq (local.get $p) (local.get $end))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return)
 							)
 						)
@@ -171,7 +171,7 @@
 						;; A non-hex second digit makes the byte escape malformed.
 						(if (i32.eq (local.get $v) (i32.const -1))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return)
 							)
 						)
@@ -219,14 +219,14 @@
 						(i32.ge_u (local.get $p) (local.get $end))
 					)
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
 				;; The Unicode escape requires an opening brace immediately after u.
 				(if (i32.ne (i32.load8_u (local.get $p)) (i32.const 123))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -240,7 +240,7 @@
 						;; EOF before a closing brace is malformed.
 						(if (i32.ge_u (local.get $p) (local.get $end))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return)
 							)
 						)
@@ -251,7 +251,7 @@
 						;; Only hexadecimal digits are allowed in a Unicode scalar escape.
 						(if (i32.eq (local.get $digit) (i32.const -1))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return)
 							)
 						)
@@ -259,7 +259,7 @@
 						;; Reject scalars above the Unicode range before another digit can overflow.
 						(if (i32.gt_u (local.get $v) (i32.const 1114111))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return)
 							)
 						)
@@ -277,7 +277,7 @@
 						)
 					)
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -299,7 +299,7 @@
 		;; Segment metadata has its own bounded arena.
 		(if (i32.ge_u (global.get $segment-count) (i32.const 128))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))
 			)
 		)
@@ -357,7 +357,7 @@
 				;; Out-of-range references remain invalid even in unreachable code.
 				(if (i32.ge_u (local.get $value) (global.get $segment-count))
 					(then
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 					)
 				)
 				(return (local.get $value))
@@ -387,7 +387,7 @@
 				(br $names)
 			)
 		)
-		(call $fail (i32.const 10))
+		(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 		(i32.const 0)
 	)
 
@@ -406,7 +406,7 @@
 		;; Bound the next descriptor before parsing a header into its target fields.
 		(if (i32.ge_u (global.get $segment-count) (i32.const 128))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -434,7 +434,7 @@
 								)
 							)
 							(then
-								(call $fail (i32.const 10))
+								(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 								(return)
 							)
 						)
@@ -517,7 +517,7 @@
 				)
 				(local.set $op (i32.load (local.get $record)))
 				;; memory.init stores its data reference in the independent auxiliary target pair.
-				(if (i32.eq (local.get $op) (i32.const 189))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_INIT))
 					(then
 						(local.set $target (i32.load offset=4 (local.get $record)))
 						(i32.store offset=24
@@ -531,7 +531,7 @@
 					)
 				)
 				;; Other opcodes retain their existing immediate metadata.
-				(if (i32.eq (local.get $op) (i32.const 190))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_DATA_DROP))
 					(then
 						(global.set $tok (i32.load offset=8 (local.get $record)))
 						(i32.store offset=4
@@ -637,7 +637,7 @@
 				(i32.gt_u (i32.add (local.get $p) (local.get $width)) (local.get $end))
 			)
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i32.const 0))
 			)
 		)
@@ -651,7 +651,7 @@
 				;; Reject stray ASCII or another leading byte inside the sequence.
 				(if (i32.ne (i32.and (local.get $c) (i32.const 192)) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return (i32.const 0))
 					)
 				)
@@ -675,7 +675,7 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i32.const 0))
 			)
 		)

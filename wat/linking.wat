@@ -141,11 +141,11 @@
 		;; Reject sizes beyond the engine's fixed arenas before changing any bound sizes.
 		(if
 			(i32.or
-				(i32.gt_u (local.get $pages) (i32.const CAP_PAGES))
+				(i32.gt_u (local.get $pages) (i32.const M4_CAP_PAGES))
 				(i32.gt_u (local.get $entries) (i32.const 4096))
 			)
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (global.get $error))
 			)
 		)
@@ -166,15 +166,15 @@
 		(local $f i32)
 		(local $i i32)
 
-		(global.set $error (i32.const 0))
+		(global.set $error (i32.const M4_ERR_SUCCESS))
 		;; Host-created function records obey the same fixed function and parameter capacities.
 		(if
 			(i32.or
-				(i32.ge_u (global.get $function-count) (i32.const CAP_FUNCTIONS))
+				(i32.ge_u (global.get $function-count) (i32.const M4_CAP_FUNCTIONS))
 				(i32.gt_u (local.get $count) (i32.const 128))
 			)
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const -1))
 			)
 		)
@@ -213,7 +213,7 @@
 		(local $i i32)
 		(local $f i32)
 
-		(global.set $error (i32.const 0))
+		(global.set $error (i32.const M4_ERR_SUCCESS))
 		;; Suspended invocations and unfinished starts retain exclusive use of execution state.
 		(if
 			(i32.or
@@ -224,7 +224,7 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 22))
+				(call $fail (i32.const M4_ERR_SUSPENDED_REENTRY))
 				(return (i64.const 0))
 			)
 		)
@@ -235,7 +235,7 @@
 				(i32.ge_u (local.get $index) (global.get $function-count))
 			)
 			(then
-				(call $fail (i32.const 10))
+				(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 				(return (i64.const 0))
 			)
 		)
@@ -243,7 +243,7 @@
 		;; Check host arity before reading any argument slot.
 		(if (i32.ne (local.get $count) (i32.load offset=16 (local.get $f)))
 			(then
-				(call $fail (i32.const 11))
+				(call $fail (i32.const M4_ERR_ARGUMENT_MISMATCH))
 				(return (i64.const 0))
 			)
 		)
@@ -254,7 +254,7 @@
 				(i32.eqz (call $buffer-ok (local.get $args) (i32.mul (local.get $count) (i32.const 8))))
 			)
 			(then
-				(call $fail (i32.const 5))
+				(call $fail (i32.const M4_ERR_INVALID_BUFFER))
 				(return (i64.const 0))
 			)
 		)
@@ -413,9 +413,9 @@
 		(local $record i32)
 
 		;; Imported sizes remain bounded by the same physical page capacity as definitions.
-		(if (i32.gt_u (local.get $pages) (i32.const CAP_PAGES))
+		(if (i32.gt_u (local.get $pages) (i32.const M4_CAP_PAGES))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (global.get $error))
 			)
 		)

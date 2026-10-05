@@ -147,7 +147,7 @@
 				;; Missing segments are reference errors even when the instruction is unreachable.
 				(if (i32.ge_u (local.get $value) (global.get $element-count))
 					(then
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 					)
 				)
 				(return (local.get $value))
@@ -177,7 +177,7 @@
 				(br $names)
 			)
 		)
-		(call $fail (i32.const 10))
+		(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 		(i32.const 0)
 	)
 
@@ -223,7 +223,7 @@
 				;; Element entries have their own fixed capacity.
 				(if (i32.ge_u (global.get $element-entry-count) (i32.const 4096))
 					(then
-						(call $fail (i32.const 6))
+						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 						(return)
 					)
 				)
@@ -258,7 +258,7 @@
 						)
 						(local.set $op (call $opcode))
 						;; Function expressions implicitly declare their target after forward resolution.
-						(if (i32.eq (local.get $op) (i32.const 195))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_REF_FUNC))
 							(then
 								(call $next)
 								(i32.store (local.get $entry) (call $function-reference))
@@ -267,7 +267,7 @@
 							;; Null and imported-global expressions preserve the list's exact reference type.
 							(else
 								;; Nulls retain -1 as the table-storage sentinel.
-								(if (i32.eq (local.get $op) (i32.const 193))
+								(if (i32.eq (local.get $op) (i32.const M4_OP_REF_NULL))
 									(then
 										(call $next)
 										(local.set $type (call $reference-type))
@@ -278,7 +278,7 @@
 												(call $type-compatible (local.get $type) (i32.load offset=48 (local.get $record)))
 											)
 											(then
-												(call $fail (i32.const 7))
+												(call $fail (i32.const M4_ERR_OPERAND_STACK))
 											)
 										)
 										(i32.store (local.get $entry) (i32.const -1))
@@ -287,7 +287,7 @@
 									;; Imported immutable globals supply their reference after bindings are installed.
 									(else
 										;; Other expressions cannot initialize element entries.
-										(if (i32.eq (local.get $op) (i32.const 49))
+										(if (i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_GET))
 											(then
 												(call $read-initializer-global (i32.load offset=48 (local.get $record)))
 												(i32.store (local.get $entry) (i32.sub (global.get $initializer-reference) (i32.const 1)))
@@ -296,7 +296,7 @@
 											;; Reject unknown constant operators without consuming following segment syntax.
 											(else
 												;; Small integer constants use the same raw table-slot encoding as other references.
-												(if (i32.eq (local.get $op) (i32.const 470))
+												(if (i32.eq (local.get $op) (i32.const M4_OP_REF_I31))
 													(then
 														(call $next)
 														(i32.store
@@ -321,10 +321,10 @@
 														;; Aggregate constructors are folded constant expressions with their own closing delimiter.
 														(if
 															(i32.or
-																(i32.or (i32.eq (local.get $op) (i32.const 473)) (i32.eq (local.get $op) (i32.const 474)))
+																(i32.or (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_NEW)) (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_NEW_DEFAULT)))
 																(i32.and
-																	(i32.ge_u (local.get $op) (i32.const 479))
-																	(i32.le_u (local.get $op) (i32.const 481))
+																	(i32.ge_u (local.get $op) (i32.const M4_OP_ARRAY_NEW))
+																	(i32.le_u (local.get $op) (i32.const M4_OP_ARRAY_NEW_FIXED))
 																)
 															)
 															(then
@@ -343,7 +343,7 @@
 															)
 															;; Other operators cannot initialize a constant reference list.
 															(else
-																(call $fail (i32.const 1))
+																(call $fail (i32.const M4_ERR_SYNTAX))
 															)
 														)
 													)
@@ -402,7 +402,7 @@
 		;; Segment descriptors are bounded independently from entry storage.
 		(if (i32.ge_u (global.get $element-count) (i32.const 128))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))
 			)
 		)
@@ -437,7 +437,7 @@
 				;; Check only earlier descriptors, temporarily excluding this unnamed descriptor.
 				(if (call $element-name-exists (local.get $value) (local.get $length))
 					(then
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 						(return)
 					)
 				)
@@ -476,7 +476,7 @@
 										;; An explicit selector requires its index or name before the wrapper close.
 										(if (i32.ne (global.get $kind) (i32.const 3))
 											(then
-												(call $fail (i32.const 1))
+												(call $fail (i32.const M4_ERR_SYNTAX))
 											)
 										)
 										(call $segment-target (local.get $record))
@@ -554,7 +554,7 @@
 		;; A second table remains outside the supported single-table subset.
 		(if (i32.ge_u (global.get $guest-table-present) (i32.const 32))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -571,7 +571,7 @@
 				;; Duplicate names are text resolution errors within the table namespace.
 				(if (i32.ne (call $find-table (global.get $tok) (global.get $len)) (i32.const -1))
 					(then
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 						(return)
 					)
 				)
@@ -638,7 +638,7 @@
 						)
 					)
 					(then
-						(call $fail (i32.const 26))
+						(call $fail (i32.const M4_ERR_TABLE_LIMITS))
 					)
 				)
 				(global.set $guest-table-size
@@ -663,7 +663,7 @@
 				;; A table requires one of the two reference value types.
 				(if (i32.lt_u (global.get $guest-table-type) (i32.const 5))
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 			)
@@ -690,7 +690,7 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 7))
+				(call $fail (i32.const M4_ERR_OPERAND_STACK))
 			)
 		)
 		(i32.store (local.get $descriptor) (global.get $guest-table-name))
@@ -704,7 +704,7 @@
 		(if (i32.gt_u (global.get $guest-table-size) (global.get $guest-table-max))
 			(then
 				(global.set $tok (local.get $offset))
-				(call $fail (i32.const 26))
+				(call $fail (i32.const M4_ERR_TABLE_LIMITS))
 			)
 		)
 		;; Actual initial storage is bounded even when a larger maximum is declared.
@@ -715,7 +715,7 @@
 			)
 			(then
 				(global.set $tok (local.get $offset))
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 			)
 		)
 	)
@@ -756,7 +756,7 @@
 								)
 							)
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 					)
@@ -824,7 +824,7 @@
 										)
 									)
 									(then
-										(call $fail (i32.const 7))
+										(call $fail (i32.const M4_ERR_OPERAND_STACK))
 									)
 								)
 							)
@@ -968,7 +968,7 @@
 					)
 					(then
 						(global.set $tok (i32.load offset=12 (local.get $record)))
-						(call $fail (i32.const 27))
+						(call $fail (i32.const M4_ERR_ELEMENT_BOUNDS))
 						(return)
 					)
 				)
@@ -1048,9 +1048,9 @@
 		)
 		;; Four slots retain both index/name pairs without overlapping later branch vectors.
 		(if
-			(i32.gt_u (global.get $table-count) (i32.sub (i32.const CAP_TABLE) (i32.const 4)))
+			(i32.gt_u (global.get $table-count) (i32.sub (i32.const M4_CAP_TABLE) (i32.const 4)))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))
 			)
 		)
@@ -1061,12 +1061,12 @@
 		(if (call $table-reference (local.get $record))
 			(then
 				;; A copy's explicit destination requires an explicit source, including in folded syntax.
-				(if (i32.eq (local.get $op) (i32.const 192))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_TABLE_COPY))
 					(then
 						;; Reject an incomplete index pair before consuming folded operand expressions.
 						(if (i32.eqz (call $table-reference (i32.add (local.get $record) (i32.const 8))))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 							)
 						)
 					)
@@ -1107,7 +1107,7 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 30))
+				(call $fail (i32.const M4_ERR_TABLE_BOUNDS))
 				(return)
 			)
 		)
@@ -1158,7 +1158,7 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i32.const 0))
 			)
 		)
@@ -1200,7 +1200,7 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 30))
+				(call $fail (i32.const M4_ERR_TABLE_BOUNDS))
 				(return)
 			)
 		)
@@ -1245,7 +1245,7 @@
 		;; Unsigned indices must identify a present entry, even when writing a null value.
 		(if (i32.ge_u (local.get $index) (global.get $guest-table-size))
 			(then
-				(call $fail (i32.const 30))
+				(call $fail (i32.const M4_ERR_TABLE_BOUNDS))
 				(return (i64.const 0))
 			)
 		)
@@ -1253,7 +1253,7 @@
 			(i32.add (global.get $guest-table-base) (i32.mul (local.get $index) (i32.const 4)))
 		)
 		;; get converts storage's -1 null sentinel into the reference slot's zero null.
-		(if (i32.eq (local.get $op) (i32.const 198))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_TABLE_GET))
 			(then
 				(return (i64.extend_i32_u (i32.add (i32.load (local.get $address)) (i32.const 1))))
 			)
@@ -1276,7 +1276,7 @@
 				(i64.extend_i32_u (global.get $guest-table-size))
 			)
 			(then
-				(call $fail (i32.const 30))
+				(call $fail (i32.const M4_ERR_TABLE_BOUNDS))
 				(return)
 			)
 		)
@@ -1341,7 +1341,7 @@
 		;; Every actual table fits the physical entry arena; larger logical offsets cannot initialize it.
 		(if (i64.gt_u (local.get $value) (i64.const 4294967295))
 			(then
-				(call $fail (i32.const 27))
+				(call $fail (i32.const M4_ERR_ELEMENT_BOUNDS))
 			)
 		)
 		(local.get $value)
@@ -1386,7 +1386,7 @@
 		;; Initializer entries share the bounded element-entry arena.
 		(if (i32.ge_u (global.get $element-entry-count) (i32.const 4096))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))
 			)
 		)
@@ -1403,7 +1403,7 @@
 						)
 					)
 					(then
-						(call $fail (i32.const 10))
+						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 					)
 				)
 			)
@@ -1537,7 +1537,7 @@
 							)
 							(then
 								(global.set $tok (i32.load offset=8 (local.get $entry)))
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 						(local.set $j (i32.add (local.get $j) (i32.const 1)))

@@ -45,7 +45,7 @@
 		(local $type i32)
 
 		;; Equality accepts only equality references, including the internal bottom.
-		(if (i32.eq (local.get $op) (i32.const 465))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_REF_EQ))
 			(then
 				(drop (call $validation-pop (i32.const 18)))
 				(drop (call $validation-pop (i32.const 18)))
@@ -55,24 +55,24 @@
 		)
 		;; Tests and casts accept references in the target's abstract hierarchy.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 466)) (i32.eq (local.get $op) (i32.const 467)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_REF_TEST)) (i32.eq (local.get $op) (i32.const M4_OP_REF_CAST)))
 			(then
 				;; Numeric target types are malformed reference type immediates.
 				(if (i32.eqz (call $is-reference (local.get $target)))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
 				(drop (call $validation-pop (call $reference-root (local.get $target))))
 				(call $validation-value
-					(select (i32.const 1) (local.get $target) (i32.eq (local.get $op) (i32.const 466)))
+					(select (i32.const 1) (local.get $target) (i32.eq (local.get $op) (i32.const M4_OP_REF_TEST)))
 				)
 				(return)
 			)
 		)
 		;; External conversion preserves the nullability of its input.
-		(if (i32.eq (local.get $op) (i32.const 468))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_ANY_CONVERT_EXTERN))
 			(then
 				(local.set $type (call $validation-pop (i32.const 6)))
 				(call $validation-value
@@ -82,7 +82,7 @@
 			)
 		)
 		;; Converting an internal reference back to extern also preserves nullability.
-		(if (i32.eq (local.get $op) (i32.const 469))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_EXTERN_CONVERT_ANY))
 			(then
 				(local.set $type (call $validation-pop (i32.const 16)))
 				(call $validation-value
@@ -92,7 +92,7 @@
 			)
 		)
 		;; Small integer construction consumes i32 and produces a non-null i31 reference.
-		(if (i32.eq (local.get $op) (i32.const 470))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_REF_I31))
 			(then
 				(drop (call $validation-pop (i32.const 1)))
 				(call $validation-value (i32.const 21))
@@ -166,13 +166,13 @@
 		(result i64)
 
 		;; Identity comparison includes null and separately allocated references.
-		(if (i32.eq (local.get $op) (i32.const 465))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_REF_EQ))
 			(then
 				(return (i64.extend_i32_u (i64.eq (local.get $a) (local.get $b))))
 			)
 		)
 		;; Tests return an ordinary i32 Boolean without trapping on null.
-		(if (i32.eq (local.get $op) (i32.const 466))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_REF_TEST))
 			(then
 				(return
 					(i64.extend_i32_u (call $runtime-reference-matches (local.get $a) (local.get $target)))
@@ -180,18 +180,18 @@
 			)
 		)
 		;; Failed casts trap before the value can flow into the refined result type.
-		(if (i32.eq (local.get $op) (i32.const 467))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_REF_CAST))
 			(then
 				;; Nullability and declared heap subtyping both participate in the runtime check.
 				(if (i32.eqz (call $runtime-reference-matches (local.get $a) (local.get $target)))
 					(then
-						(call $fail (i32.const 32))
+						(call $fail (i32.const M4_ERR_CAST_FAILURE))
 					)
 				)
 			)
 		)
 		;; Internalizing an opaque external value retains its identity through an explicit wrapper tag.
-		(if (i32.eq (local.get $op) (i32.const 468))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_ANY_CONVERT_EXTERN))
 			(then
 				;; Null and previously externalized internal values keep their original representation.
 				(if
@@ -207,29 +207,29 @@
 			)
 		)
 		;; Externalizing a wrapper restores its original opaque external handle.
-		(if (i32.eq (local.get $op) (i32.const 469))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_EXTERN_CONVERT_ANY))
 			(then
 				(return (i64.and (local.get $a) (i64.const 3758096383)))
 			)
 		)
 		;; Box a small integer by setting its dedicated tag bit after truncating to 31 bits.
-		(if (i32.eq (local.get $op) (i32.const 470))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_REF_I31))
 			(then
 				(return (i64.or (i64.and (local.get $a) (i64.const 2147483647)) (i64.const 2147483648)))
 			)
 		)
 		;; Both small integer projections reject null and differ only in sign extension.
-		(if (i32.ge_u (local.get $op) (i32.const 471))
+		(if (i32.ge_u (local.get $op) (i32.const M4_OP_I31_GET_S))
 			(then
 				;; Null has no small-integer payload.
 				(if (i64.eqz (local.get $a))
 					(then
-						(call $fail (i32.const 31))
+						(call $fail (i32.const M4_ERR_NULL_REFERENCE))
 						(return (i64.const 0))
 					)
 				)
 				;; Signed projection extends bit 30 through the i32 sign bit.
-				(if (i32.eq (local.get $op) (i32.const 471))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_I31_GET_S))
 					(then
 						(return
 							(i64.extend_i32_s
@@ -252,7 +252,7 @@
 
 		(local.set $record (call $new-memory-immediate))
 		;; Array length has no declared type immediate.
-		(if (i32.eq (local.get $op) (i32.const 488))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_LEN))
 			(then
 				(return (local.get $record))
 			)
@@ -261,8 +261,8 @@
 		;; Struct access accepts either a numeric field index or a source-backed field name.
 		(if
 			(i32.and
-				(i32.ge_u (local.get $op) (i32.const 475))
-				(i32.le_u (local.get $op) (i32.const 478))
+				(i32.ge_u (local.get $op) (i32.const M4_OP_STRUCT_GET))
+				(i32.le_u (local.get $op) (i32.const M4_OP_STRUCT_SET))
 			)
 			(then
 				(i32.store offset=4 (local.get $record) (call $function-reference))
@@ -270,13 +270,13 @@
 			)
 		)
 		;; Fixed arrays carry an explicit element count.
-		(if (i32.eq (local.get $op) (i32.const 481))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_FIXED))
 			(then
 				(i32.store offset=4 (local.get $record) (call $index))
 			)
 		)
 		;; Array copy names its source array type independently from the destination type.
-		(if (i32.eq (local.get $op) (i32.const 490))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_COPY))
 			(then
 				(i32.store offset=4 (local.get $record) (call $reference-type))
 			)
@@ -284,8 +284,8 @@
 		;; Data and element operations retain a separate segment index namespace.
 		(if
 			(i32.or
-				(i32.or (i32.eq (local.get $op) (i32.const 482)) (i32.eq (local.get $op) (i32.const 483)))
-				(i32.ge_u (local.get $op) (i32.const 491))
+				(i32.or (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_DATA)) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_ELEM)))
+				(i32.ge_u (local.get $op) (i32.const M4_OP_ARRAY_INIT_DATA))
 			)
 			(then
 				(i32.store offset=4 (local.get $record) (call $function-reference))
@@ -356,7 +356,7 @@
 		;; Every field access must stay within the declared struct type.
 		(if (i32.ge_u (local.get $index) (local.get $count))
 			(then
-				(call $fail (i32.const 10))
+				(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 			)
 		)
 		(i32.store offset=4 (local.get $immediate) (local.get $index))
@@ -382,7 +382,7 @@
 				(i64.extend_i32_u (i32.sub (i32.const 16777216) (global.get $gc-object-used)))
 			)
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))
 			)
 		)
@@ -414,7 +414,7 @@
 		;; Null cannot be dereferenced as an aggregate object.
 		(if (i64.eqz (local.get $reference))
 			(then
-				(call $fail (i32.const 31))
+				(call $fail (i32.const M4_ERR_NULL_REFERENCE))
 				(return (global.get $gc-object-base))
 			)
 		)
@@ -485,7 +485,7 @@
 		(local $ref i32)
 
 		;; Array length consumes the abstract array hierarchy without a declared type use.
-		(if (i32.eq (local.get $op) (i32.const 488))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_LEN))
 			(then
 				(drop (call $validation-pop (i32.const 24)))
 				(call $validation-value (i32.const 1))
@@ -496,7 +496,7 @@
 		;; Composite operator immediates must name concrete type declarations.
 		(if (i32.lt_u (local.get $ref) (i32.const 64))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return)
 			)
 		)
@@ -506,17 +506,17 @@
 		(if
 			(i32.ne
 				(i32.load (local.get $record))
-				(select (i32.const 1) (i32.const 2) (i32.le_u (local.get $op) (i32.const 478)))
+				(select (i32.const 1) (i32.const 2) (i32.le_u (local.get $op) (i32.const M4_OP_STRUCT_SET)))
 			)
 			(then
-				(call $fail (i32.const 7))
+				(call $fail (i32.const M4_ERR_OPERAND_STACK))
 				(return)
 			)
 		)
 		(local.set $count (i32.load offset=24 (local.get $record)))
 		(local.set $field (call $field-record (i32.load offset=20 (local.get $record))))
 		;; Struct construction consumes its ordered field vector in reverse stack order.
-		(if (i32.le_u (local.get $op) (i32.const 474))
+		(if (i32.le_u (local.get $op) (i32.const M4_OP_STRUCT_NEW_DEFAULT))
 			(then
 				(local.set $i (local.get $count))
 				;; Each field is required explicitly or must have a default value.
@@ -531,7 +531,7 @@
 							)
 						)
 						;; Explicit constructors consume values; default constructors require defaultable fields.
-						(if (i32.eq (local.get $op) (i32.const 473))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_NEW))
 							(then
 								(drop (call $validation-pop (call $unpacked-type (local.get $type))))
 							)
@@ -544,7 +544,7 @@
 										(call $reference-nonnull (local.get $type))
 									)
 									(then
-										(call $fail (i32.const 7))
+										(call $fail (i32.const M4_ERR_OPERAND_STACK))
 									)
 								)
 							)
@@ -557,20 +557,20 @@
 			)
 		)
 		;; Struct field access resolves named fields before validating its operand types.
-		(if (i32.le_u (local.get $op) (i32.const 478))
+		(if (i32.le_u (local.get $op) (i32.const M4_OP_STRUCT_SET))
 			(then
 				(local.set $field (call $gc-field (local.get $heap) (local.get $immediate)))
 			)
 		)
 		(local.set $type (i32.load (local.get $field)))
 		;; Fixed array construction consumes the declared number of element operands.
-		(if (i32.eq (local.get $op) (i32.const 481))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_FIXED))
 			(then
 				(local.set $i (i32.load offset=4 (local.get $immediate)))
 				;; Element counts cannot exceed the bounded operand stack.
-				(if (i32.gt_u (local.get $i) (i32.const CAP_OPERANDS))
+				(if (i32.gt_u (local.get $i) (i32.const M4_CAP_OPERANDS))
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 						(return)
 					)
 				)
@@ -591,13 +591,13 @@
 		;; Dynamic array constructors consume their length followed by an optional repeated element.
 		(if
 			(i32.and
-				(i32.ge_u (local.get $op) (i32.const 479))
-				(i32.le_u (local.get $op) (i32.const 480))
+				(i32.ge_u (local.get $op) (i32.const M4_OP_ARRAY_NEW))
+				(i32.le_u (local.get $op) (i32.const M4_OP_ARRAY_NEW_DEFAULT))
 			)
 			(then
 				(drop (call $validation-pop (i32.const 1)))
 				;; Repeated element constructors require a typed value.
-				(if (i32.eq (local.get $op) (i32.const 479))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW))
 					(then
 						(drop (call $validation-pop (call $unpacked-type (local.get $type))))
 					)
@@ -610,7 +610,7 @@
 								(call $reference-nonnull (local.get $type))
 							)
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 					)
@@ -621,17 +621,17 @@
 		)
 		;; Set operations require mutable storage and consume the stored value first.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 478)) (i32.eq (local.get $op) (i32.const 487)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_SET)) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_SET)))
 			(then
 				;; Immutable aggregate fields cannot be assigned.
 				(if (i32.eqz (i32.load offset=4 (local.get $field)))
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 				(drop (call $validation-pop (call $unpacked-type (local.get $type))))
 				;; Array assignment also consumes an element index.
-				(if (i32.eq (local.get $op) (i32.const 487))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_SET))
 					(then
 						(drop (call $validation-pop (i32.const 1)))
 					)
@@ -643,10 +643,10 @@
 		;; Ordinary and signed/unsigned gets distinguish packed from unpacked storage.
 		(if
 			(i32.or
-				(i32.le_u (local.get $op) (i32.const 477))
+				(i32.le_u (local.get $op) (i32.const M4_OP_STRUCT_GET_U))
 				(i32.and
-					(i32.ge_u (local.get $op) (i32.const 484))
-					(i32.le_u (local.get $op) (i32.const 486))
+					(i32.ge_u (local.get $op) (i32.const M4_OP_ARRAY_GET))
+					(i32.le_u (local.get $op) (i32.const M4_OP_ARRAY_GET_U))
 				)
 			)
 			(then
@@ -658,15 +658,15 @@
 							(i32.eq (local.get $type) (i32.const 13))
 						)
 						(i32.eqz
-							(i32.or (i32.eq (local.get $op) (i32.const 475)) (i32.eq (local.get $op) (i32.const 484)))
+							(i32.or (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_GET)) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_GET)))
 						)
 					)
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 				;; Array getters consume an index before their array reference.
-				(if (i32.ge_u (local.get $op) (i32.const 484))
+				(if (i32.ge_u (local.get $op) (i32.const M4_OP_ARRAY_GET))
 					(then
 						(drop (call $validation-pop (i32.const 1)))
 					)
@@ -679,20 +679,20 @@
 		;; Segment-backed constructors and initialization validate their independent namespaces.
 		(if
 			(i32.or
-				(i32.or (i32.eq (local.get $op) (i32.const 482)) (i32.eq (local.get $op) (i32.const 483)))
-				(i32.ge_u (local.get $op) (i32.const 491))
+				(i32.or (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_DATA)) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_ELEM)))
+				(i32.ge_u (local.get $op) (i32.const M4_OP_ARRAY_INIT_DATA))
 			)
 			(then
 				(call $gc-resolve-segment (local.get $op) (local.get $immediate) (local.get $type))
 				(drop (call $validation-pop (i32.const 1)))
 				(drop (call $validation-pop (i32.const 1)))
 				;; In-place initialization additionally consumes the destination index and array reference.
-				(if (i32.ge_u (local.get $op) (i32.const 491))
+				(if (i32.ge_u (local.get $op) (i32.const M4_OP_ARRAY_INIT_DATA))
 					(then
 						;; Only mutable arrays may be initialized after construction.
 						(if (i32.eqz (i32.load offset=4 (local.get $field)))
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 						(drop (call $validation-pop (i32.const 1)))
@@ -708,23 +708,23 @@
 		)
 		;; Fill and copy require mutable destination storage and four or five operands.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 489)) (i32.eq (local.get $op) (i32.const 490)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_FILL)) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_COPY)))
 			(then
 				;; An immutable array cannot receive a bulk write.
 				(if (i32.eqz (i32.load offset=4 (local.get $field)))
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 				(drop (call $validation-pop (i32.const 1)))
 				;; Copy consumes the source index and source array with a compatible element type.
-				(if (i32.eq (local.get $op) (i32.const 490))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_COPY))
 					(then
 						(local.set $i (call $reference-heap (i32.load offset=4 (local.get $immediate))))
 						;; Source types must be arrays and their elements must fit destination storage.
 						(if (i32.ne (i32.load (call $heap-record (local.get $i))) (i32.const 2))
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 						(local.set $count
@@ -733,7 +733,7 @@
 						;; Packed storage compatibility retains exact widths; ordinary fields allow subtypes.
 						(if (i32.eqz (call $type-compatible (local.get $count) (local.get $type)))
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 						(drop (call $validation-pop (i32.const 1)))
@@ -749,7 +749,7 @@
 				(return)
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 	)
 
 	;; Execute aggregate construction and access directly on the interpreter's object arena.
@@ -770,7 +770,7 @@
 
 		(global.set $gc-high (i64.const 0))
 		;; Array length reads the allocation's dynamic length, independently from its concrete type.
-		(if (i32.eq (local.get $op) (i32.const 488))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_LEN))
 			(then
 				(local.set $object (call $gc-object (call $gc-pop)))
 				(return (i64.extend_i32_u (i32.load offset=4 (local.get $object))))
@@ -782,11 +782,11 @@
 		(local.set $field (call $field-record (i32.load offset=20 (local.get $record))))
 		(local.set $type (i32.load (local.get $field)))
 		;; Struct constructors allocate one raw slot per declared field.
-		(if (i32.le_u (local.get $op) (i32.const 474))
+		(if (i32.le_u (local.get $op) (i32.const M4_OP_STRUCT_NEW_DEFAULT))
 			(then
 				(local.set $object (call $gc-allocate (local.get $heap) (local.get $count)))
 				;; Explicit constructors install fields from the operand stack in reverse order.
-				(if (i32.eq (local.get $op) (i32.const 473))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_NEW))
 					(then
 						(local.set $i (local.get $count))
 						;; Stop after the first field has received its operand.
@@ -816,12 +816,12 @@
 		;; Repeated, default and fixed arrays share one dynamic slot layout.
 		(if
 			(i32.and
-				(i32.ge_u (local.get $op) (i32.const 479))
-				(i32.le_u (local.get $op) (i32.const 481))
+				(i32.ge_u (local.get $op) (i32.const M4_OP_ARRAY_NEW))
+				(i32.le_u (local.get $op) (i32.const M4_OP_ARRAY_NEW_FIXED))
 			)
 			(then
 				;; Fixed constructors obtain their count from the immediate rather than an operand.
-				(if (i32.eq (local.get $op) (i32.const 481))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_FIXED))
 					(then
 						(local.set $count (i32.load offset=4 (local.get $immediate)))
 					)
@@ -831,7 +831,7 @@
 					)
 				)
 				;; Repeated elements retain both raw halves across allocation and the fill loop.
-				(if (i32.eq (local.get $op) (i32.const 479))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW))
 					(then
 						(local.set $value (call $gc-pop))
 						(local.set $high (global.get $gc-high))
@@ -852,7 +852,7 @@
 						(br_if $done (i32.eqz (local.get $i)))
 						(local.set $i (i32.sub (local.get $i) (i32.const 1)))
 						;; Fixed arrays consume one distinct operand for each slot.
-						(if (i32.eq (local.get $op) (i32.const 481))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_FIXED))
 							(then
 								(local.set $value (call $gc-pop))
 								(local.set $high (global.get $gc-high))
@@ -874,8 +874,8 @@
 		;; Segment and bulk operations consume their longer operand vectors in a dedicated helper.
 		(if
 			(i32.or
-				(i32.or (i32.eq (local.get $op) (i32.const 482)) (i32.eq (local.get $op) (i32.const 483)))
-				(i32.ge_u (local.get $op) (i32.const 489))
+				(i32.or (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_DATA)) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_ELEM)))
+				(i32.ge_u (local.get $op) (i32.const M4_OP_ARRAY_FILL))
 			)
 			(then
 				(return
@@ -889,7 +889,7 @@
 			)
 		)
 		;; Struct access resolves its field index during validation.
-		(if (i32.le_u (local.get $op) (i32.const 478))
+		(if (i32.le_u (local.get $op) (i32.const M4_OP_STRUCT_SET))
 			(then
 				(local.set $i (i32.load offset=4 (local.get $immediate)))
 				(local.set $type
@@ -901,14 +901,14 @@
 		)
 		;; Set instructions consume the assigned value before the reference and optional index.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 478)) (i32.eq (local.get $op) (i32.const 487)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_SET)) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_SET)))
 			(then
 				(local.set $value (call $gc-pop))
 				(local.set $high (global.get $gc-high))
 			)
 		)
 		;; Array access obtains a dynamic element index from the operand stack.
-		(if (i32.ge_u (local.get $op) (i32.const 484))
+		(if (i32.ge_u (local.get $op) (i32.const M4_OP_ARRAY_GET))
 			(then
 				(local.set $i (i32.wrap_i64 (call $gc-pop)))
 			)
@@ -923,14 +923,14 @@
 		;; Array indexing must be within the allocation's dynamic length.
 		(if (i32.ge_u (local.get $i) (i32.load offset=4 (local.get $object)))
 			(then
-				(call $fail (i32.const 33))
+				(call $fail (i32.const M4_ERR_ARRAY_BOUNDS))
 				(return (i64.const 0))
 			)
 		)
 		(local.set $slot (call $gc-slot (local.get $object) (local.get $i)))
 		;; Mutable field assignment changes the object in place and has no result.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 478)) (i32.eq (local.get $op) (i32.const 487)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_SET)) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_SET)))
 			(then
 				(call $gc-store (local.get $slot) (local.get $type) (local.get $value) (local.get $high))
 				(return (i64.const 0))
@@ -940,7 +940,7 @@
 		(global.set $gc-high (i64.load offset=8 (local.get $slot)))
 		;; Signed packed gets extend their stored bit width to an ordinary i32.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 476)) (i32.eq (local.get $op) (i32.const 485)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_GET_S)) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_GET_S)))
 			(then
 				;; Packed byte and halfword projections require different sign-extension shifts.
 				(if (i32.eq (local.get $type) (i32.const 12))
@@ -993,10 +993,10 @@
 		(if
 			(i32.ne
 				(i32.load (local.get $record))
-				(select (i32.const 1) (i32.const 2) (i32.le_u (local.get $op) (i32.const 474)))
+				(select (i32.const 1) (i32.const 2) (i32.le_u (local.get $op) (i32.const M4_OP_STRUCT_NEW_DEFAULT)))
 			)
 			(then
-				(call $fail (i32.const 7))
+				(call $fail (i32.const M4_ERR_OPERAND_STACK))
 				(return (i64.const 0))
 			)
 		)
@@ -1009,23 +1009,23 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 7))
+				(call $fail (i32.const M4_ERR_OPERAND_STACK))
 			)
 		)
 		(local.set $count (i32.load offset=24 (local.get $record)))
 		(local.set $type (i32.load (call $field-record (i32.load offset=20 (local.get $record)))))
 		;; Dynamic array constructors evaluate a repeated element before their length expression.
-		(if (i32.eq (local.get $op) (i32.const 479))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW))
 			(then
 				(local.set $value (call $global-initializer (call $unpacked-type (local.get $type))))
 				(local.set $high (global.get $initializer-high))
 			)
 		)
 		;; Array length is either a fixed immediate or an i32 constant expression.
-		(if (i32.ge_u (local.get $op) (i32.const 479))
+		(if (i32.ge_u (local.get $op) (i32.const M4_OP_ARRAY_NEW))
 			(then
 				;; Fixed constructors preserve their explicit element count.
-				(if (i32.eq (local.get $op) (i32.const 481))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_FIXED))
 					(then
 						(local.set $count (i32.load offset=4 (local.get $immediate)))
 					)
@@ -1049,7 +1049,7 @@
 			(loop $fields
 				(br_if $done (i32.eq (local.get $i) (local.get $count)))
 				;; Struct fields have individual types; arrays repeat their single storage type.
-				(if (i32.le_u (local.get $op) (i32.const 474))
+				(if (i32.le_u (local.get $op) (i32.const M4_OP_STRUCT_NEW_DEFAULT))
 					(then
 						(local.set $type
 							(i32.load
@@ -1060,7 +1060,7 @@
 				)
 				;; Explicit struct and fixed-array constructors evaluate one expression per field.
 				(if
-					(i32.or (i32.eq (local.get $op) (i32.const 473)) (i32.eq (local.get $op) (i32.const 481)))
+					(i32.or (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_NEW)) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_FIXED)))
 					(then
 						(local.set $value (call $global-initializer (call $unpacked-type (local.get $type))))
 						(local.set $high (global.get $initializer-high))
@@ -1068,7 +1068,7 @@
 				)
 				;; Default construction rejects fields with a non-null reference type.
 				(if
-					(i32.or (i32.eq (local.get $op) (i32.const 474)) (i32.eq (local.get $op) (i32.const 480)))
+					(i32.or (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_NEW_DEFAULT)) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_DEFAULT)))
 					(then
 						;; A zero reference is valid only for nullable storage.
 						(if
@@ -1077,7 +1077,7 @@
 								(call $reference-nonnull (local.get $type))
 							)
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 					)
@@ -1135,12 +1135,12 @@
 
 		;; Data-backed arrays require numeric storage rather than reference elements.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 482)) (i32.eq (local.get $op) (i32.const 491)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_DATA)) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_INIT_DATA)))
 			(then
 				;; References cannot be reconstructed from arbitrary data bytes.
 				(if (call $is-reference (local.get $type))
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 				(local.set $index
@@ -1167,7 +1167,7 @@
 						)
 					)
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 			)
@@ -1189,7 +1189,7 @@
 				(i64.extend_i32_u (i32.load offset=4 (local.get $object)))
 			)
 			(then
-				(call $fail (i32.const 33))
+				(call $fail (i32.const M4_ERR_ARRAY_BOUNDS))
 			)
 		)
 	)
@@ -1215,7 +1215,7 @@
 
 		(local.set $count (i32.wrap_i64 (call $gc-pop)))
 		;; Fill reads its repeated value; other operations read a source index or byte offset.
-		(if (i32.eq (local.get $op) (i32.const 489))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_FILL))
 			(then
 				(local.set $value (call $gc-pop))
 				(local.set $high (global.get $gc-high))
@@ -1226,13 +1226,13 @@
 			)
 		)
 		;; Array copy additionally consumes a source array reference.
-		(if (i32.eq (local.get $op) (i32.const 490))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_COPY))
 			(then
 				(local.set $source (call $gc-object (call $gc-pop)))
 			)
 		)
 		;; In-place operations consume the destination index and reference after their source operands.
-		(if (i32.ge_u (local.get $op) (i32.const 489))
+		(if (i32.ge_u (local.get $op) (i32.const M4_OP_ARRAY_FILL))
 			(then
 				(local.set $dest-index (i32.wrap_i64 (call $gc-pop)))
 				(local.set $dest (call $gc-object (call $gc-pop)))
@@ -1246,7 +1246,7 @@
 			)
 		)
 		;; Array copy checks both ranges before changing any slot, including zero-length copies.
-		(if (i32.eq (local.get $op) (i32.const 490))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_COPY))
 			(then
 				(call $gc-array-range (local.get $source) (local.get $source-index) (local.get $count))
 				;; Bounds failures prevent partially copied objects.
@@ -1264,7 +1264,7 @@
 			)
 		)
 		;; Fill checks bounds before repeating a stored value across destination slots.
-		(if (i32.eq (local.get $op) (i32.const 489))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_FILL))
 			(then
 				;; A rejected range must not enter the write loop.
 				(if (global.get $error)
@@ -1292,7 +1292,7 @@
 		)
 		;; Data and element segments have distinct range units and trap categories.
 		(if
-			(i32.or (i32.eq (local.get $op) (i32.const 482)) (i32.eq (local.get $op) (i32.const 491)))
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_DATA)) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_INIT_DATA)))
 			(then
 				(local.set $segment (call $data-record (i32.load offset=4 (local.get $immediate))))
 				(local.set $width (call $gc-storage-width (local.get $type)))
@@ -1306,7 +1306,7 @@
 						(i64.extend_i32_u (i32.load offset=44 (local.get $segment)))
 					)
 					(then
-						(call $fail (i32.const 14))
+						(call $fail (i32.const M4_ERR_MEMORY_BOUNDS))
 					)
 				)
 				(local.set $source
@@ -1326,7 +1326,7 @@
 						(i64.extend_i32_u (i32.load offset=44 (local.get $segment)))
 					)
 					(then
-						(call $fail (i32.const 27))
+						(call $fail (i32.const M4_ERR_ELEMENT_BOUNDS))
 					)
 				)
 				(local.set $source
@@ -1344,7 +1344,7 @@
 			)
 		)
 		;; Constructor variants allocate their destination only after checking the complete source range.
-		(if (i32.lt_u (local.get $op) (i32.const 489))
+		(if (i32.lt_u (local.get $op) (i32.const M4_OP_ARRAY_FILL))
 			(then
 				(local.set $dest (call $gc-allocate (local.get $heap) (local.get $count)))
 			)
@@ -1402,7 +1402,7 @@
 		(select
 			(call $gc-reference (local.get $dest))
 			(i64.const 0)
-			(i32.lt_u (local.get $op) (i32.const 489))
+			(i32.lt_u (local.get $op) (i32.const M4_OP_ARRAY_FILL))
 		)
 	)
 
@@ -1444,7 +1444,7 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 7))
+				(call $fail (i32.const M4_ERR_OPERAND_STACK))
 			)
 		)
 		(drop (call $validation-pop (local.get $source)))
@@ -1452,7 +1452,7 @@
 		;; A transferred reference must have a final slot in the destination label vector.
 		(if (i32.eqz (call $shape-count (local.get $label)))
 			(then
-				(call $fail (i32.const 7))
+				(call $fail (i32.const M4_ERR_OPERAND_STACK))
 				(return)
 			)
 		)
@@ -1460,14 +1460,14 @@
 			(select
 				(local.get $target)
 				(call $gc-reference-difference (local.get $source) (local.get $target))
-				(i32.eq (local.get $op) (i32.const 493))
+				(i32.eq (local.get $op) (i32.const M4_OP_BR_ON_CAST))
 			)
 		)
 		(local.set $fallthrough
 			(select
 				(call $gc-reference-difference (local.get $source) (local.get $target))
 				(local.get $target)
-				(i32.eq (local.get $op) (i32.const 493))
+				(i32.eq (local.get $op) (i32.const M4_OP_BR_ON_CAST))
 			)
 		)
 		(call $validation-value (local.get $branch))

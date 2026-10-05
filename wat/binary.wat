@@ -23,7 +23,7 @@
 		(if
 			(i32.or (global.get $error) (i32.ge_u (global.get $bin-pos) (global.get $bin-limit)))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i32.const 0))
 			)
 		)
@@ -39,7 +39,7 @@
 		;; Reserved bytes cannot use an alternative or a longer LEB encoding.
 		(if (i32.ne (call $binary-read) (local.get $byte))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 			)
 		)
 	)
@@ -86,7 +86,7 @@
 										)
 									)
 									(then
-										(call $fail (i32.const 1))
+										(call $fail (i32.const M4_ERR_SYNTAX))
 										(br $done)
 									)
 								)
@@ -96,7 +96,7 @@
 								;; Reject a nonzero high remainder before accumulating this unsigned group.
 								(if (i32.shr_u (local.get $digit) (local.get $remaining))
 									(then
-										(call $fail (i32.const 1))
+										(call $fail (i32.const M4_ERR_SYNTAX))
 										(br $done)
 									)
 								)
@@ -135,7 +135,7 @@
 				;; A continuation after the last legal group is an overlong integer.
 				(if (i32.ge_u (local.get $shift) (local.get $width))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(br $done)
 					)
 				)
@@ -164,7 +164,7 @@
 		;; Declared sections and bodies cannot extend beyond their containing range.
 		(if (i64.gt_u (local.get $end) (i64.extend_i32_u (global.get $bin-limit)))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (global.get $bin-limit))
 			)
 		)
@@ -184,7 +184,7 @@
 		;; Text expansion has a separate capacity from guest code and data arenas.
 		(if (i32.ge_u (global.get $bin-used) (i32.const 1048576))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -207,7 +207,7 @@
 		;; A complete fragment must fit before any byte in it is written.
 		(if (i32.gt_u (global.get $bin-used) (i32.sub (i32.const 1048576) (local.get $width)))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -253,7 +253,7 @@
 				(i32.gt_u (global.get $bin-used) (i32.sub (i32.const 1048575) (local.get $n)))
 			)
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -556,7 +556,7 @@
 				(return)
 			)
 		)
-		(call $fail (i32.const 1))
+		(call $fail (i32.const M4_ERR_SYNTAX))
 	)
 
 	;; Decode a length-prefixed byte string; optionally validate its name encoding or discard a custom name.
@@ -619,7 +619,7 @@
 		;; Limits accept an optional maximum and the sixty-four-bit address flag.
 		(if (i32.ne (i32.and (local.get $flag) (i32.const -6)) (i32.const 0))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return)
 			)
 		)
@@ -675,7 +675,7 @@
 		;; Mutability is a byte enum, not a LEB integer.
 		(if (i32.gt_u (local.get $mut) (i32.const 1))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return)
 			)
 		)
@@ -805,7 +805,7 @@
 						;; A referenced type must lie within the expanded type vector.
 						(if (i32.ge_u (local.get $type) (global.get $bin-type-count))
 							(then
-								(call $fail (i32.const 4))
+								(call $fail (i32.const M4_ERR_UNKNOWN_EXPORT))
 								(br $done)
 							)
 						)
@@ -852,14 +852,14 @@
 				;; Unsupported initializer instructions remain malformed rather than executable guest code.
 				(if (i32.eq (local.get $arity) (i32.const -1))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(br $done)
 					)
 				)
 				;; The initializer stack must provide every required operand.
 				(if (i32.gt_u (local.get $arity) (local.get $depth))
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 						(br $done)
 					)
 				)
@@ -886,7 +886,7 @@
 				;; The bounded temporary constant stack cannot overwrite decoder scratch metadata.
 				(if (i32.ge_u (local.get $depth) (i32.const 256))
 					(then
-						(call $fail (i32.const 6))
+						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 						(br $done)
 					)
 				)
@@ -901,7 +901,7 @@
 		;; A well-typed constant expression produces exactly one value.
 		(if (i32.ne (local.get $depth) (i32.const 1))
 			(then
-				(call $fail (i32.const 7))
+				(call $fail (i32.const M4_ERR_OPERAND_STACK))
 			)
 		)
 	)
@@ -961,7 +961,7 @@
 				;; Reserved cast flag bits are malformed.
 				(if (i32.gt_u (local.get $alignment) (i32.const 3))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -999,7 +999,7 @@
 						;; Only the four core catch forms are valid.
 						(if (i32.gt_u (local.get $type) (i32.const 3))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(br $done)
 							)
 						)
@@ -1244,7 +1244,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1258,7 +1258,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1280,7 +1280,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1294,7 +1294,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1316,7 +1316,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1330,7 +1330,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1352,7 +1352,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1366,7 +1366,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1388,7 +1388,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1402,7 +1402,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1424,7 +1424,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1438,7 +1438,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1460,7 +1460,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1474,7 +1474,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1496,7 +1496,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1510,7 +1510,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1532,7 +1532,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1546,7 +1546,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1568,7 +1568,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1582,7 +1582,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1604,7 +1604,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1618,7 +1618,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1640,7 +1640,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1654,7 +1654,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1676,7 +1676,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1690,7 +1690,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1712,7 +1712,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1726,7 +1726,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1748,7 +1748,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1762,7 +1762,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1786,7 +1786,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1800,7 +1800,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1824,7 +1824,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1838,7 +1838,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1862,7 +1862,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1876,7 +1876,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1900,7 +1900,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1914,7 +1914,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1938,7 +1938,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1952,7 +1952,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1976,7 +1976,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -1990,7 +1990,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -2014,7 +2014,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -2028,7 +2028,7 @@
 				;; Reject alignment exponents that cannot be represented as a byte count.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -2120,7 +2120,7 @@
 				;; Empty and multi-value select vectors are malformed for this instruction.
 				(if (i32.ne (call $binary-u32) (i32.const 1))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -2316,7 +2316,7 @@
 				;; The memarg flag permits one explicit memory selector before the full-width offset.
 				(if (i32.ge_u (local.get $alignment) (i32.const 128))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -2330,7 +2330,7 @@
 				;; An unrepresentable alignment cannot wrap into a valid smaller alignment.
 				(if (i32.gt_u (local.get $alignment) (i32.const 31))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -2403,7 +2403,7 @@
 						;; Negative encodings other than the compact value bytes are malformed.
 						(if (i64.lt_s (local.get $wide) (i64.const 0))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return)
 							)
 						)
@@ -2460,7 +2460,7 @@
 				;; Binary namespace overflow is malformed regardless of this engine's smaller capacity.
 				(if (i64.gt_u (local.get $total) (i64.const 4294967295))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(br $preflight-done)
 					)
 				)
@@ -2472,10 +2472,10 @@
 		(if
 			(i32.and
 				(i32.eqz (global.get $error))
-				(i64.gt_u (local.get $total) (i64.const CAP_LOCALS))
+				(i64.gt_u (local.get $total) (i64.const M4_CAP_LOCALS))
 			)
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 			)
 		)
 		(global.set $bin-pos (local.get $groups-start))
@@ -2495,7 +2495,7 @@
 				;; The binary format cannot declare a local namespace larger than an unsigned 32-bit count.
 				(if (i64.gt_u (local.get $total) (i64.const 4294967295))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(br $locals-done)
 					)
 				)
@@ -2509,9 +2509,9 @@
 					;; Nonempty groups copy their one encoded type for each additional local slot.
 					(else
 						;; Bounded valid local counts cannot exhaust the output writer through billions of repetitions.
-						(if (i64.gt_u (local.get $total) (i64.const CAP_LOCALS))
+						(if (i64.gt_u (local.get $total) (i64.const M4_CAP_LOCALS))
 							(then
-								(call $fail (i32.const 6))
+								(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 								(br $locals-done)
 							)
 						)
@@ -2561,7 +2561,7 @@
 						;; Do not alias an unsupported bulk/table subopcode into another instruction.
 						(if (i32.gt_u (local.get $byte) (i32.const 17))
 							(then
-								(call $fail (i32.const 2))
+								(call $fail (i32.const M4_ERR_UNSUPPORTED))
 								(br $done)
 							)
 						)
@@ -2596,7 +2596,7 @@
 						)
 					)
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(br $done)
 					)
 				)
@@ -2607,7 +2607,7 @@
 		;; A function body must end at exactly its declared byte boundary.
 		(if (i32.ne (global.get $bin-pos) (local.get $body-end))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 			)
 		)
 		(global.set $bin-limit (local.get $outer-limit))
@@ -2628,7 +2628,7 @@
 				;; Imports do not permit an initializer marker.
 				(if (i32.eqz (local.get $defined))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -2655,7 +2655,7 @@
 						(i32.gt_u (local.get $type) (i32.const 116))
 					)
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -2748,9 +2748,9 @@
 		(if (i32.eq (local.get $section) (i32.const 3))
 			(then
 				;; The type-index map has one bounded slot per possible defined function.
-				(if (i32.gt_u (local.get $count) (i32.const CAP_FUNCTIONS))
+				(if (i32.gt_u (local.get $count) (i32.const M4_CAP_FUNCTIONS))
 					(then
-						(call $fail (i32.const 6))
+						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 						(return)
 					)
 				)
@@ -2763,7 +2763,7 @@
 				;; A mismatch is malformed before any body is expanded or evaluated.
 				(if (i32.ne (local.get $count) (global.get $bin-functions))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
@@ -2837,7 +2837,7 @@
 						;; Unknown import kinds cannot be interpreted as a valid descriptor.
 						(if (i32.gt_u (local.get $kind) (i32.const 4))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 							)
 						)
 						(call $binary-close)
@@ -2929,7 +2929,7 @@
 						;; Unknown binary kinds cannot fall through to a valid export descriptor.
 						(if (i32.gt_u (local.get $kind) (i32.const 4))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(br $done)
 							)
 						)
@@ -2958,7 +2958,7 @@
 						;; Only active implicit, passive, and active explicit-memory data modes are valid.
 						(if (i32.gt_u (local.get $kind) (i32.const 2))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(br $done)
 							)
 						)
@@ -3000,12 +3000,12 @@
 		;; A pending invocation retains exclusive ownership of the interpreter state.
 		(if (i32.ge_s (global.get $pending-import) (i32.const 0))
 			(then
-				(call $fail (i32.const 22))
+				(call $fail (i32.const M4_ERR_SUSPENDED_REENTRY))
 				(return (global.get $error))
 			)
 		)
 		(global.set $bin-memory-type (i32.const 1))
-		(global.set $error (i32.const 0))
+		(global.set $error (i32.const M4_ERR_SUCCESS))
 		(global.set $ready (i32.const 0))
 		(global.set $segments-ready (i32.const 0))
 		(global.set $resource-phase (i32.const 0))
@@ -3013,7 +3013,7 @@
 		;; Reject invalid host input ranges before reading a binary header.
 		(if (i32.eqz (call $buffer-ok (local.get $p) (local.get $n)))
 			(then
-				(call $fail (i32.const 5))
+				(call $fail (i32.const M4_ERR_INVALID_BUFFER))
 				(return (global.get $error))
 			)
 		)
@@ -3035,7 +3035,7 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (global.get $error))
 			)
 		)
@@ -3064,7 +3064,7 @@
 				;; IDs outside the MVP section set are malformed rather than ignored.
 				(if (i32.gt_u (local.get $section) (i32.const 13))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(br $done)
 					)
 				)
@@ -3099,7 +3099,7 @@
 						;; Repeated or decreasing noncustom section IDs cannot be reinterpreted as a valid module.
 						(if (i32.le_u (local.get $priority) (local.get $last))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(br $done)
 							)
 						)
@@ -3111,7 +3111,7 @@
 				;; Every noncustom section must consume exactly its declared payload.
 				(if (i32.ne (global.get $bin-pos) (local.get $section-end))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(br $done)
 					)
 				)
@@ -3132,7 +3132,7 @@
 				(i32.eqz (local.get $code-seen))
 			)
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 			)
 		)
 		(call $binary-close)
@@ -3152,7 +3152,7 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (global.get $error))
 			)
 		)
@@ -3170,7 +3170,7 @@
 		;; Bits outside the three defined flag bits are malformed segment encodings.
 		(if (i32.gt_u (local.get $flag) (i32.const 7))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return)
 			)
 		)
@@ -3220,7 +3220,7 @@
 								)
 							)
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return)
 							)
 						)
@@ -3404,7 +3404,7 @@
 				(return)
 			)
 		)
-		(call $fail (i32.const 1))
+		(call $fail (i32.const M4_ERR_SYNTAX))
 	)
 
 	;; Emit an explicit nullable or non-null reference type with its signed heap type.
@@ -3601,7 +3601,7 @@
 		;; Only the two defined mutability bytes are accepted.
 		(if (i32.gt_u (local.get $mut) (i32.const 1))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return)
 			)
 		)
@@ -3733,7 +3733,7 @@
 				(return)
 			)
 		)
-		(call $fail (i32.const 1))
+		(call $fail (i32.const M4_ERR_SYNTAX))
 	)
 
 	;; Decode one subtype, including finality and its optional declared supertype.
@@ -3743,9 +3743,9 @@
 		(local $sub i32)
 
 		;; Expanded recursive members have the same bounded type capacity as text declarations.
-		(if (i32.ge_u (global.get $bin-type-count) (i32.const CAP_TYPES))
+		(if (i32.ge_u (global.get $bin-type-count) (i32.const M4_CAP_TYPES))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -3771,7 +3771,7 @@
 				;; Multiple inheritance is outside the core type grammar.
 				(if (i32.gt_u (local.get $n) (i32.const 1))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)

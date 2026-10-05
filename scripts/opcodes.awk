@@ -154,6 +154,18 @@ function binary_dispatch(low, high, tabs, middle, code, i, text, j, width, entry
 
 END {
   if (invalid) exit 1
+  # Generate the checked-in m4 names from the same IDs used by WAT dispatch.
+  if (emit_m4) {
+    print "m4_dnl Generated from scripts/opcodes.tsv; regenerate with make."
+    print "m4_dnl These are interpreter IDs, not WebAssembly wire encodings."
+    for (i = 1; i <= count; i++) {
+      macro = toupper(name[i])
+      gsub(/[^A-Z0-9_]/, "_", macro)
+      if (seen_macro[macro]++) exit 1
+      printf "m4_define(<!M4_OP_%s!>,<!%d!>)m4_dnl\n", macro, id[i]
+    }
+    exit
+  }
   print "\t;; Opcode keyword bytes occupy reserved memory below the host source buffers."
   offset = 128
   print "\t(data (i32.const 128)"

@@ -28,7 +28,7 @@
 		;; Unknown formats cannot determine a lane count or vector representation.
 		(if (i32.eq (local.get $format) (i32.const 6))
 			(then
-				(call $fail (i32.const 1))
+				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i32.const 0))
 			)
 		)
@@ -42,9 +42,9 @@
 		)
 		;; Literal storage shares the bounded immediate arena with branch and table operands.
 		(if
-			(i32.gt_u (global.get $table-count) (i32.sub (i32.const CAP_TABLE) (i32.const 4)))
+			(i32.gt_u (global.get $table-count) (i32.sub (i32.const M4_CAP_TABLE) (i32.const 4)))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))
 			)
 		)
@@ -93,7 +93,7 @@
 										(i64.gt_s (local.get $value) (local.get $mask))
 									)
 									(then
-										(call $fail (i32.const 3))
+										(call $fail (i32.const M4_ERR_INTEGER_RANGE))
 									)
 								)
 							)
@@ -418,13 +418,13 @@
 		(global.set $vector-low (i64.const 0))
 		(global.set $vector-high (i64.const 0))
 		(local.set $width
-			(select (i32.const 32) (i32.const 64) (i32.le_u (local.get $op) (i32.const 446)))
+			(select (i32.const 32) (i32.const 64) (i32.le_u (local.get $op) (i32.const M4_OP_F32X4_RELAXED_NMADD)))
 		)
 		;; Dot operations group two or four signed bytes into one output lane.
-		(if (i32.ge_u (local.get $op) (i32.const 458))
+		(if (i32.ge_u (local.get $op) (i32.const M4_OP_I16X8_RELAXED_DOT_I8X16_I7X16_S))
 			(then
 				(local.set $width
-					(select (i32.const 16) (i32.const 32) (i32.eq (local.get $op) (i32.const 458)))
+					(select (i32.const 16) (i32.const 32) (i32.eq (local.get $op) (i32.const M4_OP_I16X8_RELAXED_DOT_I8X16_I7X16_S)))
 				)
 				(local.set $group (i32.div_u (local.get $width) (i32.const 8)))
 			)
@@ -444,7 +444,7 @@
 			(if (local.get $group)
 				(then
 					(local.set $sum
-						(select (local.get $z) (i64.const 0) (i32.eq (local.get $op) (i32.const 459)))
+						(select (local.get $z) (i64.const 0) (i32.eq (local.get $op) (i32.const M4_OP_I32X4_RELAXED_DOT_I8X16_I7X16_ADD_S)))
 					)
 					(local.set $j (i32.const 0))
 					;; Accumulate every byte belonging to this output lane.
@@ -486,7 +486,7 @@
 								)
 							)
 							;; nmadd negates the rounded product before addition.
-							(if (i32.eq (local.get $op) (i32.const 446))
+							(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_RELAXED_NMADD))
 								(then
 									(local.set $f (f32.neg (local.get $f)))
 								)
@@ -505,7 +505,7 @@
 								(f64.mul (f64.reinterpret_i64 (local.get $x)) (f64.reinterpret_i64 (local.get $y)))
 							)
 							;; nmadd negates the rounded product before addition.
-							(if (i32.eq (local.get $op) (i32.const 448))
+							(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_RELAXED_NMADD))
 								(then
 									(local.set $d (f64.neg (local.get $d)))
 								)
@@ -538,100 +538,100 @@
 		(result i64)
 
 		;; Normalize relaxed aliases before selecting a strict lane family.
-		(if (i32.ge_u (local.get $op) (i32.const 440))
+		(if (i32.ge_u (local.get $op) (i32.const M4_OP_I8X16_RELAXED_SWIZZLE))
 			(then
 				;; i8x16.relaxed_swizzle uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const 440))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_RELAXED_SWIZZLE))
 					(then
-						(local.set $op (i32.const 336))
+						(local.set $op (i32.const M4_OP_I8X16_SWIZZLE))
 					)
 				)
 				;; i32x4.relaxed_trunc_f32x4_s uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const 441))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_RELAXED_TRUNC_F32X4_S))
 					(then
-						(local.set $op (i32.const 408))
+						(local.set $op (i32.const M4_OP_I32X4_TRUNC_SAT_F32X4_S))
 					)
 				)
 				;; i32x4.relaxed_trunc_f32x4_u uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const 442))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_RELAXED_TRUNC_F32X4_U))
 					(then
-						(local.set $op (i32.const 409))
+						(local.set $op (i32.const M4_OP_I32X4_TRUNC_SAT_F32X4_U))
 					)
 				)
 				;; i32x4.relaxed_trunc_f64x2_s_zero uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const 443))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_RELAXED_TRUNC_F64X2_S_ZERO))
 					(then
-						(local.set $op (i32.const 412))
+						(local.set $op (i32.const M4_OP_I32X4_TRUNC_SAT_F64X2_S_ZERO))
 					)
 				)
 				;; i32x4.relaxed_trunc_f64x2_u_zero uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const 444))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_RELAXED_TRUNC_F64X2_U_ZERO))
 					(then
-						(local.set $op (i32.const 413))
+						(local.set $op (i32.const M4_OP_I32X4_TRUNC_SAT_F64X2_U_ZERO))
 					)
 				)
 				;; i8x16.relaxed_laneselect uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const 449))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_RELAXED_LANESELECT))
 					(then
-						(local.set $op (i32.const 362))
+						(local.set $op (i32.const M4_OP_V128_BITSELECT))
 					)
 				)
 				;; i16x8.relaxed_laneselect uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const 450))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_RELAXED_LANESELECT))
 					(then
-						(local.set $op (i32.const 362))
+						(local.set $op (i32.const M4_OP_V128_BITSELECT))
 					)
 				)
 				;; i32x4.relaxed_laneselect uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const 451))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_RELAXED_LANESELECT))
 					(then
-						(local.set $op (i32.const 362))
+						(local.set $op (i32.const M4_OP_V128_BITSELECT))
 					)
 				)
 				;; i64x2.relaxed_laneselect uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const 452))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_RELAXED_LANESELECT))
 					(then
-						(local.set $op (i32.const 362))
+						(local.set $op (i32.const M4_OP_V128_BITSELECT))
 					)
 				)
 				;; f32x4.relaxed_min uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const 453))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_RELAXED_MIN))
 					(then
-						(local.set $op (i32.const 320))
+						(local.set $op (i32.const M4_OP_F32X4_MIN))
 					)
 				)
 				;; f32x4.relaxed_max uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const 454))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_RELAXED_MAX))
 					(then
-						(local.set $op (i32.const 321))
+						(local.set $op (i32.const M4_OP_F32X4_MAX))
 					)
 				)
 				;; f64x2.relaxed_min uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const 455))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_RELAXED_MIN))
 					(then
-						(local.set $op (i32.const 331))
+						(local.set $op (i32.const M4_OP_F64X2_MIN))
 					)
 				)
 				;; f64x2.relaxed_max uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const 456))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_RELAXED_MAX))
 					(then
-						(local.set $op (i32.const 332))
+						(local.set $op (i32.const M4_OP_F64X2_MAX))
 					)
 				)
 				;; i16x8.relaxed_q15mulr_s uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const 457))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_RELAXED_Q15MULR_S))
 					(then
-						(local.set $op (i32.const 374))
+						(local.set $op (i32.const M4_OP_I16X8_Q15MULR_SAT_S))
 					)
 				)
 				;; Relaxed multiply-add and dot products evaluate scalar lanes without native guest execution.
 				(if
 					(i32.or
 						(i32.and
-							(i32.ge_u (local.get $op) (i32.const 445))
-							(i32.le_u (local.get $op) (i32.const 448))
+							(i32.ge_u (local.get $op) (i32.const M4_OP_F32X4_RELAXED_MADD))
+							(i32.le_u (local.get $op) (i32.const M4_OP_F64X2_RELAXED_NMADD))
 						)
-						(i32.ge_u (local.get $op) (i32.const 458))
+						(i32.ge_u (local.get $op) (i32.const M4_OP_I16X8_RELAXED_DOT_I8X16_I7X16_S))
 					)
 					(then
 						(return
@@ -652,7 +652,7 @@
 		(global.set $vector-low (i64.const 0))
 		(global.set $vector-high (i64.const 0))
 		;; Opcode 203 predates its corresponding integer lane family.
-		(if (i32.eq (local.get $op) (i32.const 203))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_ADD))
 			(then
 				(return
 					(call $vector-words
@@ -666,7 +666,7 @@
 			)
 		)
 		;; Opcode 204 predates its corresponding integer lane family.
-		(if (i32.eq (local.get $op) (i32.const 204))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_ADD))
 			(then
 				(return
 					(call $vector-wide
@@ -680,13 +680,13 @@
 			)
 		)
 		;; Opcodes through 299 belong to the earlier lane families.
-		(if (i32.le_u (local.get $op) (i32.const 299))
+		(if (i32.le_u (local.get $op) (i32.const M4_OP_I32X4_MAX_U))
 			(then
 				;; Opcodes through 234 belong to the earlier lane families.
-				(if (i32.le_u (local.get $op) (i32.const 234))
+				(if (i32.le_u (local.get $op) (i32.const M4_OP_I32X4_GE_U))
 					(then
 						;; Opcodes through 214 belong to the earlier lane families.
-						(if (i32.le_u (local.get $op) (i32.const 214))
+						(if (i32.le_u (local.get $op) (i32.const M4_OP_I8X16_GE_U))
 							(then
 								(return
 									(call $vector-compare8
@@ -701,7 +701,7 @@
 							;; Later opcode families bypass the earlier handlers.
 							(else
 								;; Opcodes through 224 belong to the earlier lane families.
-								(if (i32.le_u (local.get $op) (i32.const 224))
+								(if (i32.le_u (local.get $op) (i32.const M4_OP_I16X8_GE_U))
 									(then
 										(return
 											(call $vector-compare16
@@ -732,10 +732,10 @@
 					;; Later opcode families bypass the earlier handlers.
 					(else
 						;; Opcodes through 270 belong to the earlier lane families.
-						(if (i32.le_u (local.get $op) (i32.const 270))
+						(if (i32.le_u (local.get $op) (i32.const M4_OP_I8X16_AVGR_U))
 							(then
 								;; Opcodes through 246 belong to the earlier lane families.
-								(if (i32.le_u (local.get $op) (i32.const 246))
+								(if (i32.le_u (local.get $op) (i32.const M4_OP_F64X2_GE))
 									(then
 										(return
 											(call $vector-compare-float
@@ -764,7 +764,7 @@
 							;; Later opcode families bypass the earlier handlers.
 							(else
 								;; Opcodes through 288 belong to the earlier lane families.
-								(if (i32.le_u (local.get $op) (i32.const 288))
+								(if (i32.le_u (local.get $op) (i32.const M4_OP_I16X8_AVGR_U))
 									(then
 										(return
 											(call $vector-shorts
@@ -797,13 +797,13 @@
 			;; Later opcode families bypass the earlier handlers.
 			(else
 				;; Opcodes through 356 belong to the earlier lane families.
-				(if (i32.le_u (local.get $op) (i32.const 356))
+				(if (i32.le_u (local.get $op) (i32.const M4_OP_F64X2_REPLACE_LANE))
 					(then
 						;; Opcodes through 323 belong to the earlier lane families.
-						(if (i32.le_u (local.get $op) (i32.const 323))
+						(if (i32.le_u (local.get $op) (i32.const M4_OP_F32X4_PMAX))
 							(then
 								;; Opcodes through 312 belong to the earlier lane families.
-								(if (i32.le_u (local.get $op) (i32.const 312))
+								(if (i32.le_u (local.get $op) (i32.const M4_OP_I64X2_GE_S))
 									(then
 										(return
 											(call $vector-wide
@@ -832,7 +832,7 @@
 							;; Later opcode families bypass the earlier handlers.
 							(else
 								;; Opcodes through 334 belong to the earlier lane families.
-								(if (i32.le_u (local.get $op) (i32.const 334))
+								(if (i32.le_u (local.get $op) (i32.const M4_OP_F64X2_PMAX))
 									(then
 										(return
 											(call $vector-float64
@@ -864,10 +864,10 @@
 					;; Later opcode families bypass the earlier handlers.
 					(else
 						;; Opcodes through 407 belong to the earlier lane families.
-						(if (i32.le_u (local.get $op) (i32.const 407))
+						(if (i32.le_u (local.get $op) (i32.const M4_OP_I64X2_EXTMUL_HIGH_I32X4_U))
 							(then
 								;; Opcodes through 365 belong to the earlier lane families.
-								(if (i32.le_u (local.get $op) (i32.const 365))
+								(if (i32.le_u (local.get $op) (i32.const M4_OP_F64X2_PROMOTE_LOW_F32X4))
 									(then
 										(return
 											(call $vector-bits
@@ -898,7 +898,7 @@
 							;; Later opcode families bypass the earlier handlers.
 							(else
 								;; Opcodes through 415 belong to the earlier lane families.
-								(if (i32.le_u (local.get $op) (i32.const 415))
+								(if (i32.le_u (local.get $op) (i32.const M4_OP_F64X2_CONVERT_LOW_I32X4_U))
 									(then
 										(return
 											(call $vector-conversions
@@ -944,7 +944,7 @@
 		(local $y i64)
 
 		;; Execute i8x16.eq independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 205))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_EQ))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -965,7 +965,7 @@
 			)
 		)
 		;; Execute i8x16.ne independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 206))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_NE))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -986,7 +986,7 @@
 			)
 		)
 		;; Execute i8x16.lt_s independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 207))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_LT_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1015,7 +1015,7 @@
 			)
 		)
 		;; Execute i8x16.lt_u independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 208))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_LT_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1036,7 +1036,7 @@
 			)
 		)
 		;; Execute i8x16.gt_s independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 209))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_GT_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1065,7 +1065,7 @@
 			)
 		)
 		;; Execute i8x16.gt_u independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 210))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_GT_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1086,7 +1086,7 @@
 			)
 		)
 		;; Execute i8x16.le_s independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 211))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_LE_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1115,7 +1115,7 @@
 			)
 		)
 		;; Execute i8x16.le_u independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 212))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_LE_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1136,7 +1136,7 @@
 			)
 		)
 		;; Execute i8x16.ge_s independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 213))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_GE_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1165,7 +1165,7 @@
 			)
 		)
 		;; Execute i8x16.ge_u independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 214))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_GE_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1185,7 +1185,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -1202,7 +1202,7 @@
 		(local $y i64)
 
 		;; Execute i16x8.eq independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 215))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EQ))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1223,7 +1223,7 @@
 			)
 		)
 		;; Execute i16x8.ne independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 216))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_NE))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1244,7 +1244,7 @@
 			)
 		)
 		;; Execute i16x8.lt_s independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 217))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_LT_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1273,7 +1273,7 @@
 			)
 		)
 		;; Execute i16x8.lt_u independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 218))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_LT_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1294,7 +1294,7 @@
 			)
 		)
 		;; Execute i16x8.gt_s independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 219))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_GT_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1323,7 +1323,7 @@
 			)
 		)
 		;; Execute i16x8.gt_u independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 220))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_GT_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1344,7 +1344,7 @@
 			)
 		)
 		;; Execute i16x8.le_s independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 221))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_LE_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1373,7 +1373,7 @@
 			)
 		)
 		;; Execute i16x8.le_u independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 222))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_LE_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1394,7 +1394,7 @@
 			)
 		)
 		;; Execute i16x8.ge_s independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 223))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_GE_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1423,7 +1423,7 @@
 			)
 		)
 		;; Execute i16x8.ge_u independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 224))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_GE_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1443,7 +1443,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -1460,7 +1460,7 @@
 		(local $y i64)
 
 		;; Execute i32x4.eq independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 225))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EQ))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1481,7 +1481,7 @@
 			)
 		)
 		;; Execute i32x4.ne independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 226))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_NE))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1502,7 +1502,7 @@
 			)
 		)
 		;; Execute i32x4.lt_s independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 227))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_LT_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1531,7 +1531,7 @@
 			)
 		)
 		;; Execute i32x4.lt_u independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 228))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_LT_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1552,7 +1552,7 @@
 			)
 		)
 		;; Execute i32x4.gt_s independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 229))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_GT_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1581,7 +1581,7 @@
 			)
 		)
 		;; Execute i32x4.gt_u independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 230))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_GT_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1602,7 +1602,7 @@
 			)
 		)
 		;; Execute i32x4.le_s independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 231))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_LE_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1631,7 +1631,7 @@
 			)
 		)
 		;; Execute i32x4.le_u independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 232))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_LE_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1652,7 +1652,7 @@
 			)
 		)
 		;; Execute i32x4.ge_s independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 233))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_GE_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1681,7 +1681,7 @@
 			)
 		)
 		;; Execute i32x4.ge_u independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 234))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_GE_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1701,7 +1701,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -1718,7 +1718,7 @@
 		(local $y i64)
 
 		;; Execute f32x4.eq independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 235))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_EQ))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1739,7 +1739,7 @@
 			)
 		)
 		;; Execute f32x4.ne independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 236))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_NE))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1760,7 +1760,7 @@
 			)
 		)
 		;; Execute f32x4.lt independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 237))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_LT))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1781,7 +1781,7 @@
 			)
 		)
 		;; Execute f32x4.gt independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 238))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_GT))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1802,7 +1802,7 @@
 			)
 		)
 		;; Execute f32x4.le independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 239))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_LE))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1823,7 +1823,7 @@
 			)
 		)
 		;; Execute f32x4.ge independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 240))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_GE))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1844,7 +1844,7 @@
 			)
 		)
 		;; Execute f64x2.eq independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 241))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_EQ))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1865,7 +1865,7 @@
 			)
 		)
 		;; Execute f64x2.ne independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 242))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_NE))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1886,7 +1886,7 @@
 			)
 		)
 		;; Execute f64x2.lt independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 243))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_LT))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1907,7 +1907,7 @@
 			)
 		)
 		;; Execute f64x2.gt independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 244))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_GT))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1928,7 +1928,7 @@
 			)
 		)
 		;; Execute f64x2.le independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 245))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_LE))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1949,7 +1949,7 @@
 			)
 		)
 		;; Execute f64x2.ge independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 246))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_GE))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -1969,7 +1969,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -1986,7 +1986,7 @@
 		(local $y i64)
 
 		;; Execute i8x16.abs independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 247))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_ABS))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2011,7 +2011,7 @@
 			)
 		)
 		;; Execute i8x16.neg independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 248))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_NEG))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2029,7 +2029,7 @@
 			)
 		)
 		;; Execute i8x16.popcnt independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 249))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_POPCNT))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2047,7 +2047,7 @@
 			)
 		)
 		;; Execute f32x4.ceil independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 250))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_CEIL))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2068,7 +2068,7 @@
 			)
 		)
 		;; Execute f32x4.floor independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 251))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_FLOOR))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2089,7 +2089,7 @@
 			)
 		)
 		;; Execute f32x4.trunc independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 252))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_TRUNC))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2110,7 +2110,7 @@
 			)
 		)
 		;; Execute f32x4.nearest independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 253))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_NEAREST))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2131,7 +2131,7 @@
 			)
 		)
 		;; Execute i8x16.shl independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 254))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_SHL))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2152,7 +2152,7 @@
 			)
 		)
 		;; Execute i8x16.shr_s independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 255))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_SHR_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2176,7 +2176,7 @@
 			)
 		)
 		;; Execute i8x16.shr_u independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 256))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_SHR_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2197,7 +2197,7 @@
 			)
 		)
 		;; Execute i8x16.add independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 257))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_ADD))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2215,7 +2215,7 @@
 			)
 		)
 		;; Execute i8x16.add_sat_s independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 258))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_ADD_SAT_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2243,7 +2243,7 @@
 			)
 		)
 		;; Execute i8x16.add_sat_u independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 259))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_ADD_SAT_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2264,7 +2264,7 @@
 			)
 		)
 		;; Execute i8x16.sub independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 260))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_SUB))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2282,7 +2282,7 @@
 			)
 		)
 		;; Execute i8x16.sub_sat_s independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 261))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_SUB_SAT_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2310,7 +2310,7 @@
 			)
 		)
 		;; Execute i8x16.sub_sat_u independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 262))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_SUB_SAT_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2331,7 +2331,7 @@
 			)
 		)
 		;; Execute f64x2.ceil independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 263))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_CEIL))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2352,7 +2352,7 @@
 			)
 		)
 		;; Execute f64x2.floor independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 264))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_FLOOR))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2373,7 +2373,7 @@
 			)
 		)
 		;; Execute i8x16.min_s independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 265))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_MIN_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2401,7 +2401,7 @@
 			)
 		)
 		;; Execute i8x16.min_u independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 266))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_MIN_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2422,7 +2422,7 @@
 			)
 		)
 		;; Execute i8x16.max_s independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 267))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_MAX_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2450,7 +2450,7 @@
 			)
 		)
 		;; Execute i8x16.max_u independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 268))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_MAX_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2471,7 +2471,7 @@
 			)
 		)
 		;; Execute f64x2.trunc independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 269))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_TRUNC))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2492,7 +2492,7 @@
 			)
 		)
 		;; Execute i8x16.avgr_u independently in each 8-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 270))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_AVGR_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2512,7 +2512,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -2529,7 +2529,7 @@
 		(local $y i64)
 
 		;; Execute i16x8.abs independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 271))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_ABS))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2554,7 +2554,7 @@
 			)
 		)
 		;; Execute i16x8.neg independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 272))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_NEG))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2572,7 +2572,7 @@
 			)
 		)
 		;; Execute i16x8.shl independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 273))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_SHL))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2593,7 +2593,7 @@
 			)
 		)
 		;; Execute i16x8.shr_s independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 274))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_SHR_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2617,7 +2617,7 @@
 			)
 		)
 		;; Execute i16x8.shr_u independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 275))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_SHR_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2638,7 +2638,7 @@
 			)
 		)
 		;; Execute i16x8.add independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 276))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_ADD))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2659,7 +2659,7 @@
 			)
 		)
 		;; Execute i16x8.add_sat_s independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 277))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_ADD_SAT_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2687,7 +2687,7 @@
 			)
 		)
 		;; Execute i16x8.add_sat_u independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 278))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_ADD_SAT_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2712,7 +2712,7 @@
 			)
 		)
 		;; Execute i16x8.sub independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 279))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_SUB))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2733,7 +2733,7 @@
 			)
 		)
 		;; Execute i16x8.sub_sat_s independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 280))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_SUB_SAT_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2761,7 +2761,7 @@
 			)
 		)
 		;; Execute i16x8.sub_sat_u independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 281))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_SUB_SAT_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2786,7 +2786,7 @@
 			)
 		)
 		;; Execute f64x2.nearest independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 282))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_NEAREST))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2807,7 +2807,7 @@
 			)
 		)
 		;; Execute i16x8.mul independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 283))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_MUL))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2828,7 +2828,7 @@
 			)
 		)
 		;; Execute i16x8.min_s independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 284))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_MIN_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2856,7 +2856,7 @@
 			)
 		)
 		;; Execute i16x8.min_u independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 285))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_MIN_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2877,7 +2877,7 @@
 			)
 		)
 		;; Execute i16x8.max_s independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 286))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_MAX_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2905,7 +2905,7 @@
 			)
 		)
 		;; Execute i16x8.max_u independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 287))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_MAX_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2926,7 +2926,7 @@
 			)
 		)
 		;; Execute i16x8.avgr_u independently in each 16-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 288))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_AVGR_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2946,7 +2946,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -2963,7 +2963,7 @@
 		(local $y i64)
 
 		;; Execute i32x4.add independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 203))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_ADD))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -2984,7 +2984,7 @@
 			)
 		)
 		;; Execute i32x4.abs independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 289))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_ABS))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3009,7 +3009,7 @@
 			)
 		)
 		;; Execute i32x4.neg independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 290))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_NEG))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3027,7 +3027,7 @@
 			)
 		)
 		;; Execute i32x4.shl independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 291))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_SHL))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3048,7 +3048,7 @@
 			)
 		)
 		;; Execute i32x4.shr_s independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 292))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_SHR_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3072,7 +3072,7 @@
 			)
 		)
 		;; Execute i32x4.shr_u independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 293))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_SHR_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3093,7 +3093,7 @@
 			)
 		)
 		;; Execute i32x4.sub independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 294))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_SUB))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3114,7 +3114,7 @@
 			)
 		)
 		;; Execute i32x4.mul independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 295))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_MUL))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3135,7 +3135,7 @@
 			)
 		)
 		;; Execute i32x4.min_s independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 296))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_MIN_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3163,7 +3163,7 @@
 			)
 		)
 		;; Execute i32x4.min_u independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 297))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_MIN_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3184,7 +3184,7 @@
 			)
 		)
 		;; Execute i32x4.max_s independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 298))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_MAX_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3212,7 +3212,7 @@
 			)
 		)
 		;; Execute i32x4.max_u independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 299))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_MAX_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3232,7 +3232,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -3249,7 +3249,7 @@
 		(local $y i64)
 
 		;; Execute i64x2.add independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 204))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_ADD))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3270,7 +3270,7 @@
 			)
 		)
 		;; Execute i64x2.abs independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 300))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_ABS))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3295,7 +3295,7 @@
 			)
 		)
 		;; Execute i64x2.neg independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 301))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_NEG))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3313,7 +3313,7 @@
 			)
 		)
 		;; Execute i64x2.shl independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 302))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_SHL))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3334,7 +3334,7 @@
 			)
 		)
 		;; Execute i64x2.shr_s independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 303))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_SHR_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3358,7 +3358,7 @@
 			)
 		)
 		;; Execute i64x2.shr_u independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 304))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_SHR_U))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3379,7 +3379,7 @@
 			)
 		)
 		;; Execute i64x2.sub independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 305))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_SUB))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3400,7 +3400,7 @@
 			)
 		)
 		;; Execute i64x2.mul independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 306))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_MUL))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3421,7 +3421,7 @@
 			)
 		)
 		;; Execute i64x2.eq independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 307))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EQ))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3442,7 +3442,7 @@
 			)
 		)
 		;; Execute i64x2.ne independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 308))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_NE))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3463,7 +3463,7 @@
 			)
 		)
 		;; Execute i64x2.lt_s independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 309))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_LT_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3492,7 +3492,7 @@
 			)
 		)
 		;; Execute i64x2.gt_s independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 310))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_GT_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3521,7 +3521,7 @@
 			)
 		)
 		;; Execute i64x2.le_s independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 311))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_LE_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3550,7 +3550,7 @@
 			)
 		)
 		;; Execute i64x2.ge_s independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 312))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_GE_S))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3578,7 +3578,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -3595,7 +3595,7 @@
 		(local $y i64)
 
 		;; Execute f32x4.abs independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 313))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_ABS))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3616,7 +3616,7 @@
 			)
 		)
 		;; Execute f32x4.neg independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 314))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_NEG))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3637,7 +3637,7 @@
 			)
 		)
 		;; Execute f32x4.sqrt independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 315))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_SQRT))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3658,7 +3658,7 @@
 			)
 		)
 		;; Execute f32x4.add independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 316))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_ADD))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3679,7 +3679,7 @@
 			)
 		)
 		;; Execute f32x4.sub independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 317))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_SUB))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3700,7 +3700,7 @@
 			)
 		)
 		;; Execute f32x4.mul independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 318))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_MUL))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3721,7 +3721,7 @@
 			)
 		)
 		;; Execute f32x4.div independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 319))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_DIV))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3742,7 +3742,7 @@
 			)
 		)
 		;; Execute f32x4.min independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 320))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_MIN))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3763,7 +3763,7 @@
 			)
 		)
 		;; Execute f32x4.max independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 321))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_MAX))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3784,7 +3784,7 @@
 			)
 		)
 		;; Execute f32x4.pmin independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 322))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_PMIN))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3812,7 +3812,7 @@
 			)
 		)
 		;; Execute f32x4.pmax independently in each 32-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 323))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_PMAX))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3839,7 +3839,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -3856,7 +3856,7 @@
 		(local $y i64)
 
 		;; Execute f64x2.abs independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 324))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_ABS))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3877,7 +3877,7 @@
 			)
 		)
 		;; Execute f64x2.neg independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 325))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_NEG))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3898,7 +3898,7 @@
 			)
 		)
 		;; Execute f64x2.sqrt independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 326))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_SQRT))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3919,7 +3919,7 @@
 			)
 		)
 		;; Execute f64x2.add independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 327))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_ADD))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3940,7 +3940,7 @@
 			)
 		)
 		;; Execute f64x2.sub independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 328))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_SUB))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3961,7 +3961,7 @@
 			)
 		)
 		;; Execute f64x2.mul independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 329))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_MUL))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -3982,7 +3982,7 @@
 			)
 		)
 		;; Execute f64x2.div independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 330))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_DIV))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -4003,7 +4003,7 @@
 			)
 		)
 		;; Execute f64x2.min independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 331))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_MIN))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -4024,7 +4024,7 @@
 			)
 		)
 		;; Execute f64x2.max independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 332))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_MAX))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -4045,7 +4045,7 @@
 			)
 		)
 		;; Execute f64x2.pmin independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 333))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_PMIN))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -4070,7 +4070,7 @@
 			)
 		)
 		;; Execute f64x2.pmax independently in each 64-bit lane.
-		(if (i32.eq (local.get $op) (i32.const 334))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_PMAX))
 			(then
 				;; Pack each result after extracting operands in stack order.
 				(loop $lanes
@@ -4094,7 +4094,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -4110,7 +4110,7 @@
 		(local $i i32)
 
 		;; Interpret i8x16.shuffle using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 335))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_SHUFFLE))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4137,7 +4137,7 @@
 			)
 		)
 		;; Interpret i8x16.swizzle using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 336))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_SWIZZLE))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4167,7 +4167,7 @@
 			)
 		)
 		;; Interpret i8x16.splat using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 337))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_SPLAT))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4179,7 +4179,7 @@
 			)
 		)
 		;; Interpret i16x8.splat using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 338))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_SPLAT))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4191,7 +4191,7 @@
 			)
 		)
 		;; Interpret i32x4.splat using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 339))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_SPLAT))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4203,7 +4203,7 @@
 			)
 		)
 		;; Interpret i64x2.splat using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 340))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_SPLAT))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4215,7 +4215,7 @@
 			)
 		)
 		;; Interpret f32x4.splat using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 341))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_SPLAT))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4227,7 +4227,7 @@
 			)
 		)
 		;; Interpret f64x2.splat using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 342))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_SPLAT))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4239,7 +4239,7 @@
 			)
 		)
 		;; Interpret i8x16.extract_lane_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 343))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_EXTRACT_LANE_S))
 			(then
 				(global.set $vector-low
 					(i64.extend_i32_s
@@ -4254,7 +4254,7 @@
 			)
 		)
 		;; Interpret i8x16.extract_lane_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 344))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_EXTRACT_LANE_U))
 			(then
 				(global.set $vector-low
 					(i64.extend_i32_s
@@ -4267,7 +4267,7 @@
 			)
 		)
 		;; Interpret i8x16.replace_lane using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 345))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_REPLACE_LANE))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4286,7 +4286,7 @@
 			)
 		)
 		;; Interpret i16x8.extract_lane_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 346))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTRACT_LANE_S))
 			(then
 				(global.set $vector-low
 					(i64.extend_i32_s
@@ -4301,7 +4301,7 @@
 			)
 		)
 		;; Interpret i16x8.extract_lane_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 347))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTRACT_LANE_U))
 			(then
 				(global.set $vector-low
 					(i64.extend_i32_s
@@ -4314,7 +4314,7 @@
 			)
 		)
 		;; Interpret i16x8.replace_lane using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 348))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_REPLACE_LANE))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4333,7 +4333,7 @@
 			)
 		)
 		;; Interpret i32x4.extract_lane using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 349))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTRACT_LANE))
 			(then
 				(global.set $vector-low
 					(i64.extend_i32_s
@@ -4346,7 +4346,7 @@
 			)
 		)
 		;; Interpret i32x4.replace_lane using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 350))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_REPLACE_LANE))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4365,7 +4365,7 @@
 			)
 		)
 		;; Interpret i64x2.extract_lane using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 351))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTRACT_LANE))
 			(then
 				(global.set $vector-low
 					(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $imm))
@@ -4374,7 +4374,7 @@
 			)
 		)
 		;; Interpret i64x2.replace_lane using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 352))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_REPLACE_LANE))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4393,7 +4393,7 @@
 			)
 		)
 		;; Interpret f32x4.extract_lane using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 353))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_EXTRACT_LANE))
 			(then
 				(global.set $vector-low
 					(call $vector-lane32 (local.get $a) (local.get $ah) (local.get $imm))
@@ -4402,7 +4402,7 @@
 			)
 		)
 		;; Interpret f32x4.replace_lane using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 354))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_REPLACE_LANE))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4421,7 +4421,7 @@
 			)
 		)
 		;; Interpret f64x2.extract_lane using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 355))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_EXTRACT_LANE))
 			(then
 				(global.set $vector-low
 					(call $vector-lane64 (local.get $a) (local.get $ah) (local.get $imm))
@@ -4430,7 +4430,7 @@
 			)
 		)
 		;; Interpret f64x2.replace_lane using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 356))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_REPLACE_LANE))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4448,7 +4448,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -4465,7 +4465,7 @@
 		(local $i i32)
 
 		;; Interpret v128.not using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 357))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_NOT))
 			(then
 				(global.set $vector-low (i64.xor (local.get $a) (i64.const -1)))
 				(global.set $vector-high (i64.xor (local.get $ah) (i64.const -1)))
@@ -4473,7 +4473,7 @@
 			)
 		)
 		;; Interpret v128.and using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 358))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_AND))
 			(then
 				(global.set $vector-low (i64.and (local.get $a) (local.get $b)))
 				(global.set $vector-high (i64.and (local.get $ah) (local.get $bh)))
@@ -4481,7 +4481,7 @@
 			)
 		)
 		;; Interpret v128.andnot using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 359))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_ANDNOT))
 			(then
 				(global.set $vector-low (i64.and (local.get $a) (i64.xor (local.get $b) (i64.const -1))))
 				(global.set $vector-high
@@ -4491,7 +4491,7 @@
 			)
 		)
 		;; Interpret v128.or using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 360))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_OR))
 			(then
 				(global.set $vector-low (i64.or (local.get $a) (local.get $b)))
 				(global.set $vector-high (i64.or (local.get $ah) (local.get $bh)))
@@ -4499,7 +4499,7 @@
 			)
 		)
 		;; Interpret v128.xor using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 361))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_XOR))
 			(then
 				(global.set $vector-low (i64.xor (local.get $a) (local.get $b)))
 				(global.set $vector-high (i64.xor (local.get $ah) (local.get $bh)))
@@ -4507,7 +4507,7 @@
 			)
 		)
 		;; Interpret v128.bitselect using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 362))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_BITSELECT))
 			(then
 				(global.set $vector-low
 					(i64.or
@@ -4525,7 +4525,7 @@
 			)
 		)
 		;; Interpret v128.any_true using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 363))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_ANY_TRUE))
 			(then
 				(global.set $vector-low
 					(i64.extend_i32_u (i64.ne (i64.or (local.get $a) (local.get $ah)) (i64.const 0)))
@@ -4534,7 +4534,7 @@
 			)
 		)
 		;; Interpret f32x4.demote_f64x2_zero using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 364))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_DEMOTE_F64X2_ZERO))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4553,7 +4553,7 @@
 			)
 		)
 		;; Interpret f64x2.promote_low_f32x4 using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 365))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_PROMOTE_LOW_F32X4))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4571,7 +4571,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -4586,7 +4586,7 @@
 		(local $i i32)
 
 		;; Interpret i8x16.all_true using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 366))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_ALL_TRUE))
 			(then
 				(global.set $vector-low (i64.const 1))
 				;; Process every output lane in order.
@@ -4609,7 +4609,7 @@
 			)
 		)
 		;; Interpret i8x16.bitmask using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 367))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_BITMASK))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4632,7 +4632,7 @@
 			)
 		)
 		;; Interpret i8x16.narrow_i16x8_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 368))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_NARROW_I16X8_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4667,7 +4667,7 @@
 			)
 		)
 		;; Interpret i8x16.narrow_i16x8_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 369))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_NARROW_I16X8_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4702,7 +4702,7 @@
 			)
 		)
 		;; Interpret i16x8.extadd_pairwise_i8x16_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 370))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTADD_PAIRWISE_I8X16_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4732,7 +4732,7 @@
 			)
 		)
 		;; Interpret i16x8.extadd_pairwise_i8x16_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 371))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTADD_PAIRWISE_I8X16_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4758,7 +4758,7 @@
 			)
 		)
 		;; Interpret i32x4.extadd_pairwise_i16x8_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 372))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTADD_PAIRWISE_I16X8_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4788,7 +4788,7 @@
 			)
 		)
 		;; Interpret i32x4.extadd_pairwise_i16x8_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 373))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTADD_PAIRWISE_I16X8_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4814,7 +4814,7 @@
 			)
 		)
 		;; Interpret i16x8.q15mulr_sat_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 374))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_Q15MULR_SAT_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4846,7 +4846,7 @@
 			)
 		)
 		;; Interpret i16x8.all_true using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 375))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_ALL_TRUE))
 			(then
 				(global.set $vector-low (i64.const 1))
 				;; Process every output lane in order.
@@ -4869,7 +4869,7 @@
 			)
 		)
 		;; Interpret i16x8.bitmask using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 376))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_BITMASK))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4892,7 +4892,7 @@
 			)
 		)
 		;; Interpret i16x8.narrow_i32x4_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 377))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_NARROW_I32X4_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4927,7 +4927,7 @@
 			)
 		)
 		;; Interpret i16x8.narrow_i32x4_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 378))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_NARROW_I32X4_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4962,7 +4962,7 @@
 			)
 		)
 		;; Interpret i16x8.extend_low_i8x16_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 379))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTEND_LOW_I8X16_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -4983,7 +4983,7 @@
 			)
 		)
 		;; Interpret i16x8.extend_high_i8x16_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 380))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTEND_HIGH_I8X16_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5004,7 +5004,7 @@
 			)
 		)
 		;; Interpret i16x8.extend_low_i8x16_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 381))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTEND_LOW_I8X16_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5023,7 +5023,7 @@
 			)
 		)
 		;; Interpret i16x8.extend_high_i8x16_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 382))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTEND_HIGH_I8X16_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5042,7 +5042,7 @@
 			)
 		)
 		;; Interpret i16x8.extmul_low_i8x16_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 383))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTMUL_LOW_I8X16_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5072,7 +5072,7 @@
 			)
 		)
 		;; Interpret i16x8.extmul_high_i8x16_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 384))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTMUL_HIGH_I8X16_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5102,7 +5102,7 @@
 			)
 		)
 		;; Interpret i16x8.extmul_low_i8x16_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 385))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTMUL_LOW_I8X16_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5128,7 +5128,7 @@
 			)
 		)
 		;; Interpret i16x8.extmul_high_i8x16_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 386))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTMUL_HIGH_I8X16_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5154,7 +5154,7 @@
 			)
 		)
 		;; Interpret i32x4.all_true using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 387))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_ALL_TRUE))
 			(then
 				(global.set $vector-low (i64.const 1))
 				;; Process every output lane in order.
@@ -5177,7 +5177,7 @@
 			)
 		)
 		;; Interpret i32x4.bitmask using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 388))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_BITMASK))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5200,7 +5200,7 @@
 			)
 		)
 		;; Interpret i32x4.extend_low_i16x8_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 389))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTEND_LOW_I16X8_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5221,7 +5221,7 @@
 			)
 		)
 		;; Interpret i32x4.extend_high_i16x8_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 390))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTEND_HIGH_I16X8_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5242,7 +5242,7 @@
 			)
 		)
 		;; Interpret i32x4.extend_low_i16x8_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 391))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTEND_LOW_I16X8_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5261,7 +5261,7 @@
 			)
 		)
 		;; Interpret i32x4.extend_high_i16x8_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 392))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTEND_HIGH_I16X8_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5280,7 +5280,7 @@
 			)
 		)
 		;; Interpret i32x4.dot_i16x8_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 393))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_DOT_I16X8_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5328,7 +5328,7 @@
 			)
 		)
 		;; Interpret i32x4.extmul_low_i16x8_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 394))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTMUL_LOW_I16X8_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5358,7 +5358,7 @@
 			)
 		)
 		;; Interpret i32x4.extmul_high_i16x8_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 395))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTMUL_HIGH_I16X8_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5388,7 +5388,7 @@
 			)
 		)
 		;; Interpret i32x4.extmul_low_i16x8_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 396))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTMUL_LOW_I16X8_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5414,7 +5414,7 @@
 			)
 		)
 		;; Interpret i32x4.extmul_high_i16x8_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 397))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTMUL_HIGH_I16X8_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5440,7 +5440,7 @@
 			)
 		)
 		;; Interpret i64x2.all_true using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 398))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_ALL_TRUE))
 			(then
 				(global.set $vector-low (i64.const 1))
 				;; Process every output lane in order.
@@ -5463,7 +5463,7 @@
 			)
 		)
 		;; Interpret i64x2.bitmask using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 399))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_BITMASK))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5486,7 +5486,7 @@
 			)
 		)
 		;; Interpret i64x2.extend_low_i32x4_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 400))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTEND_LOW_I32X4_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5507,7 +5507,7 @@
 			)
 		)
 		;; Interpret i64x2.extend_high_i32x4_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 401))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTEND_HIGH_I32X4_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5528,7 +5528,7 @@
 			)
 		)
 		;; Interpret i64x2.extend_low_i32x4_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 402))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTEND_LOW_I32X4_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5547,7 +5547,7 @@
 			)
 		)
 		;; Interpret i64x2.extend_high_i32x4_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 403))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTEND_HIGH_I32X4_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5566,7 +5566,7 @@
 			)
 		)
 		;; Interpret i64x2.extmul_low_i32x4_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 404))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTMUL_LOW_I32X4_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5596,7 +5596,7 @@
 			)
 		)
 		;; Interpret i64x2.extmul_high_i32x4_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 405))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTMUL_HIGH_I32X4_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5626,7 +5626,7 @@
 			)
 		)
 		;; Interpret i64x2.extmul_low_i32x4_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 406))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTMUL_LOW_I32X4_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5652,7 +5652,7 @@
 			)
 		)
 		;; Interpret i64x2.extmul_high_i32x4_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 407))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTMUL_HIGH_I32X4_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5677,7 +5677,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -5690,7 +5690,7 @@
 		(local $i i32)
 
 		;; Interpret i32x4.trunc_sat_f32x4_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 408))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_TRUNC_SAT_F32X4_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5709,7 +5709,7 @@
 			)
 		)
 		;; Interpret i32x4.trunc_sat_f32x4_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 409))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_TRUNC_SAT_F32X4_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5728,7 +5728,7 @@
 			)
 		)
 		;; Interpret f32x4.convert_i32x4_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 410))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_CONVERT_I32X4_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5747,7 +5747,7 @@
 			)
 		)
 		;; Interpret f32x4.convert_i32x4_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 411))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_CONVERT_I32X4_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5766,7 +5766,7 @@
 			)
 		)
 		;; Interpret i32x4.trunc_sat_f64x2_s_zero using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 412))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_TRUNC_SAT_F64X2_S_ZERO))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5785,7 +5785,7 @@
 			)
 		)
 		;; Interpret i32x4.trunc_sat_f64x2_u_zero using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 413))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_TRUNC_SAT_F64X2_U_ZERO))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5804,7 +5804,7 @@
 			)
 		)
 		;; Interpret f64x2.convert_low_i32x4_s using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 414))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_CONVERT_LOW_I32X4_S))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5823,7 +5823,7 @@
 			)
 		)
 		;; Interpret f64x2.convert_low_i32x4_u using full-width scalar lanes.
-		(if (i32.eq (local.get $op) (i32.const 415))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_CONVERT_LOW_I32X4_U))
 			(then
 				;; Process every output lane in order.
 				(loop $lanes
@@ -5841,7 +5841,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -5858,7 +5858,7 @@
 		(local $i i32)
 
 		;; Interpret v128.load with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 416))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 16)))
@@ -5874,7 +5874,7 @@
 			)
 		)
 		;; Interpret v128.load8x8_s with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 417))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD8X8_S))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
@@ -5899,7 +5899,7 @@
 			)
 		)
 		;; Interpret v128.load8x8_u with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 418))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD8X8_U))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
@@ -5922,7 +5922,7 @@
 			)
 		)
 		;; Interpret v128.load16x4_s with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 419))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD16X4_S))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
@@ -5947,7 +5947,7 @@
 			)
 		)
 		;; Interpret v128.load16x4_u with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 420))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD16X4_U))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
@@ -5970,7 +5970,7 @@
 			)
 		)
 		;; Interpret v128.load32x2_s with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 421))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD32X2_S))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
@@ -5995,7 +5995,7 @@
 			)
 		)
 		;; Interpret v128.load32x2_u with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 422))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD32X2_U))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
@@ -6018,7 +6018,7 @@
 			)
 		)
 		;; Interpret v128.load8_splat with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 423))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD8_SPLAT))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 1)))
@@ -6038,7 +6038,7 @@
 			)
 		)
 		;; Interpret v128.load16_splat with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 424))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD16_SPLAT))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 2)))
@@ -6058,7 +6058,7 @@
 			)
 		)
 		;; Interpret v128.load32_splat with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 425))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD32_SPLAT))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 4)))
@@ -6078,7 +6078,7 @@
 			)
 		)
 		;; Interpret v128.load64_splat with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 426))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD64_SPLAT))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
@@ -6098,7 +6098,7 @@
 			)
 		)
 		;; Interpret v128.store with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 427))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 16)))
@@ -6114,7 +6114,7 @@
 			)
 		)
 		;; Interpret v128.load32_zero with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 428))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD32_ZERO))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 4)))
@@ -6129,7 +6129,7 @@
 			)
 		)
 		;; Interpret v128.load64_zero with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 429))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD64_ZERO))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
@@ -6144,7 +6144,7 @@
 			)
 		)
 		;; Interpret v128.load8_lane with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 430))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD8_LANE))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 1)))
@@ -6171,7 +6171,7 @@
 			)
 		)
 		;; Interpret v128.load16_lane with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 431))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD16_LANE))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 2)))
@@ -6198,7 +6198,7 @@
 			)
 		)
 		;; Interpret v128.load32_lane with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 432))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD32_LANE))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 4)))
@@ -6225,7 +6225,7 @@
 			)
 		)
 		;; Interpret v128.load64_lane with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 433))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD64_LANE))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
@@ -6252,7 +6252,7 @@
 			)
 		)
 		;; Interpret v128.store8_lane with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 434))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE8_LANE))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 1)))
@@ -6270,7 +6270,7 @@
 			)
 		)
 		;; Interpret v128.store16_lane with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 435))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE16_LANE))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 2)))
@@ -6288,7 +6288,7 @@
 			)
 		)
 		;; Interpret v128.store32_lane with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 436))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE32_LANE))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 4)))
@@ -6306,7 +6306,7 @@
 			)
 		)
 		;; Interpret v128.store64_lane with an atomic unsigned memory bound check.
-		(if (i32.eq (local.get $op) (i32.const 437))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE64_LANE))
 			(then
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
@@ -6323,7 +6323,7 @@
 				(return (global.get $vector-low))
 			)
 		)
-		(call $fail (i32.const 2))
+		(call $fail (i32.const M4_ERR_UNSUPPORTED))
 		(i64.const 0)
 	)
 
@@ -6333,85 +6333,85 @@
 		(result i32)
 
 		;; i8x16.extract_lane_s accepts exactly one lane below 16.
-		(if (i32.eq (local.get $op) (i32.const 343))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_EXTRACT_LANE_S))
 			(then
 				(return (i32.const 16))
 			)
 		)
 		;; i8x16.extract_lane_u accepts exactly one lane below 16.
-		(if (i32.eq (local.get $op) (i32.const 344))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_EXTRACT_LANE_U))
 			(then
 				(return (i32.const 16))
 			)
 		)
 		;; i8x16.replace_lane accepts exactly one lane below 16.
-		(if (i32.eq (local.get $op) (i32.const 345))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_REPLACE_LANE))
 			(then
 				(return (i32.const 16))
 			)
 		)
 		;; i16x8.extract_lane_s accepts exactly one lane below 8.
-		(if (i32.eq (local.get $op) (i32.const 346))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTRACT_LANE_S))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; i16x8.extract_lane_u accepts exactly one lane below 8.
-		(if (i32.eq (local.get $op) (i32.const 347))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTRACT_LANE_U))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; i16x8.replace_lane accepts exactly one lane below 8.
-		(if (i32.eq (local.get $op) (i32.const 348))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_REPLACE_LANE))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; i32x4.extract_lane accepts exactly one lane below 4.
-		(if (i32.eq (local.get $op) (i32.const 349))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTRACT_LANE))
 			(then
 				(return (i32.const 4))
 			)
 		)
 		;; i32x4.replace_lane accepts exactly one lane below 4.
-		(if (i32.eq (local.get $op) (i32.const 350))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_REPLACE_LANE))
 			(then
 				(return (i32.const 4))
 			)
 		)
 		;; i64x2.extract_lane accepts exactly one lane below 2.
-		(if (i32.eq (local.get $op) (i32.const 351))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTRACT_LANE))
 			(then
 				(return (i32.const 2))
 			)
 		)
 		;; i64x2.replace_lane accepts exactly one lane below 2.
-		(if (i32.eq (local.get $op) (i32.const 352))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_REPLACE_LANE))
 			(then
 				(return (i32.const 2))
 			)
 		)
 		;; f32x4.extract_lane accepts exactly one lane below 4.
-		(if (i32.eq (local.get $op) (i32.const 353))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_EXTRACT_LANE))
 			(then
 				(return (i32.const 4))
 			)
 		)
 		;; f32x4.replace_lane accepts exactly one lane below 4.
-		(if (i32.eq (local.get $op) (i32.const 354))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_REPLACE_LANE))
 			(then
 				(return (i32.const 4))
 			)
 		)
 		;; f64x2.extract_lane accepts exactly one lane below 2.
-		(if (i32.eq (local.get $op) (i32.const 355))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_EXTRACT_LANE))
 			(then
 				(return (i32.const 2))
 			)
 		)
 		;; f64x2.replace_lane accepts exactly one lane below 2.
-		(if (i32.eq (local.get $op) (i32.const 356))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_REPLACE_LANE))
 			(then
 				(return (i32.const 2))
 			)
@@ -6436,7 +6436,7 @@
 				;; Reject the first index beyond the selected lane shape.
 				(if (i32.ge_u (local.get $value) (local.get $count))
 					(then
-						(call $fail (i32.const 1))
+						(call $fail (i32.const M4_ERR_SYNTAX))
 					)
 				)
 				(return (local.get $value))
@@ -6448,7 +6448,7 @@
 		;; Shuffle masks occupy sixteen auxiliary bytes.
 		(if (i32.gt_u (global.get $table-count) (i32.const 32764))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))
 			)
 		)
@@ -6459,7 +6459,7 @@
 			;; Out-of-range mask lanes never alias a valid input.
 			(if (i32.ge_u (local.get $value) (i32.const 32))
 				(then
-					(call $fail (i32.const 1))
+					(call $fail (i32.const M4_ERR_SYNTAX))
 				)
 			)
 			(i32.store8 (i32.add (local.get $p) (local.get $i)) (local.get $value))
@@ -6475,139 +6475,139 @@
 		(result i32)
 
 		;; Scalar and non-memory SIMD opcodes cannot access guest memory.
-		(if (i32.lt_u (local.get $op) (i32.const 416))
+		(if (i32.lt_u (local.get $op) (i32.const M4_OP_V128_LOAD))
 			(then
 				(return (i32.const 0))
 			)
 		)
 		;; v128.load accesses exactly 16 bytes.
-		(if (i32.eq (local.get $op) (i32.const 416))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD))
 			(then
 				(return (i32.const 16))
 			)
 		)
 		;; v128.load8x8_s accesses exactly 8 bytes.
-		(if (i32.eq (local.get $op) (i32.const 417))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD8X8_S))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; v128.load8x8_u accesses exactly 8 bytes.
-		(if (i32.eq (local.get $op) (i32.const 418))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD8X8_U))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; v128.load16x4_s accesses exactly 8 bytes.
-		(if (i32.eq (local.get $op) (i32.const 419))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD16X4_S))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; v128.load16x4_u accesses exactly 8 bytes.
-		(if (i32.eq (local.get $op) (i32.const 420))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD16X4_U))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; v128.load32x2_s accesses exactly 8 bytes.
-		(if (i32.eq (local.get $op) (i32.const 421))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD32X2_S))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; v128.load32x2_u accesses exactly 8 bytes.
-		(if (i32.eq (local.get $op) (i32.const 422))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD32X2_U))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; v128.load8_splat accesses exactly 1 bytes.
-		(if (i32.eq (local.get $op) (i32.const 423))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD8_SPLAT))
 			(then
 				(return (i32.const 1))
 			)
 		)
 		;; v128.load16_splat accesses exactly 2 bytes.
-		(if (i32.eq (local.get $op) (i32.const 424))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD16_SPLAT))
 			(then
 				(return (i32.const 2))
 			)
 		)
 		;; v128.load32_splat accesses exactly 4 bytes.
-		(if (i32.eq (local.get $op) (i32.const 425))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD32_SPLAT))
 			(then
 				(return (i32.const 4))
 			)
 		)
 		;; v128.load64_splat accesses exactly 8 bytes.
-		(if (i32.eq (local.get $op) (i32.const 426))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD64_SPLAT))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; v128.store accesses exactly 16 bytes.
-		(if (i32.eq (local.get $op) (i32.const 427))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE))
 			(then
 				(return (i32.const 16))
 			)
 		)
 		;; v128.load32_zero accesses exactly 4 bytes.
-		(if (i32.eq (local.get $op) (i32.const 428))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD32_ZERO))
 			(then
 				(return (i32.const 4))
 			)
 		)
 		;; v128.load64_zero accesses exactly 8 bytes.
-		(if (i32.eq (local.get $op) (i32.const 429))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD64_ZERO))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; v128.load8_lane accesses exactly 1 bytes.
-		(if (i32.eq (local.get $op) (i32.const 430))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD8_LANE))
 			(then
 				(return (i32.const 1))
 			)
 		)
 		;; v128.load16_lane accesses exactly 2 bytes.
-		(if (i32.eq (local.get $op) (i32.const 431))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD16_LANE))
 			(then
 				(return (i32.const 2))
 			)
 		)
 		;; v128.load32_lane accesses exactly 4 bytes.
-		(if (i32.eq (local.get $op) (i32.const 432))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD32_LANE))
 			(then
 				(return (i32.const 4))
 			)
 		)
 		;; v128.load64_lane accesses exactly 8 bytes.
-		(if (i32.eq (local.get $op) (i32.const 433))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD64_LANE))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; v128.store8_lane accesses exactly 1 bytes.
-		(if (i32.eq (local.get $op) (i32.const 434))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE8_LANE))
 			(then
 				(return (i32.const 1))
 			)
 		)
 		;; v128.store16_lane accesses exactly 2 bytes.
-		(if (i32.eq (local.get $op) (i32.const 435))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE16_LANE))
 			(then
 				(return (i32.const 2))
 			)
 		)
 		;; v128.store32_lane accesses exactly 4 bytes.
-		(if (i32.eq (local.get $op) (i32.const 436))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE32_LANE))
 			(then
 				(return (i32.const 4))
 			)
 		)
 		;; v128.store64_lane accesses exactly 8 bytes.
-		(if (i32.eq (local.get $op) (i32.const 437))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE64_LANE))
 			(then
 				(return (i32.const 8))
 			)
@@ -6621,49 +6621,49 @@
 		(result i32)
 
 		;; Bound memory lane indices to 16 lanes.
-		(if (i32.eq (local.get $op) (i32.const 430))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD8_LANE))
 			(then
 				(return (i32.const 16))
 			)
 		)
 		;; Bound memory lane indices to 8 lanes.
-		(if (i32.eq (local.get $op) (i32.const 431))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD16_LANE))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; Bound memory lane indices to 4 lanes.
-		(if (i32.eq (local.get $op) (i32.const 432))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD32_LANE))
 			(then
 				(return (i32.const 4))
 			)
 		)
 		;; Bound memory lane indices to 2 lanes.
-		(if (i32.eq (local.get $op) (i32.const 433))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD64_LANE))
 			(then
 				(return (i32.const 2))
 			)
 		)
 		;; Bound memory lane indices to 16 lanes.
-		(if (i32.eq (local.get $op) (i32.const 434))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE8_LANE))
 			(then
 				(return (i32.const 16))
 			)
 		)
 		;; Bound memory lane indices to 8 lanes.
-		(if (i32.eq (local.get $op) (i32.const 435))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE16_LANE))
 			(then
 				(return (i32.const 8))
 			)
 		)
 		;; Bound memory lane indices to 4 lanes.
-		(if (i32.eq (local.get $op) (i32.const 436))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE32_LANE))
 			(then
 				(return (i32.const 4))
 			)
 		)
 		;; Bound memory lane indices to 2 lanes.
-		(if (i32.eq (local.get $op) (i32.const 437))
+		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE64_LANE))
 			(then
 				(return (i32.const 2))
 			)

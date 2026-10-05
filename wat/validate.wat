@@ -13,9 +13,9 @@
 		(local $frame i32)
 
 		;; Bound abstract control records before writing the next frame.
-		(if (i32.ge_u (global.get $control-count) (i32.const CAP_CONTROLS))
+		(if (i32.ge_u (global.get $control-count) (i32.const M4_CAP_CONTROLS))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -40,9 +40,9 @@
 			)
 		)
 		;; Each abstract operand has one type slot, independently from its runtime value width.
-		(if (i32.ge_u (global.get $depth) (i32.const CAP_OPERANDS))
+		(if (i32.ge_u (global.get $depth) (i32.const M4_CAP_OPERANDS))
 			(then
-				(call $fail (i32.const 6))
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
@@ -68,7 +68,7 @@
 				;; Unreachable scopes allow absent operands, while reachable ones report underflow.
 				(if (i32.eqz (i32.load offset=12 (local.get $frame)))
 					(then
-						(call $fail (i32.const 7))
+						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 					)
 				)
 				(return (i32.const 0))
@@ -90,7 +90,7 @@
 				(i32.eqz (call $type-compatible (local.get $type) (local.get $expected)))
 			)
 			(then
-				(call $fail (i32.const 7))
+				(call $fail (i32.const M4_ERR_OPERAND_STACK))
 			)
 		)
 		(local.get $type)
@@ -132,7 +132,7 @@
 		;; Dead branches still require an existing enclosing label.
 		(if (i32.ge_u (local.get $depth) (global.get $control-count))
 			(then
-				(call $fail (i32.const 10))
+				(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 				(return (i32.const 0))
 			)
 		)
@@ -167,7 +167,7 @@
 				)
 			)
 			(then
-				(call $fail (i32.const 7))
+				(call $fail (i32.const M4_ERR_OPERAND_STACK))
 				(return)
 			)
 		)
@@ -175,7 +175,7 @@
 		;; Extra known values are invalid even when the scope was previously unreachable.
 		(if (i32.ne (global.get $depth) (i32.load offset=4 (local.get $frame)))
 			(then
-				(call $fail (i32.const 7))
+				(call $fail (i32.const M4_ERR_OPERAND_STACK))
 				(return)
 			)
 		)
@@ -199,7 +199,7 @@
 		;; The false arm inherits no operands produced by the true arm.
 		(if (i32.ne (global.get $depth) (i32.load offset=4 (local.get $frame)))
 			(then
-				(call $fail (i32.const 7))
+				(call $fail (i32.const M4_ERR_OPERAND_STACK))
 				(return)
 			)
 		)
@@ -268,7 +268,7 @@
 				(if (call $control-op (local.get $op))
 					(then
 						;; Handler vectors are checked in the enclosing label context before entering try-table.
-						(if (i32.eq (local.get $op) (i32.const 495))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_TRY_TABLE))
 							(then
 								(call $validate-try-handlers
 									(i32.load offset=24 (call $metadata (i32.sub (local.get $pc) (i32.const 1))))
@@ -276,7 +276,7 @@
 							)
 						)
 						;; If conditions remain i32 even when their arms produce i64.
-						(if (i32.eq (local.get $op) (i32.const 39))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_IF))
 							(then
 								(drop (call $validation-pop (i32.const 1)))
 							)
@@ -295,14 +295,14 @@
 					)
 				)
 				;; Else checks the typed then result before starting the false path.
-				(if (i32.eq (local.get $op) (i32.const 40))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_ELSE))
 					(then
 						(call $validation-else)
 						(br $code)
 					)
 				)
 				;; End publishes a zero-or-one typed result to its outer scope.
-				(if (i32.eq (local.get $op) (i32.const 41))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_END))
 					(then
 						(call $validation-end)
 						(br $code)
@@ -310,10 +310,10 @@
 				)
 				;; Return checks the function's result; unreachable accepts no inputs.
 				(if
-					(i32.or (i32.eq (local.get $op) (i32.const 44)) (i32.eq (local.get $op) (i32.const 45)))
+					(i32.or (i32.eq (local.get $op) (i32.const M4_OP_RETURN)) (i32.eq (local.get $op) (i32.const M4_OP_UNREACHABLE)))
 					(then
 						;; Explicit return targets the root signature rather than the current block signature.
-						(if (i32.eq (local.get $op) (i32.const 44))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_RETURN))
 							(then
 								(call $validation-result (i32.load offset=24 (local.get $f)))
 							)
@@ -325,24 +325,24 @@
 				;; Branches validate label types even at an unreachable floor.
 				(if
 					(i32.or
-						(i32.eq (local.get $op) (i32.const 42))
-						(i32.or (i32.eq (local.get $op) (i32.const 43)) (i32.eq (local.get $op) (i32.const 46)))
+						(i32.eq (local.get $op) (i32.const M4_OP_BR))
+						(i32.or (i32.eq (local.get $op) (i32.const M4_OP_BR_IF)) (i32.eq (local.get $op) (i32.const M4_OP_BR_TABLE)))
 					)
 					(then
 						;; Conditional branches and tables consume an i32 condition or selector.
-						(if (i32.ne (local.get $op) (i32.const 42))
+						(if (i32.ne (local.get $op) (i32.const M4_OP_BR))
 							(then
 								(drop (call $validation-pop (i32.const 1)))
 							)
 						)
 						;; Direct branch immediates are label depths; tables resolve their labels below.
-						(if (i32.ne (local.get $op) (i32.const 46))
+						(if (i32.ne (local.get $op) (i32.const M4_OP_BR_TABLE))
 							(then
 								(local.set $type (call $label-arity (i32.load offset=4 (local.get $record))))
 							)
 						)
 						;; Table immediates index the target arena rather than naming a label themselves.
-						(if (i32.eq (local.get $op) (i32.const 46))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_BR_TABLE))
 							(then
 								(local.set $count (i32.load offset=12 (local.get $record)))
 								(local.set $table
@@ -376,7 +376,7 @@
 										(if
 											(i32.ne (call $shape-count (local.get $target)) (call $shape-count (local.get $type)))
 											(then
-												(call $fail (i32.const 7))
+												(call $fail (i32.const M4_ERR_OPERAND_STACK))
 												(return)
 											)
 										)
@@ -394,7 +394,7 @@
 						)
 						(call $validation-result (local.get $type))
 						;; A false br_if keeps the label's typed value for fallthrough.
-						(if (i32.eq (local.get $op) (i32.const 43))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_BR_IF))
 							(then
 								;; Void labels preserve no branch operand.
 								(if (local.get $type)
@@ -413,7 +413,7 @@
 				)
 				;; Throw instructions validate their payload and make the remaining path unreachable.
 				(if
-					(i32.or (i32.eq (local.get $op) (i32.const 496)) (i32.eq (local.get $op) (i32.const 497)))
+					(i32.or (i32.eq (local.get $op) (i32.const M4_OP_THROW)) (i32.eq (local.get $op) (i32.const M4_OP_THROW_REF)))
 					(then
 						(call $validate-throw (local.get $op) (i32.load offset=4 (local.get $record)))
 						(call $validation-unreachable)
@@ -422,7 +422,7 @@
 				)
 				;; Cast branches validate target operands and refine the surviving reference type.
 				(if
-					(i32.or (i32.eq (local.get $op) (i32.const 493)) (i32.eq (local.get $op) (i32.const 494)))
+					(i32.or (i32.eq (local.get $op) (i32.const M4_OP_BR_ON_CAST)) (i32.eq (local.get $op) (i32.const M4_OP_BR_ON_CAST_FAIL)))
 					(then
 						(call $validate-gc-branch (local.get $op) (i32.load offset=4 (local.get $record)))
 						(br $code)
@@ -430,7 +430,7 @@
 				)
 				;; Reference branches refine nullability without consuming earlier branch operands on fallthrough.
 				(if
-					(i32.or (i32.eq (local.get $op) (i32.const 463)) (i32.eq (local.get $op) (i32.const 464)))
+					(i32.or (i32.eq (local.get $op) (i32.const M4_OP_BR_ON_NULL)) (i32.eq (local.get $op) (i32.const M4_OP_BR_ON_NON_NULL)))
 					(then
 						(local.set $type (call $validation-pop (i32.const 0)))
 						;; Concrete operands must belong to the reference hierarchy.
@@ -440,17 +440,17 @@
 								(i32.eqz (call $is-reference (local.get $type)))
 							)
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 						(local.set $target (call $label-arity (i32.load offset=4 (local.get $record))))
 						;; Non-null branches transfer the refined reference as the final label operand.
-						(if (i32.eq (local.get $op) (i32.const 464))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_BR_ON_NON_NULL))
 							(then
 								;; A non-null branch target must accept at least the transferred reference.
 								(if (i32.eqz (call $shape-count (local.get $target)))
 									(then
-										(call $fail (i32.const 7))
+										(call $fail (i32.const M4_ERR_OPERAND_STACK))
 									)
 								)
 								(call $validation-value
@@ -469,7 +469,7 @@
 						)
 						(call $validation-result (local.get $target))
 						;; Fallthrough restores declared branch operand types, including their wider heap types.
-						(if (i32.eq (local.get $op) (i32.const 464))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_BR_ON_NON_NULL))
 							(then
 								(local.set $j (i32.const 0))
 								;; Restore the branch prefix without the non-null reference transferred to the label.
@@ -508,8 +508,8 @@
 				;; Locals resolve against this function's typed parameter/local table.
 				(if
 					(i32.and
-						(i32.ge_u (local.get $op) (i32.const 33))
-						(i32.le_u (local.get $op) (i32.const 35))
+						(i32.ge_u (local.get $op) (i32.const M4_OP_LOCAL_GET))
+						(i32.le_u (local.get $op) (i32.const M4_OP_LOCAL_TEE))
 					)
 					(then
 						;; Resolve names only after inherited parameters have established the final local namespace.
@@ -529,7 +529,7 @@
 						(if
 							(i32.ge_u (i32.load offset=4 (local.get $record)) (i32.load offset=20 (local.get $f)))
 							(then
-								(call $fail (i32.const 10))
+								(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 								(return)
 							)
 						)
@@ -537,19 +537,19 @@
 							(i32.load (call $local-type (local.get $index) (i32.load offset=4 (local.get $record))))
 						)
 						;; A non-defaultable local cannot be read before an assignment in its current scope.
-						(if (i32.eq (local.get $op) (i32.const 33))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_LOCAL_GET))
 							(then
 								;; Initialized parameters and prior enclosing-scope assignments remain available.
 								(if
 									(i32.eqz (i32.load (call $local-init-slot (i32.load offset=4 (local.get $record)))))
 									(then
-										(call $fail (i32.const 7))
+										(call $fail (i32.const M4_ERR_OPERAND_STACK))
 									)
 								)
 							)
 						)
 						;; Writes initialize only previously uninitialized locals, preserving enclosing-scope assignments.
-						(if (i32.ne (local.get $op) (i32.const 33))
+						(if (i32.ne (local.get $op) (i32.const M4_OP_LOCAL_GET))
 							(then
 								;; The first assignment records its scope so an end or else can restore initialization state.
 								(if
@@ -564,13 +564,13 @@
 							)
 						)
 						;; Reads need no operand; writes and tee require the local's exact width.
-						(if (i32.ne (local.get $op) (i32.const 33))
+						(if (i32.ne (local.get $op) (i32.const M4_OP_LOCAL_GET))
 							(then
 								(drop (call $validation-pop (local.get $type)))
 							)
 						)
 						;; set produces nothing, while get and tee publish the declared type.
-						(if (i32.ne (local.get $op) (i32.const 34))
+						(if (i32.ne (local.get $op) (i32.const M4_OP_LOCAL_SET))
 							(then
 								(call $validation-publish (local.get $type))
 							)
@@ -580,12 +580,12 @@
 				)
 				;; Indirect calls consume an i32 selector and the declared structural parameter vector.
 				(if
-					(i32.or (i32.eq (local.get $op) (i32.const 105)) (i32.eq (local.get $op) (i32.const 439)))
+					(i32.or (i32.eq (local.get $op) (i32.const M4_OP_CALL_INDIRECT)) (i32.eq (local.get $op) (i32.const M4_OP_RETURN_CALL_INDIRECT)))
 					(then
 						;; Even unreachable indirect calls require an existing default table.
 						(if (i32.eqz (global.get $guest-table-present))
 							(then
-								(call $fail (i32.const 10))
+								(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 								(return)
 							)
 						)
@@ -605,7 +605,7 @@
 						;; Only function reference tables can select callable entries.
 						(if (i32.eqz (call $type-compatible (global.get $guest-table-type) (i32.const 5)))
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 						(local.set $j (i32.load offset=8 (local.get $callee)))
@@ -624,7 +624,7 @@
 							)
 						)
 						;; A tail call must return exactly the enclosing function's result vector.
-						(if (i32.eq (local.get $op) (i32.const 439))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_RETURN_CALL_INDIRECT))
 							(then
 								;; An unreachable site still requires a compatible callee result signature.
 								(if
@@ -635,7 +635,7 @@
 										)
 									)
 									(then
-										(call $fail (i32.const 7))
+										(call $fail (i32.const M4_ERR_OPERAND_STACK))
 									)
 								)
 								(call $validation-unreachable)
@@ -653,7 +653,7 @@
 				)
 				;; Calls consume parameters in reverse stack order and publish their typed result.
 				(if
-					(i32.or (i32.eq (local.get $op) (i32.const 36)) (i32.eq (local.get $op) (i32.const 438)))
+					(i32.or (i32.eq (local.get $op) (i32.const M4_OP_CALL)) (i32.eq (local.get $op) (i32.const M4_OP_RETURN_CALL)))
 					(then
 						(local.set $target (i32.load offset=4 (local.get $record)))
 						(local.set $callee (call $function (local.get $target)))
@@ -672,13 +672,13 @@
 						)
 						(local.set $type (i32.load offset=24 (local.get $callee)))
 						;; Direct tail calls terminate this path after checking the enclosing result vector.
-						(if (i32.eq (local.get $op) (i32.const 438))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_RETURN_CALL))
 							(then
 								;; Callee and caller result types must agree even when no result is consumed locally.
 								(if
 									(i32.eqz (call $shape-compatible (local.get $type) (i32.load offset=24 (local.get $f))))
 									(then
-										(call $fail (i32.const 7))
+										(call $fail (i32.const M4_ERR_OPERAND_STACK))
 									)
 								)
 								(call $validation-unreachable)
@@ -696,7 +696,7 @@
 				)
 				;; Globals require an existing reference and mutable targets for set.
 				(if
-					(i32.or (i32.eq (local.get $op) (i32.const 49)) (i32.eq (local.get $op) (i32.const 50)))
+					(i32.or (i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_GET)) (i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_SET)))
 					(then
 						(call $validate-resource (local.get $op) (i32.load offset=4 (local.get $record)))
 						;; Invalid references cannot be used to read a type from another arena.
@@ -709,7 +709,7 @@
 							(i32.load offset=12 (call $global-record (i32.load offset=4 (local.get $record))))
 						)
 						;; get publishes the global's width; set consumes that exact width.
-						(if (i32.eq (local.get $op) (i32.const 49))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_GET))
 							(then
 								(call $validation-publish (local.get $type))
 							)
@@ -722,7 +722,7 @@
 					)
 				)
 				;; Function references in bodies require an independent declaration, even in dead code.
-				(if (i32.eq (local.get $op) (i32.const 195))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_REF_FUNC))
 					(then
 						(local.set $target (i32.load offset=4 (local.get $record)))
 						;; Exports, global initializers and every element mode contribute declaration bits.
@@ -734,13 +734,13 @@
 								)
 							)
 							(then
-								(call $fail (i32.const 10))
+								(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
 							)
 						)
 					)
 				)
 				;; Function references publish their precise, non-null declared function type.
-				(if (i32.eq (local.get $op) (i32.const 195))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_REF_FUNC))
 					(then
 						(call $validation-value (call $function-reference-type (local.get $target)))
 						(br $code)
@@ -749,8 +749,8 @@
 				;; Aggregate instructions have field-dependent operand vectors.
 				(if
 					(i32.and
-						(i32.ge_u (local.get $op) (i32.const 473))
-						(i32.le_u (local.get $op) (i32.const 492))
+						(i32.ge_u (local.get $op) (i32.const M4_OP_STRUCT_NEW))
+						(i32.le_u (local.get $op) (i32.const M4_OP_ARRAY_INIT_ELEM))
 					)
 					(then
 						(call $validate-gc-aggregate (local.get $op) (i32.load offset=4 (local.get $record)))
@@ -760,8 +760,8 @@
 				;; GC reference operators validate their hierarchy before publishing refined result types.
 				(if
 					(i32.and
-						(i32.ge_u (local.get $op) (i32.const 465))
-						(i32.le_u (local.get $op) (i32.const 472))
+						(i32.ge_u (local.get $op) (i32.const M4_OP_REF_EQ))
+						(i32.le_u (local.get $op) (i32.const M4_OP_I31_GET_U))
 					)
 					(then
 						(call $validate-gc-reference (local.get $op) (i32.load offset=4 (local.get $record)))
@@ -769,7 +769,7 @@
 					)
 				)
 				;; Asserted non-null references retain the operand's heap type.
-				(if (i32.eq (local.get $op) (i32.const 460))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_REF_AS_NON_NULL))
 					(then
 						(local.set $type (call $validation-pop (i32.const 0)))
 						;; A concrete numeric value cannot be asserted non-null.
@@ -779,7 +779,7 @@
 								(i32.eqz (call $is-reference (local.get $type)))
 							)
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 						(call $validation-value
@@ -799,13 +799,13 @@
 				)
 				;; Reference calls consume a typed function reference followed by the declared parameter vector.
 				(if
-					(i32.or (i32.eq (local.get $op) (i32.const 461)) (i32.eq (local.get $op) (i32.const 462)))
+					(i32.or (i32.eq (local.get $op) (i32.const M4_OP_CALL_REF)) (i32.eq (local.get $op) (i32.const M4_OP_RETURN_CALL_REF)))
 					(then
 						(local.set $type (i32.load offset=4 (local.get $record)))
 						;; Reference call immediates must name a declared function type.
 						(if (i32.lt_u (local.get $type) (i32.const 64))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 								(return)
 							)
 						)
@@ -827,7 +827,7 @@
 							)
 						)
 						;; Tail reference calls finish the enclosing function with compatible results.
-						(if (i32.eq (local.get $op) (i32.const 462))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_RETURN_CALL_REF))
 							(then
 								;; Result arities and types must satisfy the enclosing function.
 								(if
@@ -838,7 +838,7 @@
 										)
 									)
 									(then
-										(call $fail (i32.const 7))
+										(call $fail (i32.const M4_ERR_OPERAND_STACK))
 									)
 								)
 								(call $validation-unreachable)
@@ -852,7 +852,7 @@
 					)
 				)
 				;; Drop resolves its segment without requiring a table or a live element list.
-				(if (i32.eq (local.get $op) (i32.const 196))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_ELEM_DROP))
 					(then
 						(i32.store offset=4
 							(local.get $record)
@@ -864,7 +864,7 @@
 					)
 				)
 				;; Init checks both namespaces and the exact element type before generic i32 operand validation.
-				(if (i32.eq (local.get $op) (i32.const 197))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_TABLE_INIT))
 					(then
 						(local.set $table (i32.load offset=4 (local.get $record)))
 						(i32.store
@@ -900,20 +900,20 @@
 								)
 							)
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 					)
 				)
 				;; Null values publish their retained reference type and use zero at runtime.
-				(if (i32.eq (local.get $op) (i32.const 193))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_REF_NULL))
 					(then
 						(call $validation-value (i32.load offset=4 (local.get $record)))
 						(br $code)
 					)
 				)
 				;; Null tests accept either reference type, including unknown operands in dead code.
-				(if (i32.eq (local.get $op) (i32.const 194))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_REF_IS_NULL))
 					(then
 						(local.set $type (call $validation-pop (i32.const 0)))
 						;; Concrete numeric operands remain invalid even after unreachable.
@@ -923,7 +923,7 @@
 								(i32.eqz (call $is-reference (local.get $type)))
 							)
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 						(call $validation-value (i32.const 1))
@@ -931,7 +931,7 @@
 					)
 				)
 				;; Select consumes an i32 condition and matching values, or its exact annotated type.
-				(if (i32.eq (local.get $op) (i32.const 47))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_SELECT))
 					(then
 						(drop (call $validation-pop (i32.const 1)))
 						(local.set $target (i32.load offset=4 (local.get $record)))
@@ -944,7 +944,7 @@
 								(i32.or (call $is-reference (local.get $type)) (call $is-reference (local.get $other)))
 							)
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 						;; Unknown dead operands can match known values, but two known widths must agree.
@@ -960,7 +960,7 @@
 								)
 							)
 							(then
-								(call $fail (i32.const 7))
+								(call $fail (i32.const M4_ERR_OPERAND_STACK))
 							)
 						)
 						(call $validation-value
@@ -974,7 +974,7 @@
 					)
 				)
 				;; Drop accepts either width and does not produce a value.
-				(if (i32.eq (local.get $op) (i32.const 31))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_DROP))
 					(then
 						(drop (call $validation-pop (i32.const 0)))
 						(br $code)
@@ -983,10 +983,10 @@
 				;; Table targets are validated even in unreachable code and may name later declarations.
 				(if
 					(i32.or
-						(i32.or (i32.eq (local.get $op) (i32.const 191)) (i32.eq (local.get $op) (i32.const 192)))
+						(i32.or (i32.eq (local.get $op) (i32.const M4_OP_TABLE_SIZE)) (i32.eq (local.get $op) (i32.const M4_OP_TABLE_COPY)))
 						(i32.and
-							(i32.ge_u (local.get $op) (i32.const 198))
-							(i32.le_u (local.get $op) (i32.const 201))
+							(i32.ge_u (local.get $op) (i32.const M4_OP_TABLE_GET))
+							(i32.le_u (local.get $op) (i32.const M4_OP_TABLE_FILL))
 						)
 					)
 					(then
@@ -1003,7 +1003,7 @@
 						(i32.store offset=4 (local.get $table) (i32.const 0))
 						(call $use-table (i32.load (local.get $table)))
 						;; Copy independently checks its source, rather than assuming it matches the destination.
-						(if (i32.eq (local.get $op) (i32.const 192))
+						(if (i32.eq (local.get $op) (i32.const M4_OP_TABLE_COPY))
 							(then
 								(i32.store offset=8
 									(local.get $table)
@@ -1024,7 +1024,7 @@
 										)
 									)
 									(then
-										(call $fail (i32.const 7))
+										(call $fail (i32.const M4_ERR_OPERAND_STACK))
 									)
 								)
 							)
@@ -1032,7 +1032,7 @@
 					)
 				)
 				;; Copy validation retains both logical table index types after independent resolution.
-				(if (i32.eq (local.get $op) (i32.const 192))
+				(if (i32.eq (local.get $op) (i32.const M4_OP_TABLE_COPY))
 					(then
 						(global.set $table-source-type
 							(select
@@ -1053,10 +1053,10 @@
 					(i32.or
 						(call $memory-op (local.get $op))
 						(i32.or
-							(i32.or (i32.eq (local.get $op) (i32.const 51)) (i32.eq (local.get $op) (i32.const 52)))
+							(i32.or (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_SIZE)) (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_GROW)))
 							(i32.and
-								(i32.ge_u (local.get $op) (i32.const 187))
-								(i32.le_u (local.get $op) (i32.const 189))
+								(i32.ge_u (local.get $op) (i32.const M4_OP_MEMORY_COPY))
+								(i32.le_u (local.get $op) (i32.const M4_OP_MEMORY_INIT))
 							)
 						)
 					)
@@ -1077,8 +1077,8 @@
 				;; Bulk copy/fill require a declared memory even in unreachable code.
 				(if
 					(i32.and
-						(i32.ge_u (local.get $op) (i32.const 187))
-						(i32.le_u (local.get $op) (i32.const 189))
+						(i32.ge_u (local.get $op) (i32.const M4_OP_MEMORY_COPY))
+						(i32.le_u (local.get $op) (i32.const M4_OP_MEMORY_INIT))
 					)
 					(then
 						(call $validate-resource (local.get $op) (i32.const 0))
@@ -1088,8 +1088,8 @@
 				(if
 					(i32.or
 						(i32.and
-							(i32.ge_u (local.get $op) (i32.const 51))
-							(i32.le_u (local.get $op) (i32.const 60))
+							(i32.ge_u (local.get $op) (i32.const M4_OP_MEMORY_SIZE))
+							(i32.le_u (local.get $op) (i32.const M4_OP_I32_STORE16))
 						)
 						(call $memory-op (local.get $op))
 					)
@@ -1108,7 +1108,7 @@
 						(if
 							(i64.gt_u (i64.load (i32.load offset=4 (local.get $record))) (i64.const 4294967295))
 							(then
-								(call $fail (i32.const 1))
+								(call $fail (i32.const M4_ERR_SYNTAX))
 							)
 						)
 					)

@@ -1,7 +1,9 @@
 ;; wiw: all guest parsing and execution lives in this module.
 (module
 	m4_changequote(<!,!>)
-	m4_include(<!limits.m4!>)
+	m4_include(<!m4/limits.m4!>)
+m4_include(<!m4/opcodes.m4!>)m4_dnl
+m4_include(<!m4/constants.m4!>)m4_dnl
 
 	m4_include(<!state.wat!>)
 	m4_include(<!lexer.wat!>)
