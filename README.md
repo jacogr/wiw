@@ -186,19 +186,21 @@ loop, alternating conditional arms, memory reads/writes, and SIMD arithmetic,
 mixed scalar/vector operands, three-vector selection and vector loads/stores
 on both the bootstrap
 and hosted runtime. SIMD workloads check every byte of the result each iteration.
-It writes sample timings, medians and source/binary hashes to `build/bench.json`.
+Taken branch workloads also check scalar/vector results and overlapping multivalue
+spans. It writes sample timings, medians and source/binary hashes to `build/bench.json`.
 `BENCH_ITERATIONS=10000 BENCH_SAMPLES=7 make bench` adjusts the bounded workload.
 These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 190 tests in 239,143.607 ms
-(3m59.14s). Bulk frame initialization, inline call/scope entry, compact shape
-decoding and balanced integer searches improve hosted invocation samples by
-roughly 4–21%. The local four-minute result has a narrow margin; these remain
-diagnostic measurements with unchanged spec coverage and stress inputs.
-The isolated hosted spec audit also passes all 65,199 commands in 239,723.820 ms
-(3m59.72s), with zero failures or skips.
+The latest complete `make check` run passes all 196 tests in 250,330.143 ms
+(4m10.33s); the preceding run took 3m59.14s. The isolated hosted spec audit passes
+all 65,199 commands in 239,563.896 ms (239.56s), with zero
+failures or skips, essentially matching the preceding audit. Direct branch
+unwinding and overlap-safe result movement improve hosted scalar/vector/multivalue
+branch samples by about 1.5–4.5%, while other workloads remain roughly unchanged.
+See the performance history for paired measurements and tradeoffs; spec coverage
+and million-call stress inputs remain unchanged.
 
 
 `make bench-load` measures parsing and validation separately from invocation,

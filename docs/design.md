@@ -1751,3 +1751,60 @@ same frozen coverage. These local runs cross four minutes with little margin;
 they are measurements, not CI thresholds. Performance history records complete
 coverage, hashes, paired invocation samples/counts and full-suite duration. The
 original million-call stress inputs remain unchanged.
+
+### Direct branch unwinding and overlap-safe result movement
+
+Ordinary br/br_if/br_table instructions resolve their validated target record
+and unwind directly in the dispatch loop. Empty targets restore the operand
+floor; single-result targets move the complete low/high slot only when its
+source differs from the destination. Larger targets use the shared result mover.
+Loop labels preserve their parameter shapes and remain active; explicit
+blocks/ifs skip their end marker, while synthetic function roots resume at
+function completion. Conditional fallthrough and branch-table defaults keep
+their existing selector handling. Fuel accounting still occurs once per guest
+instruction before dispatch.
+
+Returns, reference/cast branches and exception transfers retain their shared
+jump helper. It caches the target opcode, handles zero/single results directly,
+and publishes the resolved cursor once. The result mover skips empty or
+already-positioned spans, uses raw low/high loads/stores for one slot, and uses
+two overlap-safe memory.copy operations for larger spans. Both parallel arrays
+remain within their validated operand bounds. Imported tail-call argument
+movement shares this mover without changing suspension or the public ABI.
+
+New tests exercise br/br_if/br_table with zero, one, two and the maximum 128
+results, including overlapping ranges and the last operand slot while caller
+operands remain live. Results include full vectors, signaling NaN payloads,
+opaque references and wide integers. Additional tests distinguish loop
+parameter shapes from completion shapes and exhaust exact branch fuel
+boundaries, verifying recovery after interruption and guest traps. Both
+bootstrap and hosted runtimes run these cases.
+
+Sequential isolated paired invocation samples (5,000 iterations, five samples)
+show the following hosted medians:
+
+| Workload | Before | After | Time reduction | Instruction reduction |
+| --- | ---: | ---: | ---: | ---: |
+| branchScalar | 45.82 ms | 43.74 ms | 4.5% | 1.23% |
+| branchVector | 150.87 ms | 147.37 ms | 2.3% | 0.32% |
+| branchMany | 836.59 ms | 824.00 ms | 1.5% | 0.86% |
+| loop | 30.36 ms | 29.60 ms | 2.5% | 0.10% |
+
+The eight-result case removes three padding slots beneath the retained vector
+span, so source and destination overlap; every vector byte is checked on every
+iteration. Other invocation samples remain roughly unchanged. Bootstrap scalar
+branches improve about 20%, while its eight-result workload is about 1.7%
+slower. The step is retained for the focused branch gains, rather than a large
+overall speedup. Counts cover complete hosted invocation and adapter calls,
+excluding construction/loading; there are no profiling markers in the child.
+Expanded engine source grows by 4,046 bytes (0.25%). Samples and counts retain
+identical guest inputs across both versions.
+
+All 196 tests pass, including nested self-hosting and the complete pinned spec,
+in 250,330.143 ms (4m10.33s), compared with the prior 239,143.607 ms run.
+The subsequent isolated hosted audit passes all 65,199 commands across 258 files
+with zero failures/skips in 239,563.896 ms (239.56s),
+essentially unchanged from 239,723.820 ms. The complete-suite run is above four
+minutes; the standalone audit remains narrowly below it. These are separate local
+measurements with no timing threshold in CI. Performance history retains hashes,
+paired samples/counts and complete coverage; spec stress inputs remain unchanged.

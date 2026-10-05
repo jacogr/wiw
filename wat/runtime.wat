@@ -71,64 +71,71 @@
 		(global.set $control-count (i32.add (global.get $control-count) (i32.const 1)))
 	)
 
-	;; Unwind operands and labels to a resolved runtime target while preserving its branch result.
-	;; Loops retain their label and restart the body; blocks exit after end; functions reach implicit end.
+	;; Unwind to a resolved label for returns, references, casts and exception handlers.
+	;; Loops retain their label; explicit controls skip end; roots reach function completion.
 	(func $runtime-jump
 		(param $target i32)
 		(param $call i32)
 		(local $control i32)
 		(local $arity i32)
-		(local $value i64)
+		(local $op i32)
+		(local $base i32)
+		(local $source i32)
+		(local $next i32)
 
 		(local.set $control (call $control (local.get $target)))
+		(local.set $op (i32.load (local.get $control)))
 		(local.set $arity (i32.load offset=M4_CONTROL_RESULT_SHAPE_OFFSET (local.get $control)))
-		;; Loop labels have zero inputs even if the loop declares a normal-completion result.
-		(if (i32.eq (i32.load (local.get $control)) (i32.const M4_OP_LOOP))
-			(then
-				(local.set $arity (i32.load offset=M4_CONTROL_PARAMETER_SHAPE_OFFSET (local.get $control)))
-			)
+		;; Loop labels preserve their declared inputs rather than their completion results.
+		(if (i32.eq (local.get $op) (i32.const M4_OP_LOOP))
+			(then (local.set $arity (i32.load offset=M4_CONTROL_PARAMETER_SHAPE_OFFSET (local.get $control))))
 		)
-		;; Compact shapes encode void or one result without entering another call frame.
+		;; Compact shapes encode void or one result; vectors store their complete arity.
 		(if (i32.lt_u (local.get $arity) (i32.const M4_SHAPE_VECTOR_MIN))
 			(then (local.set $arity (i32.ne (local.get $arity) (i32.const 0))))
-			;; Vector shapes store their complete declared result count.
+			;; Vector arities remain bounded by validation.
 			(else (local.set $arity (i32.load (local.get $arity))))
 		)
-		;; Empty branches discard operands directly without invoking a result-copy loop.
+		(local.set $base (i32.load offset=M4_CONTROL_STACK_BASE_OFFSET (local.get $control)))
+		;; Empty branches discard operands without calling the result mover.
 		(if (i32.eqz (local.get $arity))
-			(then (global.set $sp (i32.load offset=M4_CONTROL_STACK_BASE_OFFSET (local.get $control))))
-			;; Nonempty branch results preserve both raw halves through the general shift.
+			(then (global.set $sp (local.get $base)))
+			;; Nonempty targets preserve their complete raw result slots.
 			(else
-				(call $runtime-shift
-					(i32.load offset=M4_CONTROL_STACK_BASE_OFFSET (local.get $control))
-					(local.get $arity)
+				;; Single results avoid another helper frame and skip already-positioned values.
+				(if (i32.eq (local.get $arity) (i32.const 1))
+					(then
+						(local.set $source (i32.sub (global.get $sp) (i32.const 1)))
+						(global.set $sp (i32.add (local.get $base) (i32.const 1)))
+						;; Both halves move together when an operand gap must be removed.
+						(if (i32.ne (local.get $base) (local.get $source))
+							(then
+								(local.set $base (i32.mul (local.get $base) (i32.const M4_SLOT_BYTES)))
+								(local.set $source (i32.mul (local.get $source) (i32.const M4_SLOT_BYTES)))
+								(i64.store (i32.add (global.get $stack-base) (local.get $base))
+									(i64.load (i32.add (global.get $stack-base) (local.get $source))))
+								(i64.store (i32.add (global.get $stack-high-base) (local.get $base))
+									(i64.load (i32.add (global.get $stack-high-base) (local.get $source))))
+							)
+						)
+					)
+					;; Larger spans share the overlap-safe bulk mover.
+					(else (call $runtime-shift (local.get $base) (local.get $arity)))
 				)
 			)
 		)
 		(global.set $control-count (local.get $target))
-		(i32.store (local.get $call) (i32.load offset=M4_CONTROL_END_OFFSET (local.get $control)))
-		;; A loop jumps to the first body instruction and keeps its own runtime label alive.
-		(if (i32.eq (i32.load (local.get $control)) (i32.const M4_OP_LOOP))
+		(local.set $next (i32.load offset=M4_CONTROL_END_OFFSET (local.get $control)))
+		;; Loops retain their label and restart at the first body instruction.
+		(if (i32.eq (local.get $op) (i32.const M4_OP_LOOP))
 			(then
 				(global.set $control-count (i32.add (local.get $target) (i32.const 1)))
-				(i32.store
-					(local.get $call)
-					(i32.add (i32.load offset=M4_CONTROL_START_OFFSET (local.get $control)) (i32.const 1))
-				)
+				(local.set $next (i32.add (i32.load offset=M4_CONTROL_START_OFFSET (local.get $control)) (i32.const 1)))
 			)
-			;; Explicit blocks/ifs resume after end; an implicit function label resumes at function end.
-			(else
-				;; Opcode zero distinguishes the function's synthetic root label from explicit controls.
-				(if (i32.ne (i32.load (local.get $control)) (i32.const 0))
-					(then
-						(i32.store
-							(local.get $call)
-							(i32.add (i32.load offset=M4_CONTROL_END_OFFSET (local.get $control)) (i32.const 1))
-						)
-					)
-				)
-			)
+			;; Synthetic roots keep end; explicit blocks/ifs continue after end.
+			(else (local.set $next (i32.add (local.get $next) (i32.ne (local.get $op) (i32.const 0)))))
 		)
+		(i32.store (local.get $call) (local.get $next))
 	)
 
 	;; Push an integer value onto the shared runtime operand stack after checking its capacity.
@@ -1107,20 +1114,63 @@
 									)
 								)
 							)
-							(call $runtime-jump
-								(i32.sub (i32.sub (global.get $control-count) (i32.const 1)) (local.get $target))
-								(local.get $frame)
+							(local.set $target (i32.sub (i32.sub (global.get $control-count) (i32.const 1)) (local.get $target)))
+							(local.set $entry-control
+								(i32.add (global.get $control-base) (i32.mul (local.get $target) (i32.const M4_CONTROL_BYTES)))
 							)
-							;; Continue from the helper-resolved label target.
-							(local.set $next
-								(i32.add
-									(local.get $code)
-									(i32.shl
-										(i32.load (local.get $frame))
-										(i32.const M4_INSTRUCTION_SHIFT)
+							(local.set $selector (i32.load (local.get $entry-control)))
+							(local.set $count (i32.load offset=M4_CONTROL_RESULT_SHAPE_OFFSET (local.get $entry-control)))
+							;; Loop branches retain their parameter shape rather than normal-completion results.
+							(if (i32.eq (local.get $selector) (i32.const M4_OP_LOOP))
+								(then (local.set $count (i32.load offset=M4_CONTROL_PARAMETER_SHAPE_OFFSET (local.get $entry-control))))
+							)
+							(local.set $inputs (i32.ne (local.get $count) (i32.const 0)))
+							;; Only vector shapes require a stored arity; compact shapes represent zero or one.
+							(if (i32.ge_u (local.get $count) (i32.const M4_SHAPE_VECTOR_MIN))
+								(then (local.set $inputs (i32.load (local.get $count))))
+							)
+							(local.set $meta (i32.load offset=M4_CONTROL_STACK_BASE_OFFSET (local.get $entry-control)))
+							;; Empty branches discard operands without entering an unwinding helper.
+							(if (i32.eqz (local.get $inputs))
+								(then (global.set $sp (local.get $meta)))
+								;; Nonempty branches preserve all raw result bits above the destination floor.
+								(else
+									;; Single results move directly, avoiding both jump and shift call frames.
+									(if (i32.eq (local.get $inputs) (i32.const 1))
+										(then
+											(local.set $count (i32.sub (global.get $sp) (i32.const 1)))
+											;; Already-positioned values need no low/high memory access.
+											(if (i32.ne (local.get $meta) (local.get $count))
+												(then
+													(local.set $count (i32.mul (local.get $count) (i32.const M4_SLOT_BYTES)))
+													(local.set $meta (i32.mul (local.get $meta) (i32.const M4_SLOT_BYTES)))
+													(i64.store (i32.add (global.get $stack-base) (local.get $meta))
+														(i64.load (i32.add (global.get $stack-base) (local.get $count))))
+													(i64.store (i32.add (global.get $stack-high-base) (local.get $meta))
+														(i64.load (i32.add (global.get $stack-high-base) (local.get $count))))
+													(local.set $meta (i32.shr_u (local.get $meta) (i32.const M4_SLOT_SHIFT)))
+												)
+											)
+											(global.set $sp (i32.add (local.get $meta) (i32.const 1)))
+										)
+										;; Larger spans use the overlap-safe bulk mover, including both vector halves.
+										(else (call $runtime-shift (local.get $meta) (local.get $inputs)))
 									)
 								)
 							)
+							(global.set $control-count (local.get $target))
+							(local.set $count (i32.load offset=M4_CONTROL_END_OFFSET (local.get $entry-control)))
+							;; Loops retain their label and resume at the first body instruction.
+							(if (i32.eq (local.get $selector) (i32.const M4_OP_LOOP))
+								(then
+									(global.set $control-count (i32.add (local.get $target) (i32.const 1)))
+									(local.set $count (i32.add (i32.load offset=M4_CONTROL_START_OFFSET (local.get $entry-control)) (i32.const 1)))
+								)
+								;; Explicit blocks skip end; synthetic roots resume at function completion.
+								(else (local.set $count (i32.add (local.get $count) (i32.ne (local.get $selector) (i32.const 0)))))
+							)
+							(i32.store (local.get $frame) (local.get $count))
+							(local.set $next (i32.add (local.get $code) (i32.shl (local.get $count) (i32.const M4_INSTRUCTION_SHIFT))))
 							(br $dispatch)
 						)
 					)
@@ -1720,46 +1770,43 @@
 		(i64.const 0)
 	)
 
-	;; Preserve the top vector while discarding operands below it down to a target floor.
+	;; Preserve complete top values at a target operand floor, including overlapping spans.
 	(func $runtime-shift
 		(param $base i32)
 		(param $count i32)
-		(local $i i32)
 		(local $source i32)
+		(local $bytes i32)
 
 		(local.set $source (i32.sub (global.get $sp) (local.get $count)))
-		;; Values move toward lower addresses, so forward scalar copying preserves overlap.
-		(block $done
-			;; Copy every result, including references and raw floating-point bits.
-			(loop $values
-				(br_if $done (i32.eq (local.get $i) (local.get $count)))
-				(i64.store
-					(i32.add
-						(global.get $stack-base)
-						(i32.mul (i32.add (local.get $base) (local.get $i)) (i32.const M4_SLOT_BYTES))
-					)
-					(i64.load
-						(i32.add
-							(global.get $stack-base)
-							(i32.mul (i32.add (local.get $source) (local.get $i)) (i32.const M4_SLOT_BYTES))
-						)
-					)
-				)
-				(i64.store
-					(i32.add
-						(global.get $stack-high-base)
-						(i32.mul (i32.add (local.get $base) (local.get $i)) (i32.const M4_SLOT_BYTES))
-					)
-					(i64.load
-						(i32.add
-							(global.get $stack-high-base)
-							(i32.mul (i32.add (local.get $source) (local.get $i)) (i32.const M4_SLOT_BYTES))
-						)
-					)
-				)
-				(local.set $i (i32.add (local.get $i) (i32.const 1)))
-				(br $values)
+		;; Empty or already-positioned results need only the final operand height.
+		(if (i32.or (i32.eqz (local.get $count)) (i32.eq (local.get $base) (local.get $source)))
+			(then
+				(global.set $sp (i32.add (local.get $base) (local.get $count)))
+				(return)
 			)
 		)
-		(global.set $sp (i32.add (local.get $base) (local.get $count)))
+		(local.set $base (i32.mul (local.get $base) (i32.const M4_SLOT_BYTES)))
+		(local.set $source (i32.mul (local.get $source) (i32.const M4_SLOT_BYTES)))
+		;; One scalar, reference or vector slot moves with two raw loads/stores.
+		(if (i32.eq (local.get $count) (i32.const 1))
+			(then
+				(i64.store (i32.add (global.get $stack-base) (local.get $base))
+					(i64.load (i32.add (global.get $stack-base) (local.get $source)))
+				)
+				(i64.store (i32.add (global.get $stack-high-base) (local.get $base))
+					(i64.load (i32.add (global.get $stack-high-base) (local.get $source)))
+				)
+			)
+			;; Bulk copies preserve overlap and move both parallel arrays for larger result spans.
+			(else
+				(local.set $bytes (i32.mul (local.get $count) (i32.const M4_SLOT_BYTES)))
+				(memory.copy (i32.add (global.get $stack-base) (local.get $base))
+					(i32.add (global.get $stack-base) (local.get $source)) (local.get $bytes)
+				)
+				(memory.copy (i32.add (global.get $stack-high-base) (local.get $base))
+					(i32.add (global.get $stack-high-base) (local.get $source)) (local.get $bytes)
+				)
+			)
+		)
+		(global.set $sp (i32.add (i32.shr_u (local.get $base) (i32.const M4_SLOT_SHIFT)) (local.get $count)))
 	)

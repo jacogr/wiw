@@ -113,6 +113,24 @@ cases.integerSignExtension = `(module (func (export "run") (param i64) (result i
     (local.set 0 (i64.sub (local.get 0) (i64.const 1)))
     (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`;
 
+// Taken branches discard padding while retaining scalar/vector results and overlapping spans.
+cases.branchScalar = `(module (func (export "run") (param i64) (result i64)
+  (loop $again
+    (block (result i64) i32.const 99 local.get 0 br 0)
+    i64.const 1 i64.sub local.set 0
+    local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
+for (const [name,count] of [['branchVector',1],['branchMany',8]]) {
+  const values=Array.from({length:count},(_,index)=>`v128.const i64x2 ${index+1} ${index+101}`);
+  const checks=[...values].reverse().map(value=>`${value} i8x16.eq i8x16.all_true i32.eqz if unreachable end`);
+  cases[name]=`(module (func (export "run") (param i64) (result i64)
+    (loop $again
+      (block (result ${'v128 '.repeat(count)})
+        i32.const 11 i32.const 22 i32.const 33 ${values.join(' ')} br 0)
+      ${checks.join(' ')}
+      local.get 0 i64.const 1 i64.sub local.set 0
+      local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
+}
+
 const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
 const report = {node: process.version, binaryen: execFileSync('wasm-opt', ['--version'], {encoding:'utf8'}).trim(),
   engineSourceSha256: createHash('sha256').update(await readFile(new URL('../build/wiw.wat', import.meta.url))).digest('hex'),
