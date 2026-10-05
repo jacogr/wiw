@@ -1,16 +1,18 @@
-	;; Initialize one explicit call frame: code cursor/end, operand base, function index, then locals.
+	;; Initialize an explicit call frame and its implicit root control using one function descriptor.
 	;; Offsets 0/4: next instruction/end; 8/12: operand base/function index; locals start at 16.
 	;; The reserved root offset saves this call's implicit control index for return and function completion.
 	;; Copy parameters in declaration order and zero every non-parameter slot on each entry.
 	(func $enter
 		(param $index i32)
 		(param $frame i32)
+		(param $frame-high i32)
 		(param $base i32)
 		(param $args i32)
 		(local $f i32)
 		(local $i i32)
 		(local $value i64)
 		(local $high i64)
+		(local $control i32)
 
 		(local.set $f (call $function (local.get $index)))
 		(i32.store (local.get $frame) (i32.load offset=8 (local.get $f)))
@@ -46,11 +48,31 @@
 					)
 					(local.get $value)
 				)
-				(i64.store (call $local-high-address (local.get $frame) (local.get $i)) (local.get $high))
+				;; Dispatch already knows this frame's parallel high-half region.
+				(i64.store
+					(i32.add (local.get $frame-high) (i32.mul (local.get $i) (i32.const 8)))
+					(local.get $high)
+				)
 				(local.set $i (i32.add (local.get $i) (i32.const 1)))
 				(br $locals)
 			)
 		)
+		;; Reserve one implicit root label after initializing all parameter/local slots.
+		(if (i32.ge_u (global.get $control-count) (i32.const CAP_CONTROLS))
+			(then
+				(call $fail (i32.const 6))
+				(return)
+			)
+		)
+		(i32.store offset=CALL_ROOT_OFFSET (local.get $frame) (global.get $control-count))
+		(local.set $control (call $control (global.get $control-count)))
+		(i32.store (local.get $control) (i32.const 0))
+		(i32.store offset=4 (local.get $control) (i32.load offset=8 (local.get $f)))
+		(i32.store offset=8 (local.get $control) (i32.load offset=12 (local.get $f)))
+		(i32.store offset=12 (local.get $control) (local.get $base))
+		(i32.store offset=16 (local.get $control) (i32.load offset=24 (local.get $f)))
+		(i32.store offset=20 (local.get $control) (i32.const 0))
+		(global.set $control-count (i32.add (global.get $control-count) (i32.const 1)))
 	)
 
 	;; Push a runtime control: opcode, opening/end indices, operand base and result type.
@@ -205,14 +227,12 @@
 				(local.set $frame (global.get $call-base))
 				(local.set $calls (i32.const 1))
 				(local.set $fuel (global.get $fuel-limit))
-				(call $enter (local.get $index) (local.get $frame) (i32.const 0) (local.get $args))
-				(i32.store offset=CALL_ROOT_OFFSET (local.get $frame) (global.get $control-count))
-				(call $runtime-control
+				(call $enter
+					(local.get $index)
+					(local.get $frame)
+					(global.get $call-high-base)
 					(i32.const 0)
-					(i32.load (local.get $frame))
-					(i32.load offset=4 (local.get $frame))
-					(i32.const 0)
-					(global.get $last-results)
+					(local.get $args)
 				)
 			)
 		)
@@ -654,15 +674,19 @@
 			;; Direct and indirect calls copy arguments into a new frame and resume at the callee's first record.
 			(if (i32.eq (local.get $route) (i32.const 5))
 				(then
-					;; The caller continuation must survive defined calls and host suspension.
-					(i32.store
-						(local.get $frame)
-						(i32.shr_u (i32.sub (local.get $next) (local.get $code)) (i32.const 4))
-					)
 					(local.set $tail
 						(i32.or
 							(i32.or (i32.eq (local.get $op) (i32.const 438)) (i32.eq (local.get $op) (i32.const 439)))
 							(i32.eq (local.get $op) (i32.const 462))
+						)
+					)
+					;; Ordinary calls save a continuation; tail calls replace it with callee entry or import completion.
+					(if (i32.eqz (local.get $tail))
+						(then
+							(i32.store
+								(local.get $frame)
+								(i32.shr_u (i32.sub (local.get $next) (local.get $code)) (i32.const 4))
+							)
 						)
 					)
 					;; Tail instructions share call resolution but replace the current frame rather than nesting.
@@ -778,33 +802,37 @@
 					)
 					(global.set $sp (i32.sub (global.get $sp) (i32.load offset=16 (local.get $meta))))
 					(local.set $target (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const 8))))
-					;; Defined tail calls copy directly from the old argument slots into the reused frame.
+					;; Defined tail calls retain this frame and its cached high-half region.
 					(if (local.get $tail)
 						(then
 							(global.set $sp (i32.load offset=8 (local.get $frame)))
 							(global.set $control-count (i32.load offset=CALL_ROOT_OFFSET (local.get $frame)))
-							(local.set $calls (i32.sub (local.get $calls) (i32.const 1)))
 						)
-					)
-					;; Bound defined-function recursion before writing beyond the call-frame region.
-					(if (i32.ge_u (local.get $calls) (i32.const CAP_CALLS))
-						(then
-							(call $fail (i32.const 6))
-							(return (i64.const 0))
-						)
-					)
-					(local.set $frame
-						(i32.add (global.get $call-base) (i32.mul (local.get $calls) (i32.const CALL_BYTES)))
-					)
-					;; Tail replacement keeps the same frame; ordinary calls select the next high-half region.
-					(if (i32.eqz (local.get $tail))
-						(then
+						;; Ordinary calls allocate the next bounded frame and high-half region.
+						(else
+							;; Reject recursion before writing outside the call-frame arena.
+							(if (i32.ge_u (local.get $calls) (i32.const CAP_CALLS))
+								(then
+									(call $fail (i32.const 6))
+									(return (i64.const 0))
+								)
+							)
+							(local.set $frame
+								(i32.add (global.get $call-base) (i32.mul (local.get $calls) (i32.const CALL_BYTES)))
+							)
 							(local.set $frame-high
 								(i32.add (global.get $call-high-base) (i32.mul (local.get $calls) (i32.const LOCAL_NAME_BYTES)))
 							)
+							(local.set $calls (i32.add (local.get $calls) (i32.const 1)))
 						)
 					)
-					(call $enter (local.get $callee) (local.get $frame) (global.get $sp) (local.get $target))
+					(call $enter
+						(local.get $callee)
+						(local.get $frame)
+						(local.get $frame-high)
+						(global.get $sp)
+						(local.get $target)
+					)
 					;; Both ordinary entry and tail replacement select the callee cursor and end.
 					(local.set $next
 						(i32.add
@@ -824,21 +852,12 @@
 							)
 						)
 					)
-					(i32.store offset=CALL_ROOT_OFFSET (local.get $frame) (global.get $control-count))
-					(call $runtime-control
-						(i32.const 0)
-						(i32.load (local.get $frame))
-						(i32.load offset=4 (local.get $frame))
-						(global.get $sp)
-						(i32.load offset=24 (local.get $meta))
-					)
 					;; Failed control allocation cannot be followed by dispatch in an incomplete callee frame.
 					(if (global.get $error)
 						(then
 							(return (i64.const 0))
 						)
 					)
-					(local.set $calls (i32.add (local.get $calls) (i32.const 1)))
 					(br $dispatch)
 				)
 			)

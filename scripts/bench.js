@@ -38,6 +38,15 @@ const cases = {
     (func $run (export "run") (type $t)
       (if (result i64) (i64.eqz (local.get 0)) (then (i64.const 0))
         (else (return_call_ref $t (i64.sub (local.get 0) (i64.const 1)) (global.get $target))))))`,
+  ordinary: `(module
+    (func $step (param i64) (result i64)
+      (if (result i64) (i64.eqz (local.get 0)) (then (i64.const 0))
+        (else (call $step (i64.sub (local.get 0) (i64.const 1))))))
+    (func (export "run") (param i64) (result i64)
+      (loop $again
+        (call $step (i64.const 8)) i64.eqz (if (then) (else unreachable))
+        (local.set 0 (i64.sub (local.get 0) (i64.const 1)))
+        (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`,
   parameters: `(module
     (func $step (param i64 i64 i64 i64) (result i64) (local i64 i64 i64 i64)
       (if (i64.ne (local.get 4) (i64.const 0)) (then unreachable))

@@ -1058,3 +1058,49 @@ control's 269,234 ms (4.49 minutes), a measured 2.6% reduction. Local timings va
 paired isolated benchmarks and instruction-count reductions support the gain.
 The source/binary hashes, control audit, discarded experiment and retained
 measurements are recorded in `test/performance.json`.
+
+
+### Call entry and tail-frame bookkeeping
+
+Dispatch passes its existing cached high-half frame base into `$enter`, so local
+initialization no longer divides a frame address for every slot. Parameter copies
+and zero initialization retain the original loop and argument-address rules. Entry
+now creates the function's implicit root label using its already-resolved function
+descriptor, with the same control-capacity check, start/end, operand base, result
+shape and zero loop-parameter field. Explicit blocks, loops and conditionals still
+use `$runtime-control`. No frame layouts, limits, exported ABI or instruction
+records change.
+
+Defined tail calls retain the current frame, high-half base and active call depth
+directly. They discard the current function's operands and labels as before, then
+initialize the replacement. Ordinary calls check capacity, allocate the next frame,
+and increment depth once. Only ordinary calls save a caller continuation; imported
+tail calls explicitly save function completion before suspension. Fuel, source
+offsets, indirect/reference resolution and host suspension follow the existing
+paths. Construction continues to parse the engine normally for each instance.
+
+New tests execute a tail replacement at the final allowed call frame, preserving
+vector upper halves and multivalue results through an implicit-root branch. An
+ordinary call beyond that boundary fails, then the next valid invocation recovers.
+A parameterless, void tail callee checks empty frame and root completion. Existing
+maximum-parameter/local, control-capacity, imported-tail, null-reference, exact-fuel,
+exception and nested self-hosting tests remain unchanged. `make bench` now includes
+a checked ordinary recursive-call workload.
+
+Paired hosted call benchmarks improve by 2.7–4.4%; ordinary recursion improves by
+1.9% in a separate bounded comparison. Diagnostic execution of the three official
+tail-call workloads retains identical guest opcode counts while executing 41 fewer
+bootstrap instructions per tail call: direct 353 to 312, indirect 550 to 509, and
+reference 366 to 325. Complete profiled invocations improve by 2.9–3.6%. These counts
+include fixed marker/resume overhead and are diagnostic rather than timing inputs.
+
+All 172 tests pass, including nested self-hosting, and both runtimes pass all
+65,199 commands across 258 unchanged files with zero skips and failures. The
+standalone hosted audit takes 270,648.823 ms (4.51 minutes), against an unchanged
+source/binary control measured earlier in the same local session at 273,352.779 ms
+(4.56 minutes). The 1.0% full-audit difference is within normal timing variation;
+the earlier recorded 262,270.025 ms result was also faster than this run. The
+retained change is supported by smaller call bookkeeping, paired call benchmarks
+and deterministic instruction reductions. `test/performance.json` records both
+comparisons, artifact hashes, full coverage and diagnostic profiles without CI
+performance thresholds.

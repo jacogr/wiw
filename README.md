@@ -173,7 +173,7 @@ execution and trap handling run inside the interpreted WAT copy; the shared
 Node frontend continues to handle synchronous callbacks and resource bindings.
 
 
-`make bench` measures direct, indirect and typed-reference tail calls, indirect
+`make bench` measures ordinary recursive calls, direct, indirect and typed-reference tail calls, indirect
 calls with many declared types and alternating table entries, sign-extension
 loops, reference calls
 through a mutable global, a call with multiple parameters and locals, a scalar
