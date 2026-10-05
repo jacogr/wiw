@@ -23322,6 +23322,817 @@
           }
         ]
       }
+    },
+    {
+      "retained": true,
+      "label": "Reusing trial denominators during exact float rounding",
+      "node": "v24.11.1",
+      "binaryen": "wasm-opt version 133",
+      "tag": "wg-3.0",
+      "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
+      "runtime": "interpreted",
+      "interpreterDepth": 1,
+      "engineSourceSha256": "13d8bb65b4a1ec83b28b7cb5c6746c96507c72e32f60d2f844cce5d125683f14",
+      "binarySha256": "52ae6bc53a2e312554524b057a8818fd8dac733f10a769265049e211c89e92c9",
+      "fullSpec": {
+        "elapsedMs": 257997.765458,
+        "passed": 65199,
+        "skipped": 0,
+        "failed": 0,
+        "fileCount": 258,
+        "previousElapsedMs": 253734.890834,
+        "speedup": 7.935064290959033,
+        "reductionPercent": 87.39770765134985,
+        "speedupVsPrevious": 0.9834770870343295,
+        "reductionPercentVsPrevious": -1.6800506268524584,
+        "slowestFiles": [
+          {
+            "file": "return_call_ref.wast",
+            "elapsedMs": 35741.91066599998
+          },
+          {
+            "file": "return_call.wast",
+            "elapsedMs": 31764.214332999996
+          },
+          {
+            "file": "simd/simd_const.wast",
+            "elapsedMs": 10316.937834000011
+          },
+          {
+            "file": "const.wast",
+            "elapsedMs": 9939.150499999996
+          },
+          {
+            "file": "memory_grow.wast",
+            "elapsedMs": 6912.505082999996
+          }
+        ]
+      },
+      "validation": {
+        "tests": 180,
+        "failed": 0,
+        "skipped": 0,
+        "bootstrapPassed": 65199,
+        "bootstrapFileCount": 258
+      },
+      "timingNote": "Standalone hosted audit after the complete test suite. Paired loader samples run sequentially with no test or audit overlap; all eleven workloads use unchanged guest inputs. Local measurements are diagnostic, with no CI thresholds.",
+      "engineSourceBytesBefore": 1621854,
+      "engineSourceBytes": 1623623,
+      "loadBenchmarkBefore": {
+        "node": "v24.11.1",
+        "binaryen": "wasm-opt version 133",
+        "engineSourceSha256": "3ff616e997486e4472ec542e08116a0a88617e40b74cc9eef3f5ad08d2cd1efa",
+        "binarySha256": "0aa845eb2ec1f30560523c8277bed62c06277c160f51564a88358f9a41077e94",
+        "phase": "load",
+        "repeats": 3,
+        "samples": 5,
+        "cases": [
+          {
+            "runtime": "bootstrap",
+            "name": "integers",
+            "format": "text",
+            "sourceBytes": 19004,
+            "medianMs": 0.3245969999999995,
+            "elapsedMs": [
+              0.3393890000000018,
+              1.106319333333334,
+              0.3245969999999995,
+              0.23906966666666798,
+              0.23722200000000035
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floats",
+            "format": "text",
+            "sourceBytes": 22588,
+            "medianMs": 0.23801400000000209,
+            "elapsedMs": [
+              0.26962500000000017,
+              0.23915266666666687,
+              0.23801400000000209,
+              0.19431966666666747,
+              0.19472233333333597
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectors",
+            "format": "text",
+            "sourceBytes": 18492,
+            "medianMs": 0.15934733333333403,
+            "elapsedMs": [
+              0.17231933333333416,
+              0.17074999999999818,
+              0.15934733333333403,
+              0.1482499999999997,
+              0.14820833333333402
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "functions",
+            "format": "text",
+            "sourceBytes": 40755,
+            "medianMs": 0.3627363333333354,
+            "elapsedMs": [
+              0.39504166666666646,
+              0.3627363333333354,
+              0.3619446666666685,
+              0.3615693333333354,
+              0.37819466666666796
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "decimalScales",
+            "format": "text",
+            "sourceBytes": 13882,
+            "medianMs": 0.6727360000000004,
+            "elapsedMs": [
+              0.7034446666666696,
+              0.655152666666666,
+              0.6687083333333371,
+              0.6747083333333327,
+              0.6727360000000004
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "decimalDigits",
+            "format": "text",
+            "sourceBytes": 17722,
+            "medianMs": 0.28355566666666715,
+            "elapsedMs": [
+              0.3123193333333347,
+              0.2827916666666634,
+              0.28355566666666715,
+              0.2814303333333328,
+              0.30579166666666424
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floatsHex",
+            "format": "text",
+            "sourceBytes": 10810,
+            "medianMs": 0.45658333333333684,
+            "elapsedMs": [
+              0.45658333333333684,
+              0.4499306666666693,
+              0.4564446666666697,
+              0.4604166666666695,
+              0.4581666666666659
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "integersBinary",
+            "format": "binary",
+            "sourceBytes": 3110,
+            "medianMs": 0.2368613333333324,
+            "elapsedMs": [
+              0.3274583333333349,
+              0.25501366666667025,
+              0.2368613333333324,
+              0.23594433333333598,
+              0.23495833333332902
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floatsBinary",
+            "format": "binary",
+            "sourceBytes": 10285,
+            "medianMs": 0.7731666666666683,
+            "elapsedMs": [
+              0.8230833333333294,
+              0.7731666666666683,
+              0.7699443333333326,
+              0.8064443333333315,
+              0.7629999999999958
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorsBinary",
+            "format": "binary",
+            "sourceBytes": 10278,
+            "medianMs": 0.2349026666666608,
+            "elapsedMs": [
+              0.2349026666666608,
+              0.2638196666666583,
+              0.22730566666666618,
+              0.25620833333332865,
+              0.2233886666666649
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "functionsBinary",
+            "format": "binary",
+            "sourceBytes": 6565,
+            "medianMs": 0.4348890000000078,
+            "elapsedMs": [
+              0.4554166666666693,
+              0.4348890000000078,
+              0.45365266666666076,
+              0.42670833333333275,
+              0.4207083333333325
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "integers",
+            "format": "text",
+            "sourceBytes": 19004,
+            "medianMs": 26.88825000000001,
+            "elapsedMs": [
+              26.942347333333345,
+              26.60102766666667,
+              27.083583333333326,
+              26.65797200000001,
+              26.88825000000001
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floats",
+            "format": "text",
+            "sourceBytes": 22588,
+            "medianMs": 30.805194333333322,
+            "elapsedMs": [
+              30.805194333333322,
+              30.557791666666656,
+              30.98743033333335,
+              30.689625000000017,
+              31.114013999999997
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectors",
+            "format": "text",
+            "sourceBytes": 18492,
+            "medianMs": 21.5531806666667,
+            "elapsedMs": [
+              21.514875,
+              21.297361333333356,
+              39.05300000000003,
+              21.79527799999998,
+              21.5531806666667
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "functions",
+            "format": "text",
+            "sourceBytes": 40755,
+            "medianMs": 56.19220833333338,
+            "elapsedMs": [
+              59.02415266666662,
+              55.93668066666661,
+              55.905527666666636,
+              56.19220833333338,
+              56.242750000000036
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "decimalScales",
+            "format": "text",
+            "sourceBytes": 13882,
+            "medianMs": 152.02151400000002,
+            "elapsedMs": [
+              150.954736,
+              151.7302776666667,
+              152.03573599999996,
+              154.13302800000005,
+              152.02151400000002
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "decimalDigits",
+            "format": "text",
+            "sourceBytes": 17722,
+            "medianMs": 64.59745833333334,
+            "elapsedMs": [
+              64.44924999999996,
+              64.91375000000001,
+              64.88984700000007,
+              64.59745833333334,
+              64.53473633333336
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floatsHex",
+            "format": "text",
+            "sourceBytes": 10810,
+            "medianMs": 120.7758056666665,
+            "elapsedMs": [
+              123.36218066666667,
+              120.3152636666664,
+              120.49056933333334,
+              120.9278889999999,
+              120.7758056666665
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "integersBinary",
+            "format": "binary",
+            "sourceBytes": 3110,
+            "medianMs": 35.612610999999866,
+            "elapsedMs": [
+              35.79405533333344,
+              35.612610999999866,
+              48.83252766666677,
+              35.37344433333359,
+              35.02362499999981
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floatsBinary",
+            "format": "binary",
+            "sourceBytes": 10285,
+            "medianMs": 125.90904166666648,
+            "elapsedMs": [
+              126.45547200000026,
+              125.90904166666648,
+              126.1845,
+              125.70859733333357,
+              125.7719723333333
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorsBinary",
+            "format": "binary",
+            "sourceBytes": 10278,
+            "medianMs": 34.779555333333214,
+            "elapsedMs": [
+              34.66450000000017,
+              34.779555333333214,
+              34.656055666666965,
+              38.42141666666672,
+              35.95722200000031
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "functionsBinary",
+            "format": "binary",
+            "sourceBytes": 6565,
+            "medianMs": 70.51619433333326,
+            "elapsedMs": [
+              71.33513866666665,
+              70.51619433333326,
+              70.68243066666643,
+              70.34162499999972,
+              70.22879166666705
+            ]
+          }
+        ]
+      },
+      "loadBenchmark": {
+        "node": "v24.11.1",
+        "binaryen": "wasm-opt version 133",
+        "engineSourceSha256": "13d8bb65b4a1ec83b28b7cb5c6746c96507c72e32f60d2f844cce5d125683f14",
+        "binarySha256": "52ae6bc53a2e312554524b057a8818fd8dac733f10a769265049e211c89e92c9",
+        "phase": "load",
+        "repeats": 3,
+        "samples": 5,
+        "cases": [
+          {
+            "runtime": "bootstrap",
+            "name": "integers",
+            "format": "text",
+            "sourceBytes": 19004,
+            "medianMs": 0.2589443333333321,
+            "elapsedMs": [
+              0.3200556666666661,
+              1.196791666666665,
+              0.2500696666666684,
+              0.23170833333333482,
+              0.2589443333333321
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floats",
+            "format": "text",
+            "sourceBytes": 22588,
+            "medianMs": 0.2486666666666674,
+            "elapsedMs": [
+              0.2736806666666662,
+              0.2628610000000009,
+              0.2486666666666674,
+              0.24529166666666904,
+              0.21181933333333328
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectors",
+            "format": "text",
+            "sourceBytes": 18492,
+            "medianMs": 0.15404166666666677,
+            "elapsedMs": [
+              0.1729583333333314,
+              0.1697640000000007,
+              0.15404166666666677,
+              0.14944433333333507,
+              0.1516806666666639
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "functions",
+            "format": "text",
+            "sourceBytes": 40755,
+            "medianMs": 0.37308333333333604,
+            "elapsedMs": [
+              0.3673473333333324,
+              0.3719999999999999,
+              0.39319433333333603,
+              0.3736109999999968,
+              0.37308333333333604
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "decimalScales",
+            "format": "text",
+            "sourceBytes": 13882,
+            "medianMs": 0.5900416666666644,
+            "elapsedMs": [
+              0.6402223333333362,
+              0.5900416666666644,
+              0.57165266666667,
+              0.5696946666666681,
+              0.5907359999999974
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "decimalDigits",
+            "format": "text",
+            "sourceBytes": 17722,
+            "medianMs": 0.2896389999999987,
+            "elapsedMs": [
+              0.3264303333333345,
+              0.2896389999999987,
+              0.2879443333333332,
+              0.2881666666666642,
+              0.2937083333333372
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floatsHex",
+            "format": "text",
+            "sourceBytes": 10810,
+            "medianMs": 0.4322223333333331,
+            "elapsedMs": [
+              0.44609733333333185,
+              0.43551399999999774,
+              0.4305140000000023,
+              0.4322223333333331,
+              0.43097200000000174
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "integersBinary",
+            "format": "binary",
+            "sourceBytes": 3110,
+            "medianMs": 0.24206966666666574,
+            "elapsedMs": [
+              0.3128889999999984,
+              0.25459733333333173,
+              0.237055666666663,
+              0.24123599999999593,
+              0.24206966666666574
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floatsBinary",
+            "format": "binary",
+            "sourceBytes": 10285,
+            "medianMs": 0.6256386666666695,
+            "elapsedMs": [
+              0.708374999999999,
+              0.6256386666666695,
+              0.6181529999999972,
+              0.5972083333333321,
+              0.6716526666666643
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorsBinary",
+            "format": "binary",
+            "sourceBytes": 10278,
+            "medianMs": 0.23234733333333205,
+            "elapsedMs": [
+              0.23234733333333205,
+              0.22698600000000133,
+              0.22588866666666738,
+              0.23650000000000185,
+              0.23793066666666599
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "functionsBinary",
+            "format": "binary",
+            "sourceBytes": 6565,
+            "medianMs": 0.42729166666667123,
+            "elapsedMs": [
+              0.42729166666667123,
+              0.43240266666666116,
+              0.4241806666666624,
+              0.42556933333332836,
+              0.43411100000000147
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "integers",
+            "format": "text",
+            "sourceBytes": 19004,
+            "medianMs": 26.677152999999993,
+            "elapsedMs": [
+              27.080361333333343,
+              26.636305333333326,
+              26.812889000000002,
+              26.677152999999993,
+              26.633861333333318
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floats",
+            "format": "text",
+            "sourceBytes": 22588,
+            "medianMs": 30.44756966666667,
+            "elapsedMs": [
+              30.256124999999997,
+              30.44756966666667,
+              30.488847333333336,
+              30.30398600000001,
+              30.637222333333284
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectors",
+            "format": "text",
+            "sourceBytes": 18492,
+            "medianMs": 21.119916666666693,
+            "elapsedMs": [
+              21.208375000000007,
+              21.13936133333338,
+              21.119916666666693,
+              21.06009700000004,
+              21.06206933333336
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "functions",
+            "format": "text",
+            "sourceBytes": 40755,
+            "medianMs": 56.004263666666624,
+            "elapsedMs": [
+              56.14961133333335,
+              56.004263666666624,
+              55.9087219999999,
+              55.45823599999994,
+              56.024389000000006
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "decimalScales",
+            "format": "text",
+            "sourceBytes": 13882,
+            "medianMs": 133.84409733333345,
+            "elapsedMs": [
+              133.84409733333345,
+              134.32786100000007,
+              133.4262360000001,
+              133.65502766666683,
+              133.95438899999985
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "decimalDigits",
+            "format": "text",
+            "sourceBytes": 17722,
+            "medianMs": 59.11036133333315,
+            "elapsedMs": [
+              59.342555333333316,
+              58.98522233333339,
+              59.11036133333315,
+              58.96612499999992,
+              59.334236
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floatsHex",
+            "format": "text",
+            "sourceBytes": 10810,
+            "medianMs": 107.3434166666666,
+            "elapsedMs": [
+              107.28698600000007,
+              107.17059733333342,
+              108.50795833333329,
+              107.3434166666666,
+              112.88005566666682
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "integersBinary",
+            "format": "binary",
+            "sourceBytes": 3110,
+            "medianMs": 34.8417499999999,
+            "elapsedMs": [
+              34.83287500000006,
+              34.75112500000008,
+              34.93695833333337,
+              34.914374999999986,
+              34.8417499999999
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floatsBinary",
+            "format": "binary",
+            "sourceBytes": 10285,
+            "medianMs": 111.12201399999988,
+            "elapsedMs": [
+              110.73284700000022,
+              111.20337499999975,
+              111.12201399999988,
+              111.34245833333323,
+              110.73201366666642
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorsBinary",
+            "format": "binary",
+            "sourceBytes": 10278,
+            "medianMs": 35.06872199999998,
+            "elapsedMs": [
+              35.32316666666642,
+              35.06872199999998,
+              35.07502766666706,
+              34.837305333333155,
+              34.98766666666658
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "functionsBinary",
+            "format": "binary",
+            "sourceBytes": 6565,
+            "medianMs": 70.27759699999963,
+            "elapsedMs": [
+              70.36362499999996,
+              70.27443033333293,
+              70.27759699999963,
+              70.32468066666661,
+              70.09387499999987
+            ]
+          }
+        ]
+      },
+      "loadInstructionProfile": {
+        "method": "Bootstrap instructions for an entire hosted load, excluding engine construction and invocation; child source has no profiling markers.",
+        "before": [
+          {
+            "name": "integers",
+            "sourceBytes": 19004,
+            "instructions": 4760623
+          },
+          {
+            "name": "floats",
+            "sourceBytes": 22588,
+            "instructions": 5406427
+          },
+          {
+            "name": "vectors",
+            "sourceBytes": 18492,
+            "instructions": 3656533
+          },
+          {
+            "name": "functions",
+            "sourceBytes": 40755,
+            "instructions": 9816151
+          },
+          {
+            "name": "decimalScales",
+            "sourceBytes": 13882,
+            "instructions": 26363919
+          },
+          {
+            "name": "decimalDigits",
+            "sourceBytes": 17722,
+            "instructions": 11536879
+          },
+          {
+            "name": "floatsHex",
+            "sourceBytes": 10810,
+            "instructions": 20881551
+          },
+          {
+            "name": "integersBinary",
+            "sourceBytes": 3110,
+            "instructions": 6459643
+          },
+          {
+            "name": "floatsBinary",
+            "sourceBytes": 10285,
+            "instructions": 22426229
+          },
+          {
+            "name": "vectorsBinary",
+            "sourceBytes": 10278,
+            "instructions": 6228726
+          },
+          {
+            "name": "functionsBinary",
+            "sourceBytes": 6565,
+            "instructions": 12920169
+          }
+        ],
+        "after": [
+          {
+            "name": "integers",
+            "sourceBytes": 19004,
+            "instructions": 4760623
+          },
+          {
+            "name": "floats",
+            "sourceBytes": 22588,
+            "instructions": 5406427
+          },
+          {
+            "name": "vectors",
+            "sourceBytes": 18492,
+            "instructions": 3656533
+          },
+          {
+            "name": "functions",
+            "sourceBytes": 40755,
+            "instructions": 9816151
+          },
+          {
+            "name": "decimalScales",
+            "sourceBytes": 13882,
+            "instructions": 23007503
+          },
+          {
+            "name": "decimalDigits",
+            "sourceBytes": 17722,
+            "instructions": 10632207
+          },
+          {
+            "name": "floatsHex",
+            "sourceBytes": 10810,
+            "instructions": 18610319
+          },
+          {
+            "name": "integersBinary",
+            "sourceBytes": 3110,
+            "instructions": 6459643
+          },
+          {
+            "name": "floatsBinary",
+            "sourceBytes": 10285,
+            "instructions": 19642997
+          },
+          {
+            "name": "vectorsBinary",
+            "sourceBytes": 10278,
+            "instructions": 6228726
+          },
+          {
+            "name": "functionsBinary",
+            "sourceBytes": 6565,
+            "instructions": 12920169
+          }
+        ]
+      }
     }
   ],
   "experiments": [

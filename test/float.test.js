@@ -81,6 +81,34 @@ for (const binary of ['wiw-opt.wasm']) {
     } finally { await rm(dir, {recursive: true, force: true}); }
   });
 
+  test(`${binary}: mixed ratio scales retain exact bits across literals and reloads`, async () => {
+    // Alternate large/small operands, halfway cases and underflow so stale scratch words cannot leak.
+    const literals = ['0x1.123456789abcdep900', '0x1.123456789abcdep-100',
+      '1.00000000000000011102230246251565404236316680908203125',
+      '1.00000005960464477539062500000000001', '1e100', '1e-100',
+      '2.4703282292062327e-324', '2.4703282292062328e-324',
+      '7.006492321624085e-46', '7.006492321624086e-46',
+      '0x1.fffffffffffffp1023', '0x1p-1074', '0', '-0', '0.1'];
+    for (const create of [createBootstrapInterpreter, createInterpreter]) {
+      const engine = await create(url);
+      for (const type of ['f64', 'f32']) {
+        const width = type === 'f32' ? 32 : 64, integer = type === 'f32' ? 'i32' : 'i64';
+        const finite = literals.flatMap(literal => {
+          try { return [{literal, bits: floatBits(literal, width)}]; }
+          catch (error) { assert.match(error.message, /out of range/); return []; }
+        });
+        for (const values of [finite, [...finite].reverse(), finite]) {
+          engine.load(`(module ${values.map(({literal}, n) =>
+            `(func (export "f${n}") (result ${integer}) ${type}.const ${literal} ${integer}.reinterpret_${type})`).join('\n')})`);
+          for (const [n, {literal, bits}] of values.entries()) {
+            const signed = BigInt.asIntN(width, bits);
+            assert.equal(engine.invoke(`f${n}`), width === 32 ? Number(signed) : signed, `${create.name}/${type}/${literal}`);
+          }
+        }
+      }
+    }
+  });
+
   test(`${binary}: small exact ratios and precision boundaries retain their IEEE bits`, async () => {
     const literals = ['0.1', '-0.1', '1.5', '-0', '16777215', '16777216', '16777217',
       '33554431', '33554433', '4294967295', '4294967296', '1677721.5', '1677721.6',

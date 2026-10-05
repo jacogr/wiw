@@ -10,7 +10,7 @@ const binary=new URL('../build/wiw-opt.wasm',import.meta.url);
 const source=await readFile(new URL('../build/wiw.wat',import.meta.url),'utf8');
 // Expose private arithmetic only in temporary test engines; the production ABI stays unchanged.
 let instrumented=source.replace('(module','(module\n  ;; Reset status between independent arithmetic cases.\n  (func (export "big_reset") (global.set $error (i32.const 0)))',1);
-for(const name of ['small','trim','mul','shift','compare','sub','bits']) {
+for(const name of ['small','trim','mul','shift','half','compare','sub','bits']) {
   instrumented=instrumented.replace(`(func $big-${name}\n`,`(func $big-${name} (export "big_${name}")\n`);
 }
 const capacity=1023,bytes=4096,a=4112,b=8240,c=12368;
@@ -60,6 +60,12 @@ for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: exact intege
       (1n<<127n)-1n,1n<<128n,(1n<<BigInt(32*(capacity-1)))-1n,1n<<BigInt(32*(capacity-1))];
     for(const value of values) {
       reset();put(a,value);assert.equal(call('big_bits',a),value===0n?0:value.toString(2).length);check();
+      reset();put(a,value);
+      let halved=value;
+      // Repeated halving crosses word boundaries and eventually reaches normalized zero.
+      for(let n=0;n<70;n++) {
+        call('big_half',a);halved>>=1n;assert.equal(valueAt(a),halved);check();
+      }
       for(const [radix,add] of [[10,9],[16,15],[1000000000,999999999]]) {
         reset();put(a,value);call('big_mul',a,radix,add);
         assert.equal(valueAt(a),value*BigInt(radix)+BigInt(add));check();

@@ -289,6 +289,42 @@
 		)
 	)
 
+	;; Halve one normalized integer in place, carrying each high word's low bit into the next word.
+	(func $big-half
+		(param $a i32)
+		(local $n i32)
+		(local $cursor i32)
+		(local $word i32)
+		(local $carry i32)
+
+		(local.set $n (i32.load (local.get $a)))
+		;; Zero has no words to visit and remains normalized.
+		(if (i32.eqz (local.get $n))
+			(then (return))
+		)
+		(local.set $cursor
+			(i32.add (local.get $a) (i32.mul (local.get $n) (i32.const M4_BIG_LIMB_BYTES)))
+		)
+		;; Only a high word of one disappears when a normalized integer is halved.
+		(if (i32.eq (i32.load (local.get $cursor)) (i32.const 1))
+			(then
+				(i32.store (local.get $a) (i32.sub (local.get $n) (i32.const 1)))
+			)
+		)
+		;; Descend through every original word, preserving its low bit before overwriting it.
+		(loop $words
+			(local.set $word (i32.load (local.get $cursor)))
+			(i32.store (local.get $cursor)
+				(i32.or (i32.shr_u (local.get $word) (i32.const 1)) (local.get $carry))
+			)
+			(local.set $carry
+				(i32.shl (local.get $word) (i32.const m4_eval(M4_BIG_LIMB_BITS - 1)))
+			)
+			(local.set $cursor (i32.sub (local.get $cursor) (i32.const M4_BIG_LIMB_BYTES)))
+			(br_if $words (i32.gt_u (local.get $cursor) (local.get $a)))
+		)
+	)
+
 	;; Round the exact positive ratio a/b to IEEE bits, with nearest-even rounding at normal and subnormal boundaries.
 	(func $round-ratio
 		(param $type i32)
@@ -296,6 +332,7 @@
 		(local $a i32)
 		(local $b i32)
 		(local $t i32)
+		(local $swap i32)
 		(local $p i32)
 		(local $emin i32)
 		(local $emax i32)
@@ -392,12 +429,18 @@
 		(if (i32.ge_s (local.get $shift) (i32.const 0))
 			(then
 				(call $big-shift (local.get $t) (local.get $a) (local.get $shift))
-				(call $big-shift (local.get $a) (local.get $t) (i32.const 0))
+				;; The scaled integer becomes the operand; its old buffer becomes scratch.
+				(local.set $swap (local.get $a))
+				(local.set $a (local.get $t))
+				(local.set $t (local.get $swap))
 			)
 			;; Large normal values scale the denominator rather than discarding numerator bits.
 			(else
 				(call $big-shift (local.get $t) (local.get $b) (i32.sub (i32.const 0) (local.get $shift)))
-				(call $big-shift (local.get $b) (local.get $t) (i32.const 0))
+				;; The scaled integer becomes the operand; its old buffer becomes scratch.
+				(local.set $swap (local.get $b))
+				(local.set $b (local.get $t))
+				(local.set $t (local.get $swap))
 			)
 		)
 		;; Capacity errors cannot be followed by arithmetic on incomplete scratch integers.
@@ -407,12 +450,17 @@
 			)
 		)
 		(local.set $j (i32.sub (call $big-bits (local.get $a)) (call $big-bits (local.get $b))))
+		;; Build the largest trial denominator once; later trials halve this exact shifted value.
+		(if (i32.ge_s (local.get $j) (i32.const 0))
+			(then
+				(call $big-shift (local.get $t) (local.get $b) (local.get $j))
+			)
+		)
 		;; Finish long division once all quotient bits have been considered.
 		(block $done
 			;; At most 53 significand bits are produced; a becomes the exact remainder.
 			(loop $divide
 				(br_if $done (i32.lt_s (local.get $j) (i32.const 0)))
-				(call $big-shift (local.get $t) (local.get $b) (local.get $j))
 				;; Subtract a shifted denominator only when it fits in the remaining numerator.
 				(if (i32.ge_s (call $big-compare (local.get $a) (local.get $t)) (i32.const 0))
 					(then
@@ -423,6 +471,10 @@
 					)
 				)
 				(local.set $j (i32.sub (local.get $j) (i32.const 1)))
+				;; Until the final bit, the trial is divisible by two because its shift is positive.
+				(if (i32.ge_s (local.get $j) (i32.const 0))
+					(then (call $big-half (local.get $t)))
+				)
 				(br $divide)
 			)
 		)

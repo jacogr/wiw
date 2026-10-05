@@ -1375,3 +1375,47 @@ The standalone hosted audit takes 253,734.891 ms (4.23 minutes), compared with
 the previous 256,798.989 ms (4.28 minutes), a 1.2% reduction. The source/binary
 hashes, phase samples, instruction counts and complete coverage are recorded
 in the performance history. Local timings are diagnostic, with no CI thresholds.
+
+### Reusing trial denominators during exact float rounding
+
+Long division builds its highest shifted denominator once, then halves that
+integer in place for each remaining quotient bit. Every halving used by division
+is exact: before the final trial, the denominator still includes a positive
+binary shift. The helper walks high words to low words, carrying each low bit
+into the next word's high bit. A high word of one disappears; zero returns
+without reading any words. Comparison, subtraction and nearest-even rounding
+continue to use the same exact numerator, denominator and remainder.
+
+Scaling also exchanges local operand/scratch pointers instead of copying the
+scaled integer back. All three buffers remain distinct, and the caller consumes
+only the resulting IEEE bits. The next literal initializes its own operands;
+no pointer changes persist outside rounding.
+
+The arithmetic fixture checks repeated halving against BigInt, including zero,
+odd words, word-boundary carries, normalization and maximum-length buffers with
+poisoned borders. A float regression alternates large and small ratios, halfway
+values and underflow, then reloads in reversed order in both runtimes, comparing
+against independent exact IEEE-bit expectations.
+
+Sequential isolated loader samples (three repeats, five samples) show:
+
+| Loader workload | Rebuilt trials | Reused trials | Time reduction | Instruction reduction |
+| --- | ---: | ---: | ---: | ---: |
+| Decimal scales | 152.02 ms | 133.84 ms | 12.0% | 12.7% |
+| Long decimal digits | 64.60 ms | 59.11 ms | 8.5% | 7.8% |
+| Hexadecimal literals | 120.78 ms | 107.34 ms | 11.1% | 10.9% |
+| Binary floats | 125.91 ms | 111.12 ms | 11.7% | 12.4% |
+
+Instruction counts cover the entire hosted load, excluding construction and
+invocation, with no profiling markers in the child source. Integer, vector,
+many-function and short-float counts stay identical. Expanded source grows by
+1,769 bytes (0.11%). All 180 tests pass, including nested self-hosting; bootstrap
+and hosted audits each pass all 65,199 pinned wg-3.0 commands across 258 files
+with zero failures and skips.
+
+The standalone hosted audit takes 257,997.765 ms (4.30 minutes), compared with
+253,734.891 ms (4.23 minutes), a 1.7% increase. The change is retained for the
+measured float-loading improvement; repeated interpreter construction still
+limits the relevance of total audit time to individual execution phases.
+Performance history records both timings, source/binary hashes and instruction
+counts. These local measurements have no CI thresholds.
