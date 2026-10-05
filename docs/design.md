@@ -1621,3 +1621,56 @@ hosted audit takes 249,391.934 ms (4.16 minutes), compared with 251,385.417 ms
 Performance history records hashes, paired loading/construction samples,
 instruction counts and complete coverage. Local measurements remain diagnostic,
 with no CI timing thresholds.
+
+### Direct float digit decoding and a folded hexadecimal helper
+
+Float significands decode decimal digit bytes directly with an unsigned range
+check after subtracting ASCII zero. Only non-decimal bytes take the case-folded
+A-F/a-f path. The existing radix check still rejects hexadecimal letters in
+decimal significands. Point, separator, exponent and exact-rounding behavior
+remain unchanged; the loop no longer calls the shared digit helper per byte.
+
+The shared helper uses the same two unsigned ranges for strings, Unicode
+escapes and NaN payloads, returning -1 for every other byte or out-of-range i32
+value. It retains its private signature. Chunk arithmetic checks error status
+immediately after multiplication, the only arithmetic call within the digit
+loop, rather than after every digit. Capacity failure still returns before
+processing another digit. No buffer, persistent state or public ABI is added.
+
+The private arithmetic fixture exhausts all byte values through the shared
+helper and rejects additional values outside the byte range. An end-to-end
+test decodes all mixed-case byte escapes plus Unicode escapes in both runtimes,
+then repeats the load. Existing independent IEEE-bit expectations cover both
+float widths, hexadecimal case, halfway rounding, underflow, separators and
+resource limits. The dataBytes benchmark validates its complete decoded payload
+outside each timing sample; the new workload measures string/data decoding
+alongside the existing float cases.
+
+Sequential isolated hosted loader samples (three repeats, five samples) show:
+
+| Loader workload | Before | Direct/folded digit decoding | Time reduction | Instruction reduction |
+| --- | ---: | ---: | ---: | ---: |
+| Short float literals | 23.16 ms | 22.30 ms | 3.7% | 0.3% |
+| Decimal scales | 128.99 ms | 126.12 ms | 2.2% | 0.1% |
+| Long decimal digits | 53.58 ms | 52.04 ms | 2.9% | 1.4% |
+| Hexadecimal ratios | 103.04 ms | 100.93 ms | 2.0% | 0.1% |
+| Long hexadecimal digits | 59.11 ms | 57.58 ms | 2.6% | 0.7% |
+| Mixed-case byte escapes | 7.18 ms | 6.89 ms | 4.0% | 1.6% |
+| Binary floats | 94.46 ms | 92.15 ms | 2.4% | 0.7% |
+
+The affected phase samples improve by 2–4%, with smaller instruction reductions
+of 0.1–1.6%. These are modest gains; timing variation also affects the unchanged
+controls. Text integer, wide-integer, vector and many-function instruction counts
+stay identical. Counts cover the full hosted load, excluding construction,
+invocation and payload validation, with no profiling markers in the child
+source. Fresh construction samples measure 15.81 ms before and 15.49 ms after.
+Expanded engine source grows by 411 bytes (0.03%).
+
+All 186 tests pass, including nested self-hosting. Both runtimes pass all 65,199
+pinned wg-3.0 commands across 258 files with zero skips or failures. The standalone
+hosted audit takes 250,954.784 ms (4.18 minutes), compared with 249,391.934 ms
+(4.16 minutes), a 0.6% increase; overall timing remains roughly unchanged.
+The change is retained for its small decoding gains. Performance history
+records complete coverage, hashes, paired loading/construction samples and
+instruction counts. Local measurements remain diagnostic, with no CI timing
+thresholds.

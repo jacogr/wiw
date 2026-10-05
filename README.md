@@ -207,6 +207,9 @@ phase measurements and full-audit tradeoffs.
 The integer decoder also caches i64 overflow thresholds, uses a direct path for
 single numeric digits, and checks decimal digits before folding hexadecimal
 letters. The wide-integer loader measures about 10% faster in paired samples.
+Float significands also decode digits directly; the shared string/NaN digit
+helper uses folded ASCII ranges. The latest affected loader samples improve by
+2–4%, with smaller instruction reductions documented in the performance history.
 The atom scanner also uses local cursors and guarded comment lookahead; the
 latest paired integer, short-float, vector and many-function loader samples
 improve by roughly 10–21% across text and binary inputs.

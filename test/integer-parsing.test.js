@@ -24,6 +24,8 @@ before(async()=>{
     ;; Decode an i64 atom through the production parser.
     (func (export "parse64") (param $p i32) (param $n i32) (result i64)
       (call $probe-token (local.get $p) (local.get $n)) (call $integer64))
+    ;; Decode a digit through the shared helper used by strings and NaN payloads.
+    (func (export "decode_hex") (param $c i32) (result i32) (call $hex (local.get $c)))
     ;; Observe advancement to EOF after successful decoding.
     (func (export "parse_kind") (result i32) (global.get $kind))
   `+engine.slice(end);
@@ -45,6 +47,12 @@ for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: integer digi
     call=(name,...args)=>parent.invoke(name,...args);
     write=(p,bytes)=>parent.writeMemory(p,bytes);
   }
+  // The shared helper must recognize exactly the ASCII digit set, with -1 for every other value.
+  for(let byte=0;byte<256;byte++) {
+    const expected=byte>=48&&byte<=57?byte-48:byte>=97&&byte<=102?byte-87:byte>=65&&byte<=70?byte-55:-1;
+    assert.equal(call('decode_hex',byte),expected,`hex byte ${byte}`);
+  }
+  for(const value of [-1,256,257,2147483647,-2147483648]) assert.equal(call('decode_hex',value),-1);
   const check=(width,text,expected,code=0)=>{
     const bytes=Buffer.from(text),pointer=65536-bytes.length;write(pointer,bytes);
     const result=call(`parse${width}`,pointer,bytes.length);

@@ -2,35 +2,22 @@
 	(func $hex
 		(param $c i32)
 		(result i32)
+		(local $digit i32)
 
-		;; Decimal digits contribute values zero through nine.
-		(if
-			(i32.and
-				(i32.ge_u (local.get $c) (i32.const 48))
-				(i32.le_u (local.get $c) (i32.const 57))
-			)
+		(local.set $digit (i32.sub (local.get $c) (i32.const M4_ASCII_ZERO)))
+		;; One unsigned range check recognizes exactly the decimal digits.
+		(if (i32.le_u (local.get $digit) (i32.const M4_DECIMAL_LAST_DIGIT))
 			(then
-				(return (i32.sub (local.get $c) (i32.const 48)))
+				(return (local.get $digit))
 			)
 		)
-		;; Lowercase letters contribute values ten through fifteen.
-		(if
-			(i32.and
-				(i32.ge_u (local.get $c) (i32.const 97))
-				(i32.le_u (local.get $c) (i32.const 102))
-			)
-			(then
-				(return (i32.sub (local.get $c) (i32.const 87)))
-			)
+		(local.set $digit
+			(i32.sub (i32.or (local.get $c) (i32.const M4_ASCII_CASE_BIT)) (i32.const M4_ASCII_LOWER_A))
 		)
-		;; Uppercase hexadecimal spellings are equivalent.
-		(if
-			(i32.and
-				(i32.ge_u (local.get $c) (i32.const 65))
-				(i32.le_u (local.get $c) (i32.const 70))
-			)
+		;; Folding ASCII case recognizes A-F and a-f through the same six-byte range.
+		(if (i32.le_u (local.get $digit) (i32.const M4_HEX_LAST_LETTER))
 			(then
-				(return (i32.sub (local.get $c) (i32.const 55)))
+				(return (i32.add (local.get $digit) (i32.const M4_DECIMAL_RADIX)))
 			)
 		)
 		(i32.const -1)

@@ -779,7 +779,23 @@
 						(br $mantissa)
 					)
 				)
-				(local.set $d (call $hex (local.get $c)))
+				(local.set $d (i32.sub (local.get $c) (i32.const M4_ASCII_ZERO)))
+				;; Decimal bytes take the direct path without a helper call per significand digit.
+				(if (i32.gt_u (local.get $d) (i32.const M4_DECIMAL_LAST_DIGIT))
+					(then
+						(local.set $d
+							(i32.sub (i32.or (local.get $c) (i32.const M4_ASCII_CASE_BIT)) (i32.const M4_ASCII_LOWER_A))
+						)
+						;; Only A-F/a-f survive the folded range check; other bytes are syntax errors.
+						(if (i32.gt_u (local.get $d) (i32.const M4_HEX_LAST_LETTER))
+							(then
+								(call $fail (i32.const M4_ERR_SYNTAX))
+								(return (i64.const 0))
+							)
+						)
+						(local.set $d (i32.add (local.get $d) (i32.const M4_DECIMAL_RADIX)))
+					)
+				)
 				;; A radix excludes hexadecimal letters from decimal significands.
 				(if (i32.ge_u (local.get $d) (local.get $base))
 					(then
@@ -793,14 +809,14 @@
 				(if (i32.eq (local.get $chunk-radix) (local.get $chunk-limit))
 					(then
 						(call $big-mul (local.get $a) (local.get $chunk-radix) (local.get $chunk))
+						;; Only multiplication can exhaust the limb buffer; stop before processing another digit.
+						(if (global.get $error)
+							(then
+								(return (i64.const 0))
+							)
+						)
 						(local.set $chunk (i32.const 0))
 						(local.set $chunk-radix (i32.const 1))
-					)
-				)
-				;; Bounded limb exhaustion is reported before further lexical accumulation.
-				(if (global.get $error)
-					(then
-						(return (i64.const 0))
 					)
 				)
 				(local.set $digits (i32.add (local.get $digits) (i32.const 1)))

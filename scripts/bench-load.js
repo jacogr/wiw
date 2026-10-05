@@ -41,6 +41,12 @@ cases.floatsHex = `(module (func (export "run") (result f64)
 cases.hexDigits = `(module (func (export "run") (result f64)
   ${`f64.const 0x1${'23456789abcdef0'.repeat(18)}p-1008 drop f64.const -0x${'f'.repeat(256)}p-1024 drop `.repeat(32)} f64.const 0))`;
 
+// Mixed-case byte escapes exercise the shared digit helper through data decoding.
+const dataBytes=Uint8Array.from({length:4096},(_,index)=>index&255);
+cases.dataBytes = `(module (memory 1)
+  (data (i32.const 0) "${Array.from(dataBytes,byte=>String.fromCharCode(92)+(byte&1?byte.toString(16).toUpperCase():byte.toString(16)).padStart(2,'0')).join('')}")
+  (func (export "run") (result i32) i32.const 0))`;
+
 // Hand-encode binary equivalents so the benchmark never compiles guest modules.
 const uleb=value=>{
   const bytes=[];
@@ -84,12 +90,14 @@ for (const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['inter
     const load=()=>format==='binary' ? engine.loadBinary(guest) : engine.load(guest);
     load();
     assert.equal(engine.invoke('run'),name.startsWith('integers') ? 0n : 0);
+    if(name==='dataBytes') assert.deepEqual(engine.readMemory(0,dataBytes.length),dataBytes);
     const elapsedMs=[];
     for (let sample=0;sample<samples;sample++) {
       const start=performance.now();
       for (let repeat=0;repeat<repeats;repeat++) load();
       elapsedMs.push((performance.now()-start)/repeats);
       assert.equal(engine.invoke('run'),name.startsWith('integers') ? 0n : 0);
+      if(name==='dataBytes') assert.deepEqual(engine.readMemory(0,dataBytes.length),dataBytes);
     }
     const medianMs=[...elapsedMs].sort((a,b)=>a-b)[Math.floor(samples/2)];
     report.cases.push({runtime,name,format,sourceBytes:Buffer.byteLength(guest),medianMs,elapsedMs});

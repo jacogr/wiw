@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createInterpreter } from '../wiw.js';
+import { createBootstrapInterpreter, createInterpreter } from '../wiw.js';
 
 async function oracle(source, check) {
   const dir = await mkdtemp(join(tmpdir(), 'wiw-resources-'));
@@ -280,3 +280,17 @@ for (const binary of ['wiw-opt.wasm']) {
     assert.equal(e.get_global(at, 1), 99);
   });
 }
+
+
+test('both runtimes: all mixed-case byte escapes and Unicode digits retain their decoded bytes',async()=>{
+  const bytes=Uint8Array.from({length:1024},(_,index)=>index&255);
+  const escaped=Array.from(bytes,byte=>String.fromCharCode(92)+(byte&1?byte.toString(16).toUpperCase():byte.toString(16)).padStart(2,'0')).join('');
+  const slash=String.fromCharCode(92);
+  const source=`(module (memory 1) (data (i32.const 0) "${escaped}${slash}u{41}${slash}u{E9}${slash}u{1f600}"))`;
+  const expected=Uint8Array.from([...bytes,...Buffer.from('Aé😀')]);
+  for(const create of [createBootstrapInterpreter,createInterpreter]) {
+    const engine=await create(new URL('../build/wiw-opt.wasm',import.meta.url));
+    engine.load(source);assert.deepEqual(engine.readMemory(0,expected.length),expected);
+    engine.load(source);assert.deepEqual(engine.readMemory(0,expected.length),expected);
+  }
+});
