@@ -75,6 +75,9 @@ const cases = {
 
 // Exercise extended signature lookups during vector execution, checking the complete raw value.
 const vectorWorkloads = {
+  vectorByteArithmetic: ['v128.const i64x2 0x0101010101010101 0x0101010101010101 v128.const i64x2 0x0202020202020202 0x0202020202020202 i8x16.add', '0x0303030303030303 0x0303030303030303'],
+  vectorShortArithmetic: ['v128.const i64x2 0x0002000200020002 0x0002000200020002 v128.const i64x2 0x0003000300030003 0x0003000300030003 i16x8.mul', '0x0006000600060006 0x0006000600060006'],
+  vectorFloatArithmetic: ['v128.const f32x4 1.5 1.5 1.5 1.5 v128.const f32x4 2.5 2.5 2.5 2.5 f32x4.add', '0x4080000040800000 0x4080000040800000'],
   vectorArithmetic: ['v128.const i64x2 1 2 v128.const i64x2 3 4 i64x2.extmul_low_i32x4_u', '3 0'],
   vectorMixed: ['v128.const i64x2 1 2 i64.const 9 i64x2.replace_lane 1', '1 9'],
   vectorSelect: ['v128.const i64x2 1 2 v128.const i64x2 3 4 v128.const i64x2 -1 0 v128.bitselect', '1 4']

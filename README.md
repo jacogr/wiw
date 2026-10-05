@@ -200,3 +200,6 @@ modules in both runtimes, plus a text workload with large decimal float scales,
 without compiling guest modules. It records
 per-load sample timings, medians, input formats and source/binary hashes in `build/bench-load.json`.
 `BENCH_LOAD_REPEATS=10 BENCH_SAMPLES=7 make bench-load` adjusts the bounded workload.
+`make bench-create` measures fresh construction with preloaded engine source, checks each
+instance with a guest, and records first-use and warm median timings in
+`build/bench-create.json`. It uses no cached interpreter state.

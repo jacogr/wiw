@@ -115,3 +115,11 @@ m4_define(<!M4_TABLE_OPERAND_OFFSET!>,<!8!>)m4_dnl
 m4_dnl Decimal scale chunks fit in one unsigned multiplier limb.
 m4_define(<!M4_DECIMAL_CHUNK_DIGITS!>,<!9!>)m4_dnl
 m4_define(<!M4_DECIMAL_CHUNK_RADIX!>,<!1000000000!>)m4_dnl
+m4_dnl Fixed-width SIMD lane addressing and masks.
+m4_define(<!M4_VECTOR_HALF_BITS!>,<!64!>)m4_dnl
+m4_define(<!M4_LANE8_SHIFT!>,<!3!>)m4_dnl
+m4_define(<!M4_LANE16_SHIFT!>,<!4!>)m4_dnl
+m4_define(<!M4_LANE32_SHIFT!>,<!5!>)m4_dnl
+m4_define(<!M4_LANE64_SHIFT!>,<!6!>)m4_dnl
+m4_define(<!M4_U8_MAX!>,<!255!>)m4_dnl
+m4_define(<!M4_U16_MAX!>,<!65535!>)m4_dnl

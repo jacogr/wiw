@@ -1060,10 +1060,11 @@ vector arithmetic, 659,438 to 617,538 for mixed operands, 728,638 to 689,238 for
 selection, and 731,138 to 691,338 for memory. Loader instruction counts remain
 identical. Expanded engine WAT shrinks from 1,500,473 to 1,489,807 bytes.
 
-An experiment expanding lane expressions directly into handlers was discarded.
+At this stage, an experiment expanding lane expressions directly into handlers
+was discarded.
 It improved SIMD invocation by 8–10%, but larger engine WAT increased the full
 audit to 276,794 ms versus a same-session unchanged control of 269,234 ms.
-The retained implementation uses small fixed-width helpers instead. The rejected
+The implementation retained at that stage used small fixed-width helpers. The rejected
 measurement and its successful conformance checks remain in the performance
 history, and its boundary regressions remain in the suite.
 
@@ -1225,3 +1226,58 @@ The standalone hosted audit takes 242,248.729 ms (4.04 minutes), versus the
 previous 242,001.909 ms (4.03 minutes), a 0.1% increase: overall audit time is
 essentially unchanged. The optimization is retained for the measured decimal
 scaling improvement. Local timings are diagnostic, with no CI thresholds.
+
+### Revisited SIMD lane inlining and separate phase measurements
+
+Fixed-width lane extraction and packing now expand directly inside their
+handlers. Extraction retains unsigned masking, half selection and shifts modulo
+sixty-four. Packing computes the value and lane offset once into function-local
+scratch slots, then merges the result into the selected half. Generic helpers
+remain for dynamic widths. The eight unused fixed-width helpers are removed;
+all opcode IDs, arithmetic, saturation, floating-point rounding, guest fuel and
+memory checks keep their existing behavior. Fixed lane shifts and masks have
+M4 names. Each inserted conditional retains its explanatory comments.
+
+This revisits the earlier discarded expansion under a different acceptance
+criterion: measured execution improvements can be retained even when repeated
+setup makes the full audit slower. It introduces no engine preparation phase or
+shared instance state. The expanded engine grows from 1,446,677 to 1,619,485
+bytes, an increase of 172,808 bytes (11.9%). This is the explicit size tradeoff.
+
+`make bench` now includes byte, short and f32 arithmetic alongside the previous
+SIMD workloads. With 5,000 checked iterations and five samples, isolated hosted
+invocation medians are:
+
+| SIMD workload | Fixed helpers | Inlined lanes | Reduction |
+| --- | ---: | ---: | ---: |
+| Byte arithmetic | 195.92 ms | 181.61 ms | 7.3% |
+| Short arithmetic | 182.61 ms | 169.42 ms | 7.2% |
+| f32 arithmetic | 181.93 ms | 170.95 ms | 6.0% |
+| Extended arithmetic | 173.92 ms | 163.98 ms | 5.7% |
+| Mixed scalar/vector operands | 161.23 ms | 152.74 ms | 5.3% |
+| Selection | 178.90 ms | 171.97 ms | 3.9% |
+| Vector memory | 186.38 ms | 178.54 ms | 4.2% |
+
+Diagnostic bootstrap instruction counts for 100 checked iterations fall by
+3.7–5.7% across these seven workloads; the scalar sign-extension control stays
+at 580,423 instructions. Child source contains no profiling markers. These
+counts exclude interpreter creation and guest loading. Final invocation samples
+ran the candidate before the baseline; the earlier exploratory pair is excluded
+from the retained record. All timings ran without tests/audits in parallel.
+
+`make bench-create` separately measures fresh construction and checks guest
+execution and global isolation for each instance. It reports first-use and warm
+medians without reusing interpreter state. With three constructions per sample
+and five samples, hosted creation with preloaded engine source measures 15.12 ms before and
+15.57 ms after,
+about 3% more. `make bench-load` remains approximately unchanged. Creation,
+loading and invocation reports all identify source/binary hashes.
+
+All 176 tests pass, including lane boundaries at every width, replacement without
+changing neighboring bits, native-oracle SIMD comparisons, exact guest fuel,
+trap recovery and nested self-hosting. Both runtimes pass all 65,199 pinned
+wg-3.0 commands across 258 files with zero skips or failures. The standalone
+hosted audit takes 256,606.437 ms (4.28 minutes), compared with the previous
+242,248.729 ms (4.04 minutes), a 5.9% increase. This setup-heavy measurement is
+recorded alongside the execution gain; it is not treated as an execution-only
+benchmark. Local timings are diagnostic, with no CI thresholds.
