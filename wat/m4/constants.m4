@@ -112,3 +112,6 @@ m4_define(<!M4_U32_BYTES!>,<!4!>)m4_dnl
 m4_define(<!M4_FUNCTION_IMPORTED!>,<!-1!>)m4_dnl
 m4_define(<!M4_INDEX_ABSENT!>,<!-1!>)m4_dnl
 m4_define(<!M4_TABLE_OPERAND_OFFSET!>,<!8!>)m4_dnl
+m4_dnl Decimal scale chunks fit in one unsigned multiplier limb.
+m4_define(<!M4_DECIMAL_CHUNK_DIGITS!>,<!9!>)m4_dnl
+m4_define(<!M4_DECIMAL_CHUNK_RADIX!>,<!1000000000!>)m4_dnl

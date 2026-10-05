@@ -51,7 +51,7 @@
 		(local.set $carry (i64.extend_i32_u (local.get $add)))
 		;; Finish after processing each existing word and then append any remaining carry.
 		(block $done
-			;; Unsigned products fit in i64 for the decimal/hex radices used here.
+			;; A 32-bit limb times a radix at most 10^9, plus carry below that radix, fits in i64.
 			(loop $words
 				(br_if $done (i32.eq (local.get $i) (local.get $n)))
 				(local.set $v
@@ -476,6 +476,8 @@
 		(local $b i32)
 		(local $t i32)
 		(local $order i32)
+		(local $scale i32)
+		(local $step i32)
 
 		;; A float literal must be an atom, with a bounded token length independent of numeric range.
 		(if (i32.ne (global.get $kind) (i32.const 3))
@@ -845,24 +847,39 @@
 						(return (local.get $sign))
 					)
 				)
-				;; End once the exact decimal scale has been applied to one side of the ratio.
+				;; Choose the ratio side once; scaling always consumes a nonnegative exponent below.
+				(local.set $scale
+					(select (local.get $a) (local.get $b) (i32.ge_s (local.get $exponent) (i32.const 0)))
+				)
+				;; Negative decimal exponents scale the denominator rather than the numerator.
+				(if (i32.lt_s (local.get $exponent) (i32.const 0))
+					(then
+						(local.set $exponent (i32.sub (i32.const 0) (local.get $exponent)))
+					)
+				)
+				;; Finish after the exact scale or the first limb-capacity failure.
 				(block $scaled
-					;; Multiplication by ten is exact and bounded by the limb buffers.
+					;; Each full chunk replaces nine exact multiplies by ten; remaining digits use ten.
 					(loop $powers
 						(br_if $scaled (global.get $error))
 						(br_if $scaled (i32.eqz (local.get $exponent)))
-						;; Positive scales multiply the numerator; negative scales multiply the denominator.
-						(if (i32.gt_s (local.get $exponent) (i32.const 0))
-							(then
-								(call $big-mul (local.get $a) (i32.const 10) (i32.const 0))
-								(local.set $exponent (i32.sub (local.get $exponent) (i32.const 1)))
-							)
-							;; The denominator retains every digit needed for later nearest-even rounding.
-							(else
-								(call $big-mul (local.get $b) (i32.const 10) (i32.const 0))
-								(local.set $exponent (i32.add (local.get $exponent) (i32.const 1)))
+						(local.set $step
+							(select
+								(i32.const M4_DECIMAL_CHUNK_DIGITS)
+								(i32.const 1)
+								(i32.ge_u (local.get $exponent) (i32.const M4_DECIMAL_CHUNK_DIGITS))
 							)
 						)
+						(call $big-mul
+							(local.get $scale)
+							(select
+								(i32.const M4_DECIMAL_CHUNK_RADIX)
+								(i32.const 10)
+								(i32.eq (local.get $step) (i32.const M4_DECIMAL_CHUNK_DIGITS))
+							)
+							(i32.const 0)
+						)
+						(local.set $exponent (i32.sub (local.get $exponent) (local.get $step)))
 						(br $powers)
 					)
 				)

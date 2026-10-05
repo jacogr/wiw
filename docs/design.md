@@ -63,7 +63,11 @@ to f32/f64, nearest ties to even, including subnormals. When both integers occup
 one limb, f64 division has exact operands. f32 division additionally requires
 both operands to be at most 2^24. These bounded positive ratios are normal and
 finite, so one division gives the required rounding without an intermediate
-precision change. Larger operands retain the exact integer algorithm. Float-to-integer operations
+precision change. Larger operands retain the exact integer algorithm. Decimal
+scales use exact multipliers of 10^9 for complete nine-digit chunks, followed
+by single powers of ten for the remainder; numerator/denominator selection
+happens once before the loop. The multiplier and its carry fit the existing
+32-bit limb and 64-bit product representation. Float-to-integer operations
 check NaN and range before native conversions. `invokeRaw` and typed forwarding
 retain signaling NaNs; plain Number callbacks have JavaScript's Number boundary.
 
@@ -1192,3 +1196,32 @@ audit takes 242,001.909 ms (4.03 minutes), compared with the prior recorded
 247,938.874 ms (4.13 minutes), a 2.4% reduction. These local timings are diagnostic;
 there are no CI timing thresholds. Engine source grows by 1,139 bytes, with no
 new runtime memory region, cache, API or preparation phase.
+
+### Batched decimal exponent scaling
+
+The float parser chooses the numerator for positive decimal scales and the
+denominator for negative scales once, then consumes the scale magnitude in
+nine-digit chunks. Multiplication by 10^9 is exact; at most eight remaining
+powers use the existing multiplier of ten. Each unsigned limb product plus
+carry fits in i64, and the multiplier is below 2^32, so one pass can append at
+most one limb. The existing capacity check and final nearest-even rounding
+remain in place. The two chunk constants have descriptive M4 names.
+
+The new decimalScales loader benchmark includes positive and negative scales,
+long significands and an exact chunk boundary. In isolated sequential samples
+with three repeats and five samples, hosted loading falls from 363.62 ms to
+209.31 ms per load (42.4%); bootstrap loading falls from 1.20 ms to 0.76 ms.
+Existing hosted text and binary loader cases remain approximately unchanged.
+Expanded engine source grows by 368 bytes, with no new memory region or table.
+
+New independent bit comparisons run in both runtimes around nine-digit chunk
+boundaries, multi-limb carries, halfway rounding, normal/subnormal transitions,
+underflow and overflow. Long significands with compensating exponents and
+recovery after malformed/out-of-range input are included. All 176 tests pass,
+including nested self-hosting. Both runtimes pass all 65,199 pinned wg-3.0
+commands across 258 files with zero skips or failures.
+
+The standalone hosted audit takes 242,248.729 ms (4.04 minutes), versus the
+previous 242,001.909 ms (4.03 minutes), a 0.1% increase: overall audit time is
+essentially unchanged. The optimization is retained for the measured decimal
+scaling improvement. Local timings are diagnostic, with no CI thresholds.

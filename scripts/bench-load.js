@@ -21,6 +21,10 @@ const cases = {
       ${'i32.const 1 i32.const 2 i32.xor drop '.repeat(16)} i32.const 0)`).join('\n')}
     (func (export "run") (result i32) call $f63))`
 };
+// Exercise both exact ratio sides and a full chunk boundary, beyond small-ratio rounding.
+cases.decimalScales = `(module (func (export "run") (result f64)
+  ${'f64.const 1e-300 drop f64.const 123456789e100 drop f64.const 3.4028234663852886e38 drop f64.const 1e-9 drop '.repeat(128)} f64.const 0))`;
+
 // Hand-encode binary equivalents so the benchmark never compiles guest modules.
 const uleb=value=>{
   const bytes=[];

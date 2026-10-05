@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createBootstrapInterpreter, createInterpreter } from '../wiw.js';
-import { floatValue } from '../scripts/scalar-values.js';
+import { floatBits, floatValue } from '../scripts/scalar-values.js';
 const names = [null, 'i32', 'i64', 'f32', 'f64'];
 const sourceFor = (body, type) => `(module (func (export "run") (result ${type}) ${body}))`;
 for (const binary of ['wiw-opt.wasm']) {
@@ -107,6 +107,46 @@ for (const binary of ['wiw-opt.wasm']) {
           const expected = type === 'f32' ? view.getInt32(0, true) : view.getBigInt64(0, true);
           assert.equal(engine.invoke(`f${n}`), expected, `${create.name}/${type}/${literal}`);
         }
+      }
+    }
+  });
+
+  test(`${binary}: decimal scale chunks preserve exact bits across carries and rounding boundaries`, async () => {
+    const literals = ['0e999999', '-0e-999999',
+      '1.000000059604644775390625', '1.00000005960464477539062500000000001',
+      '1.000000178813934326171875', '1.00000000000000011102230246251565404236316680908203125',
+      '1.00000000000000011102230246251565404236316680908203125000000001',
+      '3.4028234663852886e38', '1.7976931348623157e308', '1.7976931348623159e308',
+      '1.1754943508222875e-38', '7.006492321624085e-46', '7.006492321624086e-46',
+      '2.2250738585072014e-308', '2.4703282292062327e-324', '2.4703282292062328e-324'];
+    for (const exponent of [8, 9, 10, 17, 18, 19, 26, 27, 28, 99, 100, 101, 299, 300, 301, 323, 324, 325]) {
+      for (const mantissa of ['1', '4294967295', '4294967296', '999999999999999999']) {
+        literals.push(`${mantissa}e${exponent}`, `-${mantissa}e-${exponent}`);
+      }
+    }
+    for (const length of [8, 9, 10, 17, 18, 19, 100, 1000]) {
+      literals.push(`1${'0'.repeat(length)}e-${length}`, `-${'9'.repeat(length)}e-${length}`);
+    }
+    for (const create of [createBootstrapInterpreter, createInterpreter]) {
+      const engine = await create(url);
+      for (const type of ['f32', 'f64']) {
+        const width = type === 'f32' ? 32 : 64, integer = type === 'f32' ? 'i32' : 'i64';
+        const finite = [], invalid = [];
+        for (const literal of literals) {
+          try {finite.push({literal, bits: floatBits(literal, width)});}
+          catch (error) {assert.match(error.message, /out of range/); invalid.push(literal);}
+        }
+        engine.load(`(module ${finite.map(({literal}, n) =>
+          `(func (export "f${n}") (result ${integer}) ${type}.const ${literal} ${integer}.reinterpret_${type})`).join('\n')})`);
+        for (const [n, {literal, bits}] of finite.entries()) {
+          const signed = BigInt.asIntN(width, bits);
+          assert.equal(engine.invoke(`f${n}`), width === 32 ? Number(signed) : signed, `${create.name}/${type}/${literal}`);
+        }
+        for (const literal of invalid) assert.throws(() => engine.load(sourceFor(`${type}.const ${literal}`, type)), /out of range/);
+        assert.throws(() => engine.load(sourceFor(`${type}.const 1e-300_`, type)), /syntax/);
+        engine.load(sourceFor(`${type}.const 1e-9 ${integer}.reinterpret_${type}`, integer));
+        const bits = BigInt.asIntN(width, floatBits('1e-9', width));
+        assert.equal(engine.invoke('run'), width === 32 ? Number(bits) : bits);
       }
     }
   });
