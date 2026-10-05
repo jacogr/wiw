@@ -289,6 +289,47 @@
 
 		(local.set $a (global.get $fp-a-base))
 		(local.set $b (global.get $fp-b-base))
+		;; Single-word ratios stay finite and normal; exact operands allow one correctly rounded division.
+		(if
+			(i32.and
+				(i32.eq (i32.load (local.get $a)) (i32.const 1))
+				(i32.eq (i32.load (local.get $b)) (i32.const 1))
+			)
+			(then
+				;; Every unsigned word is exactly representable in f64.
+				(if (i32.eq (local.get $type) (i32.const 4))
+					(then
+						(return
+							(i64.reinterpret_f64
+								(f64.div
+									(f64.convert_i32_u (i32.load offset=4 (local.get $a)))
+									(f64.convert_i32_u (i32.load offset=4 (local.get $b)))
+								)
+							)
+						)
+					)
+				)
+				;; f32 operands must each fit its 24-bit precision, including the exact endpoint 2^24.
+				(if
+					(i32.and
+						(i32.le_u (i32.load offset=4 (local.get $a)) (i32.const 16777216))
+						(i32.le_u (i32.load offset=4 (local.get $b)) (i32.const 16777216))
+					)
+					(then
+						(return
+							(i64.extend_i32_u
+								(i32.reinterpret_f32
+									(f32.div
+										(f32.convert_i32_u (i32.load offset=4 (local.get $a)))
+										(f32.convert_i32_u (i32.load offset=4 (local.get $b)))
+									)
+								)
+							)
+						)
+					)
+				)
+			)
+		)
 		(local.set $t (global.get $fp-t-base))
 		(local.set $p
 			(select (i32.const 24) (i32.const 53) (i32.eq (local.get $type) (i32.const 3)))

@@ -59,7 +59,11 @@ none. Defaults are 100,000 per invocation, configurable by the host.
 Float values stay raw through storage, calls, globals and branching. Numeric
 instructions decode bits only for the operation. Literal decoding uses exact
 numerator/denominator arithmetic in three 4 KiB limb buffers and rounds directly
-to f32/f64, nearest ties to even, including subnormals. Float-to-integer operations
+to f32/f64, nearest ties to even, including subnormals. When both integers occupy
+one limb, f64 division has exact operands. f32 division additionally requires
+both operands to be at most 2^24. These bounded positive ratios are normal and
+finite, so one division gives the required rounding without an intermediate
+precision change. Larger operands retain the exact integer algorithm. Float-to-integer operations
 check NaN and range before native conversions. `invokeRaw` and typed forwarding
 retain signaling NaNs; plain Number callbacks have JavaScript's Number boundary.
 
@@ -1154,3 +1158,29 @@ standalone hosted audit takes 247,938.874 ms (4.13 minutes), against the previou
 270,648.823 ms (4.51 minutes): 8.4% less time. `test/performance.json` records
 artifact hashes, benchmarks and instruction profiles, and `test/spec/selfhost.json`
 records the new baseline. Local performance results carry no CI thresholds.
+
+### Small float literal ratios
+
+Literal parsing still builds the exact numerator and denominator and validates
+all token bytes before rounding. The rounding helper now divides directly when
+both nonzero operands occupy one unsigned 32-bit limb: every such operand is
+exact in f64. For f32, both operands must additionally be at most 2^24, including
+that endpoint. Their ratios remain normal and finite, so division rounds once
+to the declared precision. Wider operands keep the existing integer quotient,
+remainder and nearest-even rounding algorithm; there is no f64-to-f32 shortcut.
+
+New bit-pattern comparisons use the independent exact-rational reference in
+both bootstrap and interpreted runtimes. They cover decimal and hexadecimal
+ratios, signs, both sides of the 24-bit and 32-bit operand boundaries, denominator
+cutoffs, and 128 deterministic decimal scales. Existing halfway, subnormal,
+overflow, signed-zero and payload tests remain in place. All 175 tests pass,
+including nested self-hosting; both runtimes pass all 65,199 pinned wg-3.0
+commands across 258 files with zero skips or failures.
+
+Sequential loader measurements with three repeats and five samples reduce the
+hosted float-heavy text case from 81.44 ms to 29.90 ms per load (63.3%). Other
+hosted text and binary cases stay approximately unchanged. The standalone hosted
+audit takes 242,001.909 ms (4.03 minutes), compared with the prior recorded
+247,938.874 ms (4.13 minutes), a 2.4% reduction. These local timings are diagnostic;
+there are no CI timing thresholds. Engine source grows by 1,139 bytes, with no
+new runtime memory region, cache, API or preparation phase.

@@ -4,7 +4,7 @@ import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createInterpreter } from '../wiw.js';
+import { createBootstrapInterpreter, createInterpreter } from '../wiw.js';
 import { floatValue } from '../scripts/scalar-values.js';
 const names = [null, 'i32', 'i64', 'f32', 'f64'];
 const sourceFor = (body, type) => `(module (func (export "run") (result ${type}) ${body}))`;
@@ -79,6 +79,36 @@ for (const binary of ['wiw-opt.wasm']) {
         assert.throws(() => engine.load(sourceFor(`${type}.const ${literal}`, type)), /syntax|range/, `${type}/${literal}`);
       }
     } finally { await rm(dir, {recursive: true, force: true}); }
+  });
+
+  test(`${binary}: small exact ratios and precision boundaries retain their IEEE bits`, async () => {
+    const literals = ['0.1', '-0.1', '1.5', '-0', '16777215', '16777216', '16777217',
+      '33554431', '33554433', '4294967295', '4294967296', '1677721.5', '1677721.6',
+      '1677721.7', '0.0000001', '0.00000001', '0.000000001', '0.0000000001',
+      '0xffffffp-24', '0x1000000p-24', '0x1000001p-24', '0x1000001p-25',
+      '0xffffffffp-31', '0xffffffffp-32'];
+    // Exercise division with independent exact-rational expectations across both precision cutoffs.
+    let seed = 0x918acdef;
+    for (let n = 0; n < 128; n++) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      literals.push(`${n & 1 ? '-' : ''}${seed}e-${n % 11}`);
+    }
+    for (const create of [createBootstrapInterpreter, createInterpreter]) {
+      const engine = await create(url);
+      for (const type of ['f32', 'f64']) {
+        const integer = type === 'f32' ? 'i32' : 'i64';
+        engine.load(`(module ${literals.map((literal, n) =>
+          `(func (export "f${n}") (result ${integer}) ${type}.const ${literal} ${integer}.reinterpret_${type})`).join('\n')})`);
+        for (const [n, literal] of literals.entries()) {
+          const view = new DataView(new ArrayBuffer(8));
+          const value = floatValue(literal, type === 'f32' ? 32 : 64);
+          if (type === 'f32') view.setFloat32(0, value, true);
+          else view.setFloat64(0, value, true);
+          const expected = type === 'f32' ? view.getInt32(0, true) : view.getBigInt64(0, true);
+          assert.equal(engine.invoke(`f${n}`), expected, `${create.name}/${type}/${literal}`);
+        }
+      }
+    }
   });
 
   test(`${binary}: typed float locals, control, memory, globals, imports and forwarding`, async () => {

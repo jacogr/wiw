@@ -51,8 +51,9 @@ with independent native execution.
 Guest calls use explicit frames, so guest recursion does not recurse on the
 native Wasm stack. Failures carry status codes and source offsets.
 
-Float literals round directly to the declared precision using exact integer
-arithmetic inside WAT. Raw scalar slots preserve signed zero and NaN payloads.
+Float literals form an exact integer ratio inside WAT and round directly to the
+declared precision. Small ratios use one division with exactly represented operands;
+larger ratios use exact integer rounding. Raw scalar slots preserve signed zero and NaN payloads.
 The binary reader validates supported sections, LEB encodings and instructions inside
 WAT, elaborates them to bounded WAT text, and uses the same parser and validator.
 No guest binary is passed to native WebAssembly compilation.
