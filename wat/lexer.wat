@@ -61,6 +61,8 @@
 		(local $c i32)
 		(local $depth i32)
 		(local $name i32)
+		(local $cursor i32)
+		(local $end i32)
 
 		(global.set $kind (i32.const 0))
 		(global.set $len (i32.const 0))
@@ -213,28 +215,44 @@
 			)
 		)
 		(global.set $kind (i32.const 3))
+		(local.set $cursor (global.get $pos))
+		(local.set $end (global.get $end))
 		;; Exit here at an atom boundary, leaving the delimiter for the next token.
 		(block $atom-done
 			;; Scan an atom until EOF, whitespace, a parenthesis or a line comment.
 			(loop $atom
-				(br_if $atom-done (i32.ge_u (global.get $pos) (global.get $end)))
-				(local.set $c (call $peek))
+				(br_if $atom-done (i32.ge_u (local.get $cursor) (local.get $end)))
+				(local.set $c (i32.load8_u (local.get $cursor)))
 				(br_if $atom-done (call $space (local.get $c)))
 				(br_if $atom-done
 					(i32.or (i32.eq (local.get $c) (i32.const 40)) (i32.eq (local.get $c) (i32.const 41)))
 				)
-				(br_if $atom-done (call $pair (i32.const 59) (i32.const 59)))
+				;; Only a semicolon can begin a line comment; the second byte must remain in range.
+				(if (i32.eq (local.get $c) (i32.const 59))
+					(then
+						;; A lone semicolon remains part of the atom, matching the existing token grammar.
+						(if (i32.lt_u (i32.add (local.get $cursor) (i32.const 1)) (local.get $end))
+							(then
+								(br_if $atom-done
+									(i32.eq (i32.load8_u offset=1 (local.get $cursor)) (i32.const 59))
+								)
+							)
+						)
+					)
+				)
 				;; A quote or NUL inside an atom is invalid syntax.
 				(if (i32.or (i32.eq (local.get $c) (i32.const 34)) (i32.eqz (local.get $c)))
 					(then
+						(global.set $pos (local.get $cursor))
 						(call $fail (i32.const M4_ERR_SYNTAX))
 						(return)
 					)
 				)
-				(call $advance)
+				(local.set $cursor (i32.add (local.get $cursor) (i32.const 1)))
 				(br $atom)
 			)
 		)
+		(global.set $pos (local.get $cursor))
 		(global.set $len (i32.sub (global.get $pos) (global.get $tok)))
 	)
 

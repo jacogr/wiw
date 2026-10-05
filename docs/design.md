@@ -1464,3 +1464,54 @@ standalone hosted audit takes 251,066.404 ms (4.18 minutes), compared with
 257,997.765 ms (4.30 minutes), a 2.7% reduction. The performance history records
 source/binary hashes, paired samples, instruction counts and complete coverage.
 These local measurements are diagnostic, with no CI timing thresholds.
+
+### Local atom cursors and guarded line-comment lookahead
+
+Atom scanning caches its cursor and source endpoint in locals. After checking
+EOF, it reads each byte directly and advances the local cursor. Only a semicolon
+triggers a bounded check of the next byte for a line-comment delimiter. Other
+bytes no longer call the general pair matcher, byte peek or cursor-advance
+helpers. Whitespace and parenthesis boundaries retain their existing rules.
+
+The scanner publishes the cursor on completion and before reporting a quote or
+NUL failure. Delimiters remain available for the next scan, token spans remain
+byte-based, and failure offsets still identify the token start. No scanner
+pointer persists in additional global state; comments and strings use their
+existing paths.
+
+A temporary test engine exposes the private scanner without changing the
+production ABI. Explicit spans and offsets are checked with source ending at
+linear memory's exact boundary in both runtimes. Cases include EOF, lone and
+doubled semicolons, line comments, whitespace, parentheses, nested comments,
+UTF-8 bytes, strings, quote/NUL failures and recovery. The second-semicolon read
+cannot pass the source endpoint. Existing spec tests cover the surrounding WAT
+grammar.
+
+Sequential isolated hosted loader samples (three repeats, five samples) show:
+
+| Loader workload | Helper-based atoms | Local atom cursors | Time reduction | Instruction reduction |
+| --- | ---: | ---: | ---: | ---: |
+| Text integers | 27.16 ms | 22.45 ms | 17.3% | 11.1% |
+| Text short floats | 30.88 ms | 25.14 ms | 18.6% | 12.0% |
+| Text vectors | 21.10 ms | 16.76 ms | 20.6% | 14.4% |
+| Text many functions | 55.37 ms | 46.41 ms | 16.2% | 11.3% |
+| Binary integers | 34.57 ms | 29.73 ms | 14.0% | 9.2% |
+| Binary floats | 106.53 ms | 95.77 ms | 10.1% | 6.6% |
+| Binary vectors | 34.79 ms | 28.90 ms | 16.9% | 11.2% |
+| Binary many functions | 69.52 ms | 59.55 ms | 14.3% | 9.6% |
+
+Binary loaders benefit because decoded text passes through the same scanner.
+Long decimal and hexadecimal cases see smaller gains because exact arithmetic
+accounts for more of their work. Diagnostic instruction counts cover the full
+hosted load, excluding construction and invocation, with no profiling markers
+in the child source. Paired fresh construction samples fall from 16.63 ms to
+16.02 ms (3.7%), using preloaded source and independent instances rather than
+cached interpreter state. Expanded engine source grows by 678 bytes (0.04%).
+
+All 183 tests pass, including nested self-hosting. Bootstrap and hosted audits
+each pass all 65,199 pinned wg-3.0 commands across 258 files with zero skips or
+failures. The standalone hosted audit takes 252,958.331 ms (4.22 minutes),
+compared with 251,066.404 ms (4.18 minutes), a 0.8% increase. The change is
+retained for its loading improvements. Performance history records complete
+coverage, hashes, paired loading/construction samples and instruction counts.
+These local measurements are diagnostic and impose no CI timing thresholds.

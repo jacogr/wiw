@@ -204,6 +204,9 @@ Exact float rounding reuses shifted trial denominators, and significands batch
 both decimal and hexadecimal digits. The latest isolated long-hex loader drops
 from 103 ms to 63 ms (39%); see `docs/design.md` and the performance history for
 phase measurements and full-audit tradeoffs.
+The atom scanner also uses local cursors and guarded comment lookahead; the
+latest paired integer, short-float, vector and many-function loader samples
+improve by roughly 10–21% across text and binary inputs.
 `make bench-create` measures fresh construction with preloaded engine source, checks each
 instance with a guest, and records first-use and warm median timings in
 `build/bench-create.json`. It uses no cached interpreter state.
