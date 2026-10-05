@@ -25,6 +25,10 @@ const cases = {
 cases.decimalScales = `(module (func (export "run") (result f64)
   ${'f64.const 1e-300 drop f64.const 123456789e100 drop f64.const 3.4028234663852886e38 drop f64.const 1e-9 drop '.repeat(128)} f64.const 0))`;
 
+// Long compensated significands isolate digit accumulation from extreme range classification.
+cases.decimalDigits = `(module (func (export "run") (result f64)
+  ${`f64.const 1${'234567890'.repeat(28)}e-252 drop f64.const -${'9'.repeat(256)}e-256 drop `.repeat(32)} f64.const 0))`;
+
 // Hand-encode binary equivalents so the benchmark never compiles guest modules.
 const uleb=value=>{
   const bytes=[];

@@ -151,6 +151,45 @@ for (const binary of ['wiw-opt.wasm']) {
     }
   });
 
+  test(`${binary}: batched decimal digits preserve chunk tails, separators and exact rounding`, async () => {
+    const literals = ['0', '-0', '1.', '12345678_9', '123456789_0', '0000000001',
+      '000000000.000000001', '-000000000.000000000', '123456789.0123456789',
+      '1.000000059604644775390625', '1.00000005960464477539062500000000001',
+      '1.00000000000000011102230246251565404236316680908203125',
+      '1.00000000000000011102230246251565404236316680908203125000000001'];
+    for (const length of [8, 9, 10, 17, 18, 19, 26, 27, 28, 100, 253, 256, 1000]) {
+      const digits = '1234567890'.repeat(Math.ceil(length / 10)).slice(0, length);
+      literals.push(`${digits}e-${length}`, `-${'9'.repeat(length)}e-${length}`);
+      // Separators and points may cross a chunk boundary without changing its integer digits.
+      for (const point of [1, Math.min(9, length), length]) {
+        const decimal = `${digits.slice(0, point)}.${digits.slice(point)}e-${point}`;
+        literals.push(decimal, decimal.replace(/(?<=\d)(?=\d)/g, '_'));
+      }
+    }
+    for (const create of [createBootstrapInterpreter, createInterpreter]) {
+      const engine = await create(url);
+      for (const type of ['f32', 'f64']) {
+        const width = type === 'f32' ? 32 : 64, integer = type === 'f32' ? 'i32' : 'i64';
+        engine.load(`(module ${literals.map((literal, n) =>
+          `(func (export "f${n}") (result ${integer}) ${type}.const ${literal} ${integer}.reinterpret_${type})`).join('\n')})`);
+        for (const [n, literal] of literals.entries()) {
+          const bits = BigInt.asIntN(width, floatBits(literal, width));
+          assert.equal(engine.invoke(`f${n}`), width === 32 ? Number(bits) : bits, `${create.name}/${type}/${literal}`);
+        }
+        engine.load(sourceFor(`${type}.const ${'0'.repeat(8192)} ${integer}.reinterpret_${type}`, integer));
+        assert.equal(engine.invoke('run'), width === 32 ? 0 : 0n);
+        assert.throws(() => engine.load(sourceFor(`${type}.const ${'9'.repeat(8192)}`, type)), /out of range/);
+        assert.throws(() => engine.load(sourceFor(`${type}.const ${'0'.repeat(8193)}`, type)), /resource limit/);
+        for (const literal of ['123456789__0', '123456789_', '123456789._0', '1234567890e_1']) {
+          assert.throws(() => engine.load(sourceFor(`${type}.const ${literal}`, type)), /syntax/);
+        }
+        engine.load(sourceFor(`${type}.const -0 ${integer}.reinterpret_${type}`, integer));
+        const bits = BigInt.asIntN(width, floatBits('-0', width));
+        assert.equal(engine.invoke('run'), width === 32 ? Number(bits) : bits);
+      }
+    }
+  });
+
   test(`${binary}: typed float locals, control, memory, globals, imports and forwarding`, async () => {
     const engine = await createInterpreter(url);
     engine.load(`(module

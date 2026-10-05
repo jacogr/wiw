@@ -66,7 +66,11 @@ finite, so one division gives the required rounding without an intermediate
 precision change. Larger operands retain the exact integer algorithm. Decimal
 scales use exact multipliers of 10^9 for complete nine-digit chunks, followed
 by single powers of ten for the remainder; numerator/denominator selection
-happens once before the loop. The multiplier and its carry fit the existing
+happens once before the loop. Decimal significand digits also accumulate in
+local nine-digit chunks before exact radix-and-chunk updates. A short tail
+uses a direct single-word write when the integer prefix is zero. Points and
+separators retain their original grammar and fractional digit counts.
+The multiplier and its carry fit the existing
 32-bit limb and 64-bit product representation. Float-to-integer operations
 check NaN and range before native conversions. `invokeRaw` and typed forwarding
 retain signaling NaNs; plain Number callbacks have JavaScript's Number boundary.
@@ -1281,3 +1285,40 @@ hosted audit takes 256,606.437 ms (4.28 minutes), compared with the previous
 242,248.729 ms (4.04 minutes), a 5.9% increase. This setup-heavy measurement is
 recorded alongside the execution gain; it is not treated as an execution-only
 benchmark. Local timings are diagnostic, with no CI thresholds.
+
+### Batched decimal significand digits
+
+Decimal significands accumulate an unsigned chunk and its radix in two local
+slots. Each nine-digit group applies `integer * 10^9 + chunk` using the existing
+exact limb multiplier. A partial tail retains its actual power of ten; when the
+integer prefix is zero, the tail writes one word directly. Leading zeroes, points
+and separators still update the existing grammar and fractional digit counters.
+Hexadecimal significands retain per-digit arithmetic. The decimal radix shares
+the M4 definitions with the existing digit/scale chunk constants.
+
+The chunk is always below its radix, and both fit in one unsigned limb. Existing
+product/carry bounds and limb-capacity checks therefore apply unchanged. Exact
+ratio construction and nearest-even rounding retain every digit. No buffer,
+lookup table, cached state or API is added. Expanded source grows by 1,432 bytes.
+
+`make bench-load` adds decimalDigits, with long compensated positive and negative
+significands. Sequential samples with three repeats and five samples reduce
+hosted load time from 134.56 ms to 87.82 ms (34.7%). Diagnostic bootstrap
+instructions fall from 24,362,423 to 15,757,199 (35.3%), excluding construction
+and invocation and without profiling markers in the child. The ordinary float
+text workload stays near 30 ms, and other loader timings are similar. Integer,
+vector and many-function instruction counts are identical. Binary float loading
+has a small extra dispatch/local cost: instruction counts rise 0.3%, while its
+measured time rises 0.7% in this pair. These local measurements are diagnostic.
+
+New independent IEEE-bit checks run in both runtimes at full and partial chunk
+boundaries, with separators and points across chunks, long compensated values,
+leading/signed zeroes and exact halfway values. The 8,192-byte token boundary,
+out-of-range large significands, malformed separators and recovery are covered.
+All 177 tests pass, including nested self-hosting. Both runtimes pass all 65,199
+pinned wg-3.0 commands across 258 files with zero skips or failures.
+
+The standalone hosted audit takes 256,798.989 ms (4.28 minutes), versus the
+previous 256,606.437 ms, a 0.08% increase: overall timing is essentially unchanged.
+The change is retained for the measured long-literal loading gain. There are no
+CI timing thresholds.

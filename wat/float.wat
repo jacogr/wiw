@@ -37,7 +37,7 @@
 		(i32.store (local.get $p) (local.get $n))
 	)
 
-	;; Multiply an exact integer by a small radix and add one digit, checking limb capacity before a carry append.
+	;; Multiply an exact integer by a small radix and add an unsigned digit or decimal chunk, checking limb capacity before a carry append.
 	(func $big-mul
 		(param $p i32)
 		(param $m i32)
@@ -478,6 +478,8 @@
 		(local $order i32)
 		(local $scale i32)
 		(local $step i32)
+		(local $chunk i32)
+		(local $chunk-radix i32)
 
 		;; A float literal must be an atom, with a bounded token length independent of numeric range.
 		(if (i32.ne (global.get $kind) (i32.const 3))
@@ -495,7 +497,7 @@
 		)
 		(local.set $p (global.get $tok))
 		(local.set $end (i32.add (local.get $p) (global.get $len)))
-		(local.set $base (i32.const 10))
+		(local.set $base (i32.const M4_DECIMAL_RADIX))
 		(local.set $a (global.get $fp-a-base))
 		(local.set $b (global.get $fp-b-base))
 		(local.set $t (global.get $fp-t-base))
@@ -650,6 +652,7 @@
 				)
 			)
 		)
+		(local.set $chunk-radix (i32.const 1))
 		(call $big-small (local.get $a) (i32.const 0))
 		(call $big-small (local.get $b) (i32.const 1))
 		;; Finish the significand before an exponent marker or the end of the token.
@@ -704,7 +707,25 @@
 						(return (i64.const 0))
 					)
 				)
-				(call $big-mul (local.get $a) (local.get $base) (local.get $d))
+				;; Decimal digits accumulate locally before one exact nine-digit limb pass.
+				(if (i32.eq (local.get $base) (i32.const M4_DECIMAL_RADIX))
+					(then
+						(local.set $chunk (i32.add (i32.mul (local.get $chunk) (i32.const M4_DECIMAL_RADIX)) (local.get $d)))
+						(local.set $chunk-radix (i32.mul (local.get $chunk-radix) (i32.const M4_DECIMAL_RADIX)))
+						;; A complete chunk fits below its radix and cannot overflow an unsigned limb.
+						(if (i32.eq (local.get $chunk-radix) (i32.const M4_DECIMAL_CHUNK_RADIX))
+							(then
+								(call $big-mul (local.get $a) (local.get $chunk-radix) (local.get $chunk))
+								(local.set $chunk (i32.const 0))
+								(local.set $chunk-radix (i32.const 1))
+							)
+						)
+					)
+					;; Hexadecimal significands retain their existing per-digit accumulation.
+					(else
+						(call $big-mul (local.get $a) (local.get $base) (local.get $d))
+					)
+				)
 				;; Bounded limb exhaustion is reported before further lexical accumulation.
 				(if (global.get $error)
 					(then
@@ -734,6 +755,21 @@
 			(then
 				(call $fail (i32.const M4_ERR_SYNTAX))
 				(return (i64.const 0))
+			)
+		)
+		;; Commit a short decimal tail before range classification or exact-zero detection.
+		(if (i32.ne (local.get $chunk-radix) (i32.const 1))
+			(then
+				;; A short significand or a zero prefix needs only one unsigned word.
+				(if (i32.eqz (i32.load (local.get $a)))
+					(then
+						(call $big-small (local.get $a) (local.get $chunk))
+					)
+					;; Longer significands retain every trailing digit with their exact radix.
+					(else
+						(call $big-mul (local.get $a) (local.get $chunk-radix) (local.get $chunk))
+					)
+				)
 			)
 		)
 		;; A present exponent has its own optional sign and decimal digit grammar.
@@ -785,7 +821,7 @@
 							)
 						)
 						(local.set $exponent
-							(i32.add (i32.mul (local.get $exponent) (i32.const 10)) (local.get $d))
+							(i32.add (i32.mul (local.get $exponent) (i32.const M4_DECIMAL_RADIX)) (local.get $d))
 						)
 						;; Once far beyond either float's range, larger exponent magnitudes have the same range outcome.
 						(if (i32.gt_u (local.get $exponent) (i32.const 100000))
@@ -830,7 +866,7 @@
 			)
 		)
 		;; Decimal orders outside conservative bounds can be classified without constructing enormous powers.
-		(if (i32.eq (local.get $base) (i32.const 10))
+		(if (i32.eq (local.get $base) (i32.const M4_DECIMAL_RADIX))
 			(then
 				(local.set $order (i32.add (local.get $significant) (local.get $exponent)))
 				;; Decimal values above 10^400 cannot round to a finite f64 or f32.
@@ -874,7 +910,7 @@
 							(local.get $scale)
 							(select
 								(i32.const M4_DECIMAL_CHUNK_RADIX)
-								(i32.const 10)
+								(i32.const M4_DECIMAL_RADIX)
 								(i32.eq (local.get $step) (i32.const M4_DECIMAL_CHUNK_DIGITS))
 							)
 							(i32.const 0)
