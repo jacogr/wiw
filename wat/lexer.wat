@@ -47,10 +47,10 @@
 		(result i32)
 
 		(i32.or
-			(i32.eq (local.get $c) (i32.const 32))
+			(i32.eq (local.get $c) (i32.const M4_BYTE_SPACE))
 			(i32.or
-				(i32.eq (local.get $c) (i32.const 9))
-				(i32.or (i32.eq (local.get $c) (i32.const 10)) (i32.eq (local.get $c) (i32.const 13)))
+				(i32.eq (local.get $c) (i32.const M4_BYTE_TAB))
+				(i32.or (i32.eq (local.get $c) (i32.const M4_BYTE_LF)) (i32.eq (local.get $c) (i32.const M4_BYTE_CR)))
 			)
 		)
 	)
@@ -72,11 +72,19 @@
 			(loop $skip
 				(global.set $tok (global.get $pos))
 				(br_if $skip-done (i32.ge_u (global.get $pos) (global.get $end)))
+				(local.set $c (i32.load8_u (global.get $pos)))
 				;; Consume one whitespace byte and resume skipping.
-				(if (call $space (call $peek))
+				(if (call $space (local.get $c))
 					(then
 						(call $advance)
 						(br $skip)
+					)
+				)
+				;; Only an opening parenthesis or semicolon can begin comments or annotations.
+				(br_if $skip-done
+					(i32.and
+						(i32.ne (local.get $c) (i32.const M4_BYTE_LPAREN))
+						(i32.ne (local.get $c) (i32.const M4_BYTE_SEMICOLON))
 					)
 				)
 				;; An annotation is trivia even when it occurs between an opening delimiter and its keyword.
@@ -223,7 +231,19 @@
 			(loop $atom
 				(br_if $atom-done (i32.ge_u (local.get $cursor) (local.get $end)))
 				(local.set $c (i32.load8_u (local.get $cursor)))
-				(br_if $atom-done (call $space (local.get $c)))
+				;; Match exactly the four WAT whitespace bytes without a helper call per atom byte.
+				(br_if $atom-done
+					(i32.or
+						(i32.eq (local.get $c) (i32.const M4_BYTE_SPACE))
+						(i32.or
+							(i32.eq (local.get $c) (i32.const M4_BYTE_TAB))
+							(i32.or
+								(i32.eq (local.get $c) (i32.const M4_BYTE_LF))
+								(i32.eq (local.get $c) (i32.const M4_BYTE_CR))
+							)
+						)
+					)
+				)
 				(br_if $atom-done
 					(i32.or (i32.eq (local.get $c) (i32.const 40)) (i32.eq (local.get $c) (i32.const 41)))
 				)

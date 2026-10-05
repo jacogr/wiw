@@ -207,6 +207,9 @@ phase measurements and full-audit tradeoffs.
 The atom scanner also uses local cursors and guarded comment lookahead; the
 latest paired integer, short-float, vector and many-function loader samples
 improve by roughly 10–21% across text and binary inputs.
+Inline atom whitespace and an early trivia-prefix check add another 3–10%
+for those loader workloads in the latest paired samples; detailed measurements
+remain in the performance history.
 `make bench-create` measures fresh construction with preloaded engine source, checks each
 instance with a guest, and records first-use and warm median timings in
 `build/bench-create.json`. It uses no cached interpreter state.

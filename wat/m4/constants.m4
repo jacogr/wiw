@@ -130,3 +130,11 @@ m4_define(<!M4_BIG_LIMB_BITS!>,<!32!>)m4_dnl
 m4_define(<!M4_BIG_LIMB_CAPACITY!>,<!1023!>)m4_dnl
 m4_dnl Seven hexadecimal digits form a multiplier of 16^7 within one unsigned limb.
 m4_define(<!M4_HEX_CHUNK_RADIX!>,<!268435456!>)m4_dnl
+m4_dnl The four exact WAT whitespace bytes, shared by helper and inline scanner checks.
+m4_define(<!M4_BYTE_SPACE!>,<!32!>)m4_dnl
+m4_define(<!M4_BYTE_TAB!>,<!9!>)m4_dnl
+m4_define(<!M4_BYTE_LF!>,<!10!>)m4_dnl
+m4_define(<!M4_BYTE_CR!>,<!13!>)m4_dnl
+m4_dnl Bytes that can introduce WAT comments or annotations.
+m4_define(<!M4_BYTE_LPAREN!>,<!40!>)m4_dnl
+m4_define(<!M4_BYTE_SEMICOLON!>,<!59!>)m4_dnl

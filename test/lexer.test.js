@@ -60,7 +60,9 @@ for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: lexer preser
     ['a b\tc\nd\re',[[3,0,1],[3,2,1],[3,4,1],[3,6,1],[3,8,1]]],
     ['a\vb\fc',[[3,0,5]]], ['λ',[[3,0,2]]],
     ['foo(; nested (; inner ;) ;)bar)',[[3,0,3],[3,27,3],[2,30,0]]],
-    ['foo "abc" bar',[[3,0,3],[4,5,3],[3,10,3]]]
+    ['foo "abc" bar',[[3,0,3],[4,5,3],[3,10,3]]],
+    ['(@note)abc',[[3,7,3]]], ['(@note)',[]], [';;ignored',[]],
+    ['(;comment;)',[]], ['(',[[1,0,0]]], [')',[[2,0,0]]]
   ]) {
     const pointer=init(text);
     for(const [kind,start,length] of tokens) {
@@ -72,6 +74,42 @@ for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: lexer preser
     assert.equal(call('scan_next'),0,text);
     assert.equal(call('error_code'),0,text);
     assert.equal(call('scan_pos'),65536,text);
+  }
+  for(const [text,cursor] of [['(;',2],['(@',2],['(@)',2]]) {
+    const pointer=init(text);
+    call('scan_next');
+    assert.equal(call('error_code'),1,text);
+    assert.equal(call('error_offset'),pointer,text);
+    assert.equal(call('scan_pos')-pointer,cursor,text);
+  }
+  // Exhaust all byte values between atom bytes, independently checking exact delimiter rules.
+  for(let byte=0;byte<256;byte++) {
+    const pointer=init(Buffer.from([97,byte,98]));
+    assert.equal(call('scan_next'),3,`byte ${byte}`);
+    if(byte===0||byte===34) {
+      assert.equal(call('error_code'),1,`byte ${byte}`);
+      assert.equal(call('error_offset'),pointer);
+      assert.equal(call('scan_pos'),pointer+1);
+      assert.equal(call('scan_len'),0);
+      continue;
+    }
+    assert.equal(call('error_code'),0,`byte ${byte}`);
+    if([9,10,13,32,40,41].includes(byte)) {
+      assert.equal(call('scan_len'),1,`byte ${byte}`);
+      assert.equal(call('scan_pos'),pointer+1);
+      if(byte===40||byte===41) {
+        assert.equal(call('scan_next'),byte===40?1:2);
+        assert.equal(call('scan_len'),0);
+      }
+      assert.equal(call('scan_next'),3);
+      assert.equal(call('scan_tok'),pointer+2);
+      assert.equal(call('scan_len'),1);
+    } else {
+      assert.equal(call('scan_len'),3,`byte ${byte}`);
+    }
+    assert.equal(call('scan_next'),0);
+    assert.equal(call('scan_pos'),65536);
+    assert.equal(call('error_code'),0);
   }
   for(const [text,steps,start,cursor] of [['abc"',1,0,3],['abc\0',1,0,3],['\0',1,0,0],['ok xyz\0',2,3,6]]) {
     const pointer=init(text);

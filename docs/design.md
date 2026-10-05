@@ -1515,3 +1515,58 @@ compared with 251,066.404 ms (4.18 minutes), a 0.8% increase. The change is
 retained for its loading improvements. Performance history records complete
 coverage, hashes, paired loading/construction samples and instruction counts.
 These local measurements are diagnostic and impose no CI timing thresholds.
+
+### Inline atom whitespace and trivia-prefix checks
+
+The atom loop compares its cached byte directly with the four WAT whitespace
+bytes, avoiding a call to the general whitespace helper for every atom byte.
+The helper remains available to trivia and annotation parsing; both use named
+M4 constants for the same space, tab, line-feed and carriage-return bytes.
+
+Before checking annotations and comments, trivia scanning reads the current
+byte once after its EOF guard. A byte other than an opening parenthesis or a
+semicolon cannot begin any of those prefixes, so it proceeds directly to token
+classification. Parentheses, semicolons, strings, nested comments and annotations
+retain their existing parsing paths. The prefix bytes also have M4 names.
+
+The boundary fixture now exhausts all 256 raw byte values between atom bytes in
+both runtimes. It independently checks whitespace/delimiter spans, quote/NUL
+errors and cursor publication. Additional cases check complete annotations,
+comments ending at EOF, lone parentheses and incomplete comment/annotation
+failures. Source ends at the exact memory boundary, retaining lookahead bounds
+coverage. No buffer, global state or public ABI changes are introduced.
+
+Sequential isolated hosted loader samples (three repeats, five samples) show:
+
+| Loader workload | Before | Inline whitespace/prefix guard | Time reduction | Instruction reduction |
+| --- | ---: | ---: | ---: | ---: |
+| Text integers | 22.64 ms | 20.29 ms | 10.4% | 7.9% |
+| Text short floats | 25.59 ms | 23.57 ms | 7.9% | 7.2% |
+| Text vectors | 16.86 ms | 15.20 ms | 9.8% | 9.1% |
+| Text many functions | 47.15 ms | 42.31 ms | 10.3% | 8.3% |
+| Binary integers | 30.32 ms | 28.13 ms | 7.2% | 5.9% |
+| Binary floats | 98.62 ms | 95.33 ms | 3.3% | 2.1% |
+| Binary vectors | 29.58 ms | 27.38 ms | 7.4% | 7.2% |
+| Binary many functions | 60.66 ms | 55.86 ms | 7.9% | 6.2% |
+| Decimal scales | 132.04 ms | 130.85 ms | 0.9% | 0.8% |
+| Long decimal digits | 55.27 ms | 54.22 ms | 1.9% | 0.6% |
+| Hexadecimal ratios | 105.18 ms | 104.67 ms | 0.5% | 0.5% |
+| Long hexadecimal digits | 60.48 ms | 63.86 ms | -5.6% | 0.5% |
+
+The integer, short-float, vector and many-function workloads improve by 3–10%
+in time, with 2–9% fewer bootstrap instructions. Exact arithmetic dominates the
+other float cases. Long hexadecimal digits measure 5.6% slower in this paired
+sample despite 0.5% fewer instructions; the change is retained for the other
+loading and construction gains. Counts cover the full hosted load, excluding
+construction and invocation, with no profiling markers in the child source.
+
+Paired fresh construction samples drop from 18.05 ms to 15.44 ms (14.5%), using
+preloaded source and independent instances. Expanded source grows by 589 bytes.
+All 183 tests pass, including nested self-hosting. Both runtimes pass all 65,199
+pinned wg-3.0 commands across 258 files with zero skips or failures.
+
+The standalone hosted audit takes 251,385.417 ms (4.19 minutes), compared with
+252,958.331 ms (4.22 minutes), a 0.6% reduction: overall timing is roughly
+unchanged. Performance history records hashes, paired loading/construction
+samples, instruction counts and complete coverage. Local measurements are
+diagnostic and impose no CI timing thresholds.
