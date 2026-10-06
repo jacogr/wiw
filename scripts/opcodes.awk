@@ -203,6 +203,36 @@ function integer_dispatch(wide, i, first, last, used, eligible) {
   arithmetic_dispatch(1, used, wide, "\t\t")
 }
 
+# Split floating operations by opcode range, leaving only short exact-match leaves.
+function float_dispatch(low, high, tabs, middle, n, i, expr) {
+  if (high - low > 2) {
+    middle = int((low + high) / 2)
+    printf "%s;; Select floating opcodes at or below %s.\n", tabs, name[float_ids[middle]]
+    printf "%s(if (i32.le_u (local.get $op) (i32.const %d))\n%s\t(then\n", tabs, float_ids[middle], tabs
+    float_dispatch(low, middle, tabs "\t\t")
+    printf "%s\t)\n%s\t;; Larger opcodes enter the remaining floating range.\n%s\t(else\n", tabs, tabs, tabs
+    float_dispatch(middle + 1, high, tabs "\t\t")
+    printf "%s\t)\n%s)\n", tabs, tabs
+    return
+  }
+  for (n = low; n <= high; n++) {
+    i = float_ids[n]
+    printf "%s;; Execute %s with the declared input and result types.\n", tabs, name[i]
+    printf "%s(if (i32.eq (local.get $op) (i32.const %d))\n%s\t(then\n", tabs, i, tabs
+    if (i >= 152 && i <= 159) {
+      printf "%s\t\t;; Reject NaN and overflow before a native integer conversion can trap.\n", tabs
+      printf "%s\t\t(if (call $float-trunc-check (local.get $op) (local.get $a))\n%s\t\t\t(then (return (i64.const 0)))\n%s\t\t)\n", tabs, tabs, tabs
+    }
+    expr = "(" name[i] " " decoded(inputtype[i], "a")
+    if (inputs[i] == 2) expr = expr " " decoded(inputtype[i], "b")
+    expr = expr ")"
+    if (outputtype[i] == 1) expr = "(i64.extend_i32_s " expr ")"
+    if (outputtype[i] == 3) expr = "(i64.extend_i32_u (i32.reinterpret_f32 " expr "))"
+    if (outputtype[i] == 4) expr = "(i64.reinterpret_f64 " expr ")"
+    printf "%s\t\t(return %s)\n%s\t)\n%s)\n", tabs, expr, tabs, tabs
+  }
+}
+
 END {
   if (invalid) exit 1
   # Generate the checked-in m4 names from the same IDs used by WAT dispatch.
@@ -377,22 +407,11 @@ END {
   print "\t)"
   print "\n\t;; Decode IEEE bit slots, execute floating-point arithmetic or conversions, and encode the result."
   print "\t(func $float-apply\n\t\t(param $op i32)\n\t\t(param $a i64)\n\t\t(param $b i64)\n\t\t(result i64)"
+  float_count = 0
   for (i = 107; i <= count; i++) {
-    if (operation[i] != "float" && operation[i] != "floatconvert") continue
-    printf "\t\t;; Execute %s with the declared input and result types.\n", name[i]
-    printf "\t\t(if (i32.eq (local.get $op) (i32.const %d))\n\t\t\t(then\n", i
-    if (i >= 152 && i <= 159) {
-      print "\t\t\t\t;; Reject NaN and overflow before a native integer conversion can trap."
-      print "\t\t\t\t(if (call $float-trunc-check (local.get $op) (local.get $a))\n\t\t\t\t\t(then\n\t\t\t\t\t\t(return (i64.const 0))\n\t\t\t\t\t)\n\t\t\t\t)"
-    }
-    expr = "(" name[i] " " decoded(inputtype[i], "a")
-    if (inputs[i] == 2) expr = expr " " decoded(inputtype[i], "b")
-    expr = expr ")"
-    if (outputtype[i] == 1) expr = "(i64.extend_i32_s " expr ")"
-    if (outputtype[i] == 3) expr = "(i64.extend_i32_u (i32.reinterpret_f32 " expr "))"
-    if (outputtype[i] == 4) expr = "(i64.reinterpret_f64 " expr ")"
-    print "\t\t\t\t(return " expr ")\n\t\t\t)\n\t\t)"
+    if (operation[i] == "float" || operation[i] == "floatconvert") float_ids[++float_count] = i
   }
+  float_dispatch(1, float_count, "\t\t")
   print "\t\t(i64.const 0)\n\t)"
 
 }

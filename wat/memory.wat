@@ -121,6 +121,7 @@
 		(local $start i32)
 		(local $named i32)
 		(local $alignment i32)
+		(local $width i32)
 		(local $at i32)
 
 		(local.set $record (call $new-memory-immediate))
@@ -162,7 +163,8 @@
 				)
 			)
 		)
-		(local.set $alignment (call $access-width (local.get $op)))
+		(local.set $width (call $access-width (local.get $op)))
+		(local.set $alignment (local.get $width))
 		;; An omitted offset defaults to zero.
 		(if (call $attribute (i32.const 99) (i32.const 7))
 			(then
@@ -181,7 +183,7 @@
 					(i32.or
 						(i32.eqz (local.get $alignment))
 						(i32.or
-							(i32.gt_u (local.get $alignment) (call $access-width (local.get $op)))
+							(i32.gt_u (local.get $alignment) (local.get $width))
 							(i32.ne
 								(i32.and (local.get $alignment) (i32.sub (local.get $alignment) (i32.const 1)))
 								(i32.const 0)
@@ -209,6 +211,8 @@
 		)
 		(global.set $immediate-length (local.get $alignment))
 		(i64.store (local.get $record) (local.get $offset))
+		;; Natural access width is independent of the permitted source alignment hint.
+		(i32.store offset=M4_MEMORY_ACCESS_WIDTH_OFFSET (local.get $record) (local.get $width))
 		(local.get $record)
 	)
 
@@ -512,7 +516,7 @@
 			(call $memory-address
 				(local.get $a)
 				(local.get $immediate)
-				(call $scalar-access-width (local.get $op))
+				(i32.load offset=M4_MEMORY_ACCESS_WIDTH_OFFSET (local.get $immediate))
 			)
 		)
 		;; Do not perform a native access after a guest bounds failure.

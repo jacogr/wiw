@@ -2349,3 +2349,58 @@ audits pass 65,199 commands across 258 files with zero failures/skips. The hoste
 audit takes 168,122.896 ms (2m48.12s), essentially unchanged from 168,126.927 ms.
 Targeted invocation gains are retained without claiming a broad spec-audit
 speedup; the performance record preserves both whole-suite and targeted results.
+
+### Balanced float dispatch, access-width metadata and hosted type snapshots
+
+Three candidates were implemented and measured in order. The floating helper
+now uses a generated balanced opcode tree with leaves of at most three exact
+matches. Unsupported gaps still return zero; conversions retain their original
+NaN/overflow guards and every operation retains the same operand/result bit
+conversions. Branch comments name the boundary opcode, and each leaf names its
+operation. Sequential five-sample hosted arithmetic and conversion benchmarks
+improve by 9.0% and 17.7%, respectively, at this stage.
+
+Memory parsing computes natural access width once, uses it to validate the
+alignment hint and writes it at offset 28 of the existing 32-byte memarg record.
+Scalar runtime bounds checks read this field instead of classifying the opcode
+again. Binary input is decoded through the same text parser, including explicit
+memory selectors and memory64 offsets. Records and arenas retain their sizes;
+SIMD and bulk paths retain their existing width handling. New regressions check
+all 23 scalar loads/stores at the page endpoint with align=1, failure atomicity,
+recovery and a forward-referenced memory64 declaration with an overflowing
+maximum offset. Hosted scalar memory improves 6.6% in the next sequential pair.
+
+Two host ABI queries provide fresh signature and completed-result snapshots in
+existing host scratch. Signature snapshots contain parameter/result counts and
+ordered kinds; result snapshots contain count, low/high slot bases and kinds.
+Buffers are sized and backing checked before writing; there is no persistent
+signature, engine or checkpoint cache. Invocations omit unused result signatures.
+The adapter copies type vectors and result bits before reference decoding can
+issue another metadata query that reuses scratch. Counts and kinds still derive
+from the same function/type/shape helpers as individual queries.
+
+The initial prototype used bulk snapshots in both adapters. It improved mixed
+multivalue calls but regressed short scalar calls, so native/bootstrap adapters
+retain direct queries and only interpreted adapters use snapshots. Seven
+alternating samples of 1,000 short calls compare old/new frontends with identical
+final engine binaries and source; construction and verification are outside
+timing. Hosted scalar, float, vector and mixed multivalue calls improve by 10.8%,
+5.6%, 9.6% and 30.4%, respectively. Bootstrap controls take roughly 2–10% more
+time in this pair at around 1–2.5 ms per 1,000 calls; no bootstrap speedup is
+claimed. Both the discarded prototype and retained pair remain in history.
+
+New bootstrap/hosted regressions decode a function reference before other mixed
+results, checking that its nested signature query cannot overwrite later types
+or raw NaN/vector bits. They also check void results, mutation of returned
+signature arrays, and 128 parameters/results. Existing import, reload, stale
+binding, exact-fuel and nested self-hosting tests remain in the full suite.
+All timed comparisons run without overlapping compilation, tests or audits;
+raw samples, source/binary/frontend hashes and whole-suite outcomes are retained
+separately in performance history, with no CI performance thresholds.
+
+All 224 tests pass in 172,202.548 ms (2m52.20s), including complete pinned
+coverage and nested self-hosting, versus 173,279.121 ms in the preceding complete
+run (0.6% less time). Both standalone audits pass 65,199 commands across 258
+files with zero failures/skips. The isolated hosted audit takes 160,892.911 ms
+(2m40.89s), 4.3% less time than the preceding 168,122.896 ms run. Targeted and
+whole-suite measurements remain separate, with original stress inputs unchanged.

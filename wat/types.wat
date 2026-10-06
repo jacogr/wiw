@@ -815,3 +815,68 @@
 		(global.set $kind (local.get $kind))
 		(local.get $value)
 	)
+
+	;; Return current function kinds in scratch: parameter count, result count, then both vectors.
+	(func (export "function_signature")
+		(param $index i32)
+		(param $include-results i32)
+		(result i32)
+		(local $at i32)
+		(local $f i32)
+		(local $params i32)
+		(local $results i32)
+		(local $shape i32)
+		(local $i i32)
+
+		;; Invalid indices cannot expose or modify other arenas.
+		(if (i32.ge_u (local.get $index) (global.get $function-count))
+			(then
+				(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
+				(return (i32.const 0))
+			)
+		)
+		(local.set $f (call $function (local.get $index)))
+		(local.set $params (i32.load offset=M4_FUNCTION_PARAMETERS_OFFSET (local.get $f)))
+		;; Ordinary invocations request only parameter types; signature/export APIs include results.
+		(if (local.get $include-results)
+			(then
+				(local.set $shape (i32.load offset=M4_FUNCTION_RESULT_SHAPE_OFFSET (local.get $f)))
+				(local.set $results (call $shape-count (local.get $shape)))
+			)
+		)
+		(local.set $at (global.get $host-base))
+		;; Fresh snapshots reserve the complete vectors and a void sentinel before writing.
+		(if (i32.eqz
+			(call $ensure-bytes
+				(i64.add (i64.extend_i32_u (local.get $at))
+					(i64.extend_i32_u
+						(i32.add (i32.const m4_eval(M4_HOST_SIGNATURE_TYPES_OFFSET+M4_TYPE_BYTES)) (i32.mul (i32.add (local.get $params) (local.get $results)) (i32.const M4_TYPE_BYTES)))))
+			))
+			(then
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
+				(return (i32.const 0))
+			)
+		)
+		(i32.store (local.get $at) (local.get $params))
+		(i32.store offset=M4_HOST_SIGNATURE_RESULTS_OFFSET (local.get $at) (local.get $results))
+		(block $done
+			;; Parameter kinds retain declaration order, including typed host references.
+			(loop $params
+				(br_if $done (i32.eq (local.get $i) (local.get $params)))
+				(i32.store
+					(i32.add (local.get $at) (i32.add (i32.const M4_HOST_SIGNATURE_TYPES_OFFSET) (i32.mul (local.get $i) (i32.const M4_TYPE_BYTES))))
+					(call $value-kind (i32.load (call $local-type (local.get $index) (local.get $i))))
+				)
+				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br $params)
+			)
+		)
+		;; Result kinds follow parameters and are read immediately by the synchronous host adapter.
+		(if (local.get $include-results)
+			(then
+				(call $write-shape-kinds (local.get $shape)
+					(i32.add (local.get $at) (i32.add (i32.const M4_HOST_SIGNATURE_TYPES_OFFSET) (i32.mul (local.get $params) (i32.const M4_TYPE_BYTES)))))
+			)
+		)
+		(local.get $at)
+	)

@@ -369,3 +369,53 @@
 		)
 		(i32.const 1)
 	)
+
+	;; Copy a result shape's host-facing kinds into a caller-reserved scratch vector.
+	(func $write-shape-kinds
+		(param $shape i32)
+		(param $at i32)
+		(local $count i32)
+		(local $i i32)
+
+		(local.set $count (call $shape-count (local.get $shape)))
+		;; Void signatures publish an explicit zero sentinel for the singleton result path.
+		(i32.store (local.get $at) (i32.const 0))
+		(block $done
+			;; Copy each declared kind without crossing the enclosing reserved buffer.
+			(loop $types
+				(br_if $done (i32.eq (local.get $i) (local.get $count)))
+				(i32.store
+					(i32.add (local.get $at) (i32.mul (local.get $i) (i32.const M4_TYPE_BYTES)))
+					(call $value-kind (call $shape-type (local.get $shape) (local.get $i)))
+				)
+				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br $types)
+			)
+		)
+	)
+
+	;; Return a fresh completed-result snapshot: count, low/high bases, then scalar kinds.
+	(func (export "result_info")
+		(result i32)
+		(local $at i32)
+		(local $count i32)
+
+		(local.set $at (global.get $host-base))
+		(local.set $count (call $shape-count (global.get $last-results)))
+		;; Reserve a sentinel even for void results; failed backing growth exposes no partial snapshot.
+		(if (i32.eqz
+			(call $ensure-bytes
+				(i64.add (i64.extend_i32_u (local.get $at))
+					(i64.extend_i32_u (i32.add (i32.const m4_eval(M4_HOST_RESULT_TYPES_OFFSET+M4_TYPE_BYTES)) (i32.mul (local.get $count) (i32.const M4_TYPE_BYTES)))))
+			))
+			(then
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
+				(return (i32.const 0))
+			)
+		)
+		(i32.store (local.get $at) (local.get $count))
+		(i32.store offset=M4_HOST_RESULT_BASE_OFFSET (local.get $at) (global.get $stack-base))
+		(i32.store offset=M4_HOST_RESULT_HIGH_OFFSET (local.get $at) (global.get $stack-high-base))
+		(call $write-shape-kinds (global.get $last-results) (i32.add (local.get $at) (i32.const M4_HOST_RESULT_TYPES_OFFSET)))
+		(local.get $at)
+	)

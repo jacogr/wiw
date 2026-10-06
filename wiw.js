@@ -214,11 +214,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     const n = write(name, at);
     const index = e.export_function(at, n);
     check(e.error_code());
-    return {
-      index,
-      params: Array.from({ length: e.function_params(index) }, (_, slot) => e.function_param_type(index, slot)),
-      results: includeResults ? resultSignature(index) : undefined
-    };
+    return {index, ...signatureAt(index, includeResults)};
   }
   // Reference descriptors carry opaque values; numeric descriptors retain exact bits.
   function rawResult(bits, type) {
@@ -349,9 +345,19 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     const count = e.function_results(index);
     return count <= 1 ? e.function_result_type(index, 0) : Array.from({length: count}, (_, slot) => e.function_result_type(index, slot));
   }
-  function signatureAt(index) {
-    return {params: Array.from({length: e.function_params(index)}, (_, slot) => e.function_param_type(index, slot)), results: resultSignature(index)};
+  // Copy a fresh bulk snapshot before later ABI calls reuse its host scratch bytes.
+  function signatureAt(index, includeResults = true) {
+    // Direct native calls are cheaper than filling scratch; bulk queries target interpreted forwarding.
+    if (!ensureMemory) return {params: Array.from({length: e.function_params(index)}, (_, slot) => e.function_param_type(index, slot)), results: includeResults ? resultSignature(index) : undefined};
+    const at = e.function_signature(index, includeResults ? 1 : 0);
+    if (!at) check(e.error_code());
+    const view = new DataView(e.memory.buffer, memoryOffset);
+    const count = view.getUint32(at, true), results = view.getUint32(at + 4, true);
+    const params = Array.from({length: count}, (_, slot) => view.getUint32(at + 8 + slot * 4, true));
+    const types = includeResults ? Array.from({length: results}, (_, slot) => view.getUint32(at + 8 + (count + slot) * 4, true)) : [];
+    return {params, results: includeResults ? (results > 1 ? types : types[0] ?? 0) : undefined};
   }
+
   function functionReference(index) {
     if (tableFunctions.has(index)) return tableFunctions.get(index);
     const descriptor = e.function_info(index), view = new DataView(e.memory.buffer, memoryOffset);
@@ -484,18 +490,37 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       check(e.error_code());
     }
     check(e.error_code());
-    const resultCount = e.result_count();
-    if (resultCount > 1) {
-      const output = new DataView(e.memory.buffer, memoryOffset), at = e.result_base();
-      return Array.from({length: resultCount}, (_, slot) => {
-        let bits = output.getBigInt64(at + slot * 8, true);
-        const type = e.result_type(slot);
-        if (type === 7) bits = BigInt.asUintN(64, bits) | (BigInt.asUintN(64, output.getBigInt64(e.result_high_base() + slot * 8, true)) << 64n);
-        return raw ? rawResult(bits, type) : decodedValue(bits, type);
-      });
+    // The bootstrap avoids scratch metadata work when its native queries cross no interpreted boundary.
+    if (!ensureMemory) {
+      const count = e.result_count();
+      if (count > 1) {
+        const view = new DataView(e.memory.buffer, memoryOffset), at = e.result_base();
+        return Array.from({length: count}, (_, slot) => {
+          let bits = view.getBigInt64(at + slot * 8, true);
+          const type = e.result_type(slot);
+          if (type === 7) bits = BigInt.asUintN(64, bits) | (view.getBigUint64(e.result_high_base() + slot * 8, true) << 64n);
+          return raw ? rawResult(bits, type) : decodedValue(bits, type);
+        });
+      }
+      const type = e.result_type(0);
+      if (type === 7) value = BigInt.asUintN(64, value) | (new DataView(e.memory.buffer, memoryOffset).getBigUint64(e.result_high_base(), true) << 64n);
+      return raw ? rawResult(value, type) : decodedValue(value, type);
     }
-    const resultType = e.result_type(0);
-    if (resultType === 7) value = BigInt.asUintN(64, value) | (BigInt.asUintN(64, new DataView(e.memory.buffer, memoryOffset).getBigInt64(e.result_high_base(), true)) << 64n);
+    const info = e.result_info();
+    if (!info) check(e.error_code());
+    const output = new DataView(e.memory.buffer, memoryOffset);
+    const resultCount = output.getUint32(info, true), at = output.getUint32(info + 4, true), highAt = output.getUint32(info + 8, true);
+    // Copy kinds and bits before decoding references can issue further metadata queries.
+    const types = Array.from({length: Math.max(1, resultCount)}, (_, slot) => output.getUint32(info + 12 + slot * 4, true));
+    if (resultCount > 1) {
+      const bits = Array.from({length: resultCount}, (_, slot) => {
+        const low = output.getBigInt64(at + slot * 8, true);
+        return types[slot] === 7 ? BigInt.asUintN(64, low) | (output.getBigUint64(highAt + slot * 8, true) << 64n) : low;
+      });
+      return bits.map((bits, slot) => raw ? rawResult(bits, types[slot]) : decodedValue(bits, types[slot]));
+    }
+    const resultType = types[0];
+    if (resultType === 7) value = BigInt.asUintN(64, value) | (output.getBigUint64(highAt, true) << 64n);
     return raw ? rawResult(value, resultType) : decodedValue(value, resultType);
   }
   // Run either public scalar values or exact raw slots through the same protected invocation.

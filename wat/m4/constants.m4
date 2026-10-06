@@ -104,6 +104,7 @@ m4_define(<!M4_MEMORY_ADDRESS_TYPE_OFFSET!>,<!24!>)m4_dnl
 m4_define(<!M4_TABLE_ADDRESS_TYPE_OFFSET!>,<!24!>)m4_dnl
 m4_define(<!M4_ELEMENT_LIVE_LENGTH_OFFSET!>,<!44!>)m4_dnl
 m4_define(<!M4_VECTOR_HIGH_OFFSET!>,<!8!>)m4_dnl
+m4_define(<!M4_MEMORY_ACCESS_WIDTH_OFFSET!>,<!28!>)m4_dnl
 m4_define(<!M4_MEMORY_OPERAND_OFFSET!>,<!8!>)m4_dnl
 m4_define(<!M4_BULK_SOURCE_MEMORY_OFFSET!>,<!16!>)m4_dnl
 m4_define(<!M4_BULK_SOURCE_TABLE_OFFSET!>,<!8!>)m4_dnl
@@ -186,3 +187,11 @@ m4_define(<!M4_BYTE_LANES_SEMICOLON!>,<!0x3b3b3b3b3b3b3b3b!>)m4_dnl
 m4_dnl Packed scalar effects hold operand/result type nibbles in the second byte.
 m4_define(<!M4_EFFECT_OPERAND_SHIFT!>,<!12!>)m4_dnl
 m4_define(<!M4_BYTE_SHIFT!>,<!8!>)m4_dnl
+
+m4_dnl Fresh host metadata snapshots use counted i32 type vectors in existing scratch memory.
+m4_define(<!M4_HOST_SIGNATURE_RESULTS_OFFSET!>,<!4!>)m4_dnl
+m4_define(<!M4_HOST_SIGNATURE_TYPES_OFFSET!>,<!8!>)m4_dnl
+m4_define(<!M4_HOST_RESULT_BASE_OFFSET!>,<!4!>)m4_dnl
+m4_define(<!M4_HOST_RESULT_HIGH_OFFSET!>,<!8!>)m4_dnl
+m4_define(<!M4_HOST_RESULT_TYPES_OFFSET!>,<!12!>)m4_dnl
+m4_define(<!M4_TYPE_BYTES!>,<!4!>)m4_dnl
