@@ -149,3 +149,14 @@ m4_define(<!M4_CONTROL_BYTES!>,<!32!>)m4_dnl
 
 m4_dnl Shapes below this address encode void or one value type; larger shapes are vectors.
 m4_define(<!M4_SHAPE_VECTOR_MIN!>,<!1048576!>)m4_dnl
+
+m4_dnl Little-endian two-byte lexer delimiters, read only after checking the full pair.
+m4_define(<!M4_PAIR_LINE_COMMENT!>,<!15163!>)m4_dnl
+m4_define(<!M4_PAIR_BLOCK_COMMENT_OPEN!>,<!15144!>)m4_dnl
+m4_define(<!M4_PAIR_BLOCK_COMMENT_CLOSE!>,<!10555!>)m4_dnl
+m4_define(<!M4_PAIR_ANNOTATION_OPEN!>,<!16424!>)m4_dnl
+
+m4_dnl Token-prefix bytes used after the scanner has proved the cursor is in range.
+m4_define(<!M4_BYTE_DOLLAR!>,<!36!>)m4_dnl
+m4_define(<!M4_BYTE_RPAREN!>,<!41!>)m4_dnl
+m4_define(<!M4_BYTE_QUOTE!>,<!34!>)m4_dnl

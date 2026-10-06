@@ -63,92 +63,120 @@
 		(local $name i32)
 		(local $cursor i32)
 		(local $end i32)
+		(local $prefix i32)
 
 		(global.set $kind (i32.const 0))
 		(global.set $len (i32.const 0))
-		;; Leave this region once the cursor reaches a token or the end of input.
+		(local.set $cursor (global.get $pos))
+		(local.set $end (global.get $end))
+		;; Leave this region at the first token byte or EOF, then publish the local cursor.
 		(block $skip-done
-			;; Keep skipping whitespace and comments before classifying a token.
+			;; Scan trivia locally; helper calls see a published cursor only at their boundary.
 			(loop $skip
-				(global.set $tok (global.get $pos))
-				(br_if $skip-done (i32.ge_u (global.get $pos) (global.get $end)))
-				(local.set $c (i32.load8_u (global.get $pos)))
-				;; Consume one whitespace byte and resume skipping.
-				(if (call $space (local.get $c))
+				(br_if $skip-done (i32.ge_u (local.get $cursor) (local.get $end)))
+				(local.set $c (i32.load8_u (local.get $cursor)))
+				;; Space, tab/LF and CR are the only whitespace bytes; VT/FF remain invalid.
+				(if
+					(i32.or
+						(i32.eq (local.get $c) (i32.const M4_BYTE_SPACE))
+						(i32.or
+							(i32.le_u (i32.sub (local.get $c) (i32.const M4_BYTE_TAB)) (i32.const 1))
+							(i32.eq (local.get $c) (i32.const M4_BYTE_CR))
+						)
+					)
 					(then
-						(call $advance)
+						(local.set $cursor (i32.add (local.get $cursor) (i32.const 1)))
 						(br $skip)
 					)
 				)
-				;; Only an opening parenthesis or semicolon can begin comments or annotations.
+				;; Ordinary token prefixes cannot introduce comments or annotations.
 				(br_if $skip-done
 					(i32.and
 						(i32.ne (local.get $c) (i32.const M4_BYTE_LPAREN))
 						(i32.ne (local.get $c) (i32.const M4_BYTE_SEMICOLON))
 					)
 				)
-				;; An annotation is trivia even when it occurs between an opening delimiter and its keyword.
-				(if (call $pair (i32.const 40) (i32.const 64))
+				;; A trailing single byte has no delimiter pair; never load past the input end.
+				(br_if $skip-done (i32.ge_u (i32.add (local.get $cursor) (i32.const 1)) (local.get $end)))
+				(local.set $prefix (i32.load16_u (local.get $cursor)))
+				(global.set $tok (local.get $cursor))
+				;; Annotations retain their full grammar and shared lexical error handling.
+				(if (i32.eq (local.get $prefix) (i32.const M4_PAIR_ANNOTATION_OPEN))
 					(then
+						(global.set $pos (local.get $cursor))
 						(call $skip-annotation)
-						;; A malformed annotation stops scanning at its first failure.
-						(if (global.get $error)
-							(then
-								(return)
-							)
-						)
+						;; Failed annotation parsing already publishes its cursor and first error.
+						(if (global.get $error) (then (return)))
+						(local.set $cursor (global.get $pos))
 						(br $skip)
 					)
 				)
-				;; A double semicolon starts a comment that runs to the line ending.
-				(if (call $pair (i32.const 59) (i32.const 59))
+				;; Line comments skip their delimiter and scan once per byte to CR, LF or EOF.
+				(if (i32.eq (local.get $prefix) (i32.const M4_PAIR_LINE_COMMENT))
 					(then
-						;; Discard comment bytes until newline or EOF, then resume skipping.
+						(local.set $cursor (i32.add (local.get $cursor) (i32.const 2)))
+						;; Leave line endings for the whitespace path and preserve EOF without a sentinel load.
 						(loop $line
-							(br_if $skip (i32.ge_u (global.get $pos) (global.get $end)))
+							(br_if $skip (i32.ge_u (local.get $cursor) (local.get $end)))
+							(local.set $c (i32.load8_u (local.get $cursor)))
 							(br_if $skip
-								(i32.or (i32.eq (call $peek) (i32.const 10)) (i32.eq (call $peek) (i32.const 13)))
+								(i32.or (i32.eq (local.get $c) (i32.const M4_BYTE_LF)) (i32.eq (local.get $c) (i32.const M4_BYTE_CR)))
 							)
-							(call $advance)
+							(local.set $cursor (i32.add (local.get $cursor) (i32.const 1)))
 							(br $line)
 						)
 					)
 				)
-				;; An opening parenthesis followed by a semicolon starts a nested block comment.
-				(if (call $pair (i32.const 40) (i32.const 59))
+				;; Block comments recognize nested delimiters without treating strings or UTF-8 specially.
+				(if (i32.eq (local.get $prefix) (i32.const M4_PAIR_BLOCK_COMMENT_OPEN))
 					(then
-						(call $advance)
-						(call $advance)
+						(local.set $cursor (i32.add (local.get $cursor) (i32.const 2)))
 						(local.set $depth (i32.const 1))
-						;; Track nested comment delimiters until the outermost comment closes.
+						;; The outermost closing delimiter returns to trivia scanning.
 						(loop $comment
-							;; EOF before the outer comment closes is a syntax error.
-							(if (i32.ge_u (global.get $pos) (global.get $end))
+							;; Unterminated comments report the original opening token and publish EOF.
+							(if (i32.ge_u (local.get $cursor) (local.get $end))
 								(then
+									(global.set $pos (local.get $cursor))
 									(call $fail (i32.const M4_ERR_SYNTAX))
 									(return)
 								)
 							)
-							;; A nested opening delimiter increases the number of comments still to close.
-							(if (call $pair (i32.const 40) (i32.const 59))
+							(local.set $c (i32.load8_u (local.get $cursor)))
+							;; Most comment bytes cannot begin a delimiter and need no lookahead.
+							(if
+								(i32.and
+									(i32.ne (local.get $c) (i32.const M4_BYTE_LPAREN))
+									(i32.ne (local.get $c) (i32.const M4_BYTE_SEMICOLON))
+								)
 								(then
-									(local.set $depth (i32.add (local.get $depth) (i32.const 1)))
-									(call $advance)
-									(call $advance)
+									(local.set $cursor (i32.add (local.get $cursor) (i32.const 1)))
 									(br $comment)
 								)
 							)
-							;; A closing delimiter removes one nesting level; zero resumes token scanning.
-							(if (call $pair (i32.const 59) (i32.const 41))
+							(local.set $prefix (i32.const 0))
+							;; Read delimiter pairs only when both bytes remain within the comment source.
+							(if (i32.lt_u (i32.add (local.get $cursor) (i32.const 1)) (local.get $end))
+								(then (local.set $prefix (i32.load16_u (local.get $cursor))))
+							)
+							;; Nested opening pairs increase the number of comments still to close.
+							(if (i32.eq (local.get $prefix) (i32.const M4_PAIR_BLOCK_COMMENT_OPEN))
+								(then
+									(local.set $depth (i32.add (local.get $depth) (i32.const 1)))
+									(local.set $cursor (i32.add (local.get $cursor) (i32.const 2)))
+									(br $comment)
+								)
+							)
+							;; A closing pair ends one nesting level; the last one finishes the comment.
+							(if (i32.eq (local.get $prefix) (i32.const M4_PAIR_BLOCK_COMMENT_CLOSE))
 								(then
 									(local.set $depth (i32.sub (local.get $depth) (i32.const 1)))
-									(call $advance)
-									(call $advance)
+									(local.set $cursor (i32.add (local.get $cursor) (i32.const 2)))
 									(br_if $skip (i32.eqz (local.get $depth)))
 									(br $comment)
 								)
 							)
-							(call $advance)
+							(local.set $cursor (i32.add (local.get $cursor) (i32.const 1)))
 							(br $comment)
 						)
 					)
@@ -156,75 +184,74 @@
 				(br $skip-done)
 			)
 		)
-		(global.set $tok (global.get $pos))
-		;; After skipping, EOF leaves the token kind at its initial EOF value.
-		(if (i32.ge_u (global.get $pos) (global.get $end))
+		(global.set $pos (local.get $cursor))
+		(global.set $tok (local.get $cursor))
+		;; EOF leaves the token kind at its initial value and avoids every following load.
+		(if (i32.ge_u (local.get $cursor) (local.get $end)) (then (return)))
+		;; Only dollar prefixes can be quoted identifiers; other tokens avoid the pair helper.
+		(if (i32.eq (local.get $c) (i32.const M4_BYTE_DOLLAR))
 			(then
-				(return)
-			)
-		)
-		;; Quoted identifiers decode into the same dollar-prefixed byte namespace as ordinary identifiers.
-		(if (call $pair (i32.const 36) (i32.const 34))
-			(then
-				(call $advance)
-				(call $quoted-token)
-				;; Quoted identifiers need a token boundary before the following atom.
-				(local.set $c (call $peek))
-				;; Adjacent non-delimiter bytes cannot extend a completed quoted identifier.
-				(if
-					(i32.and
-						(i32.gt_u (local.get $c) (i32.const 32))
-						(i32.and
-							(i32.ne (local.get $c) (i32.const 40))
-							(i32.and (i32.ne (local.get $c) (i32.const 41)) (i32.ne (local.get $c) (i32.const 59)))
+				;; Quoted identifiers decode into the same dollar-prefixed byte namespace as ordinary identifiers.
+				(if (call $pair (i32.const 36) (i32.const 34))
+					(then
+						(call $advance)
+						(call $quoted-token)
+						;; Quoted identifiers need a token boundary before the following atom.
+						(local.set $c (call $peek))
+						;; Adjacent non-delimiter bytes cannot extend a completed quoted identifier.
+						(if
+							(i32.and
+								(i32.gt_u (local.get $c) (i32.const 32))
+								(i32.and
+									(i32.ne (local.get $c) (i32.const 40))
+									(i32.and (i32.ne (local.get $c) (i32.const 41)) (i32.ne (local.get $c) (i32.const 59)))
+								)
+							)
+							(then
+								(call $fail (i32.const M4_ERR_SYNTAX))
+							)
 						)
-					)
-					(then
-						(call $fail (i32.const M4_ERR_SYNTAX))
+						(local.set $name (i32.add (global.get $data-base) (global.get $data-count)))
+						(call $data-byte (i32.const 36))
+						(drop (call $export-name (global.get $tok) (global.get $len)))
+						;; A quoted identifier must decode to at least one byte after its dollar prefix.
+						(if (i32.eqz (global.get $decoded-name-length))
+							(then
+								(call $fail (i32.const M4_ERR_SYNTAX))
+							)
+						)
+						(global.set $tok (local.get $name))
+						(global.set $len (i32.add (global.get $decoded-name-length) (i32.const 1)))
+						(global.set $kind (i32.const 3))
+						(return)
 					)
 				)
-				(local.set $name (i32.add (global.get $data-base) (global.get $data-count)))
-				(call $data-byte (i32.const 36))
-				(drop (call $export-name (global.get $tok) (global.get $len)))
-				;; A quoted identifier must decode to at least one byte after its dollar prefix.
-				(if (i32.eqz (global.get $decoded-name-length))
-					(then
-						(call $fail (i32.const M4_ERR_SYNTAX))
-					)
-				)
-				(global.set $tok (local.get $name))
-				(global.set $len (i32.add (global.get $decoded-name-length) (i32.const 1)))
-				(global.set $kind (i32.const 3))
-				(return)
 			)
 		)
-		(local.set $c (call $peek))
 		;; An opening parenthesis is a complete one-byte token.
-		(if (i32.eq (local.get $c) (i32.const 40))
+		(if (i32.eq (local.get $c) (i32.const M4_BYTE_LPAREN))
 			(then
 				(global.set $kind (i32.const 1))
-				(call $advance)
+				(global.set $pos (i32.add (local.get $cursor) (i32.const 1)))
 				(return)
 			)
 		)
 		;; A closing parenthesis is a complete one-byte token.
-		(if (i32.eq (local.get $c) (i32.const 41))
+		(if (i32.eq (local.get $c) (i32.const M4_BYTE_RPAREN))
 			(then
 				(global.set $kind (i32.const 2))
-				(call $advance)
+				(global.set $pos (i32.add (local.get $cursor) (i32.const 1)))
 				(return)
 			)
 		)
 		;; An opening quote starts a string; exclude both quotes from the token span.
-		(if (i32.eq (local.get $c) (i32.const 34))
+		(if (i32.eq (local.get $c) (i32.const M4_BYTE_QUOTE))
 			(then
 				(call $quoted-token)
 				(return)
 			)
 		)
 		(global.set $kind (i32.const 3))
-		(local.set $cursor (global.get $pos))
-		(local.set $end (global.get $end))
 		;; Exit here at an atom boundary, leaving the delimiter for the next token.
 		(block $atom-done
 			;; Scan an atom until EOF, whitespace, a parenthesis or a line comment.

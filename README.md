@@ -193,20 +193,20 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 196 tests in 250,330.143 ms
-(4m10.33s); the preceding run took 3m59.14s. The isolated hosted spec audit passes
-all 65,199 commands in 239,563.896 ms (239.56s), with zero
-failures or skips, essentially matching the preceding audit. Direct branch
-unwinding and overlap-safe result movement improve hosted scalar/vector/multivalue
-branch samples by about 1.5–4.5%, while other workloads remain roughly unchanged.
-See the performance history for paired measurements and tradeoffs; spec coverage
-and million-call stress inputs remain unchanged.
+The latest complete `make check` run passes all 198 tests in 229,419.598 ms
+(3m49.42s). The isolated hosted spec audit passes all 65,199 commands in
+222,368.810 ms (222.37s), with zero failures or skips—about
+7.2% faster than the previous audit. Local trivia scanning and guarded token
+classification improve hosted trivia-heavy loads by 29–65%, while common text integer/float/vector/many-function samples improving 6–9%.
+Coverage and million-call stress inputs remain unchanged; performance history
+retains the paired measurements and tradeoffs.
 
 
 `make bench-load` measures parsing and validation separately from invocation,
 using equivalent text and hand-encoded binary integer, float, SIMD and many-function
 modules in both runtimes, plus text workloads with large decimal scales, long significands and hexadecimal ratios,
-without compiling guest modules. It records
+without compiling guest modules. Trivia-heavy cases also isolate whitespace runs,
+line comments and nested block comments. It records
 per-load sample timings, medians, input formats and source/binary hashes in `build/bench-load.json`.
 `BENCH_LOAD_REPEATS=10 BENCH_SAMPLES=7 make bench-load` adjusts the bounded workload.
 Exact float rounding reuses shifted trial denominators, and significands batch

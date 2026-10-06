@@ -47,6 +47,14 @@ cases.dataBytes = `(module (memory 1)
   (data (i32.const 0) "${Array.from(dataBytes,byte=>String.fromCharCode(92)+(byte&1?byte.toString(16).toUpperCase():byte.toString(16)).padStart(2,'0')).join('')}")
   (func (export "run") (result i32) i32.const 0))`;
 
+// Trivia-heavy modules isolate whitespace runs and both comment forms around real instructions.
+for(const [name,trivia] of [
+  ['whitespace',' \t\r\n'.repeat(16)],
+  ['lineComments',';; A line comment with (delimiters), quotes " and UTF-8 λ.\r\n'],
+  ['blockComments','(; An outer comment (; nested parentheses () ;) with quotes " and UTF-8 λ. ;)']
+]) cases[name]=`(module (func (export "run") (result i32)
+  ${`i32.const 1 ${trivia} drop ${trivia}`.repeat(256)} i32.const 0))`;
+
 // Hand-encode binary equivalents so the benchmark never compiles guest modules.
 const uleb=value=>{
   const bytes=[];

@@ -1808,3 +1808,68 @@ essentially unchanged from 239,723.820 ms. The complete-suite run is above four
 minutes; the standalone audit remains narrowly below it. These are separate local
 measurements with no timing threshold in CI. Performance history retains hashes,
 paired samples/counts and complete coverage; spec stress inputs remain unchanged.
+
+### Local trivia scanning and guarded token-prefix classification
+
+The token scanner holds its source cursor and endpoint locally while consuming
+whitespace and comments. Only space, tab, LF and CR count as whitespace. Ordinary
+bytes skip delimiter lookahead; possible comment/annotation prefixes use one
+little-endian halfword load after proving that both bytes are in range. Line
+comments stop at CR, LF or EOF. Nested block comments recognize opening/closing
+pairs, publishing EOF before an unterminated-comment error while retaining the
+original opening token offset.
+
+The cursor is published before entering the annotation helper and reloaded
+when that helper returns. Successful trivia scanning publishes the token start
+and next position once. Token classification reuses the byte and bounds already
+read by the scanner: only dollar prefixes call the quoted-identifier pair helper,
+parentheses advance directly, and atoms reuse the existing local cursor/end.
+Quoted identifiers, strings and annotations retain their grammar and decoding
+helpers. Named m4 constants describe delimiter pairs and the token-prefix bytes.
+
+The temporary scanner fixture extends memory-end coverage to long whitespace
+runs, line endings, 128 nested comments, all 256 bytes inside a comment, adjacent
+single-byte tokens and incomplete delimiter pairs. It checks exact cursor/token
+spans and unterminated-comment offsets in both runtimes. Public tests load quoted
+UTF-8 identifiers through mixed trivia and verify recovery after malformed quoted
+names. No persistent state, buffer or public ABI is added.
+
+Sequential isolated loader samples (three repeats, five samples) show:
+
+| Hosted workload | Before | After | Time reduction | Instruction reduction |
+| --- | ---: | ---: | ---: | ---: |
+| whitespace | 10.71 ms | 7.64 ms | 28.7% | 14.2% |
+| lineComments | 12.02 ms | 6.80 ms | 43.4% | 26.8% |
+| blockComments | 22.22 ms | 7.77 ms | 65.1% | 54.6% |
+| integers | 18.70 ms | 17.32 ms | 7.4% | 3.8% |
+| floats | 21.69 ms | 20.21 ms | 6.9% | 3.3% |
+| vectors | 13.92 ms | 12.62 ms | 9.3% | 4.4% |
+| functions | 39.02 ms | 36.67 ms | 6.0% | 4.2% |
+| integersBinary | 25.78 ms | 24.55 ms | 4.8% | 2.8% |
+| vectorsBinary | 24.76 ms | 23.08 ms | 6.8% | 3.4% |
+| functionsBinary | 51.74 ms | 48.51 ms | 6.2% | 3.0% |
+
+Long decimal/hex significands and decimal scales retain nearly unchanged timings;
+the dataBytes control is about 0.7% slower. All seventeen paired loader cases use
+identical inputs. Instruction counts cover an entire hosted load, excluding
+construction, invocation and payload checks, with no child profiling markers.
+Fresh hosted construction measures 14.65 ms before and 14.41 ms after; bootstrap
+construction remains about 1 ms. Expanded source grows by 2,000 bytes (0.12%).
+These measurements are diagnostic, with no CI performance thresholds.
+
+All 198 tests pass, including nested self-hosting and the full pinned spec, in
+229,419.598 ms (3m49.42s), compared with the preceding 250,330.143 ms run.
+The isolated hosted audit passes all 65,199 wg-3.0 commands across 258 files with
+zero failures/skips in 222,368.810 ms (222.37s), down
+7.2% from 239,563.896 ms. Both measurements are below
+four minutes; all original stress inputs remain unchanged. Performance history
+records paired loader/construction samples, counts, hashes and complete coverage.
+
+An unrelated pre-existing annotation edge case was found during boundary-test
+development: a string followed by nested annotation content can consume that
+content's opening delimiter while decoding the string. The reproducer is
+`(module (@note "(; string ;)" (; comment ;) (nested)) (func (export "run") (result i32) i32.const 0))`.
+WABT accepts it with --enable-annotations; both the baseline and candidate
+bootstrap engines reject it at byte 54. This optimization retains the existing
+annotation helper behavior. The performance record preserves the reproducer
+for a separate correctness fix; it is outside the pinned suite's current cases.

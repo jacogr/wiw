@@ -4,7 +4,7 @@ import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {createBootstrapInterpreter} from '../wiw.js';
+import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
 
 let directory,source,binary;
 before(async () => {
@@ -75,6 +75,35 @@ for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: lexer preser
     assert.equal(call('error_code'),0,text);
     assert.equal(call('scan_pos'),65536,text);
   }
+  // Trivia runs and adjacent delimiters end at memory's last byte without lookahead beyond it.
+  for(const trivia of [
+    ' \t\r\n'.repeat(128),
+    ';; " λ (; ignored ;)\r\n',
+    '(; " λ () ; stray ; characters (; inner ;) ;)',
+    '(;'.repeat(128)+'content'+ ';)'.repeat(128),
+    '(@note (; comment ;) (nested)) \t(;other;)'
+  ]) {
+    for(const suffix of ['', '(', ';', 'abc']) {
+      const text=trivia+suffix,pointer=init(text);
+      assert.equal(call('scan_next'),suffix ? (suffix==='(' ? 1 : 3) : 0,text);
+      assert.equal(call('error_code'),0,text);
+      assert.equal(call('scan_tok')-pointer,Buffer.byteLength(trivia),text);
+      assert.equal(call('scan_len'),suffix==='abc' ? 3 : (suffix===';' ? 1 : 0),text);
+      assert.equal(call('scan_pos'),65536,text);
+    }
+  }
+  const commentBytes=Buffer.from([40,59,...Array.from({length:256},(_,byte)=>byte),59,41]);
+  init(commentBytes);
+  assert.equal(call('scan_next'),0);
+  assert.equal(call('error_code'),0);
+  assert.equal(call('scan_pos'),65536);
+  for(const tail of ['(', ';', '(;', ';(', ';;', ');']) {
+    const text=' \t(; nested (; closed ;) '+tail,pointer=init(text);
+    call('scan_next');
+    assert.equal(call('error_code'),1,text);
+    assert.equal(call('error_offset'),pointer+2,text);
+    assert.equal(call('scan_pos'),65536,text);
+  }
   for(const [text,cursor] of [['(;',2],['(@',2],['(@)',2]]) {
     const pointer=init(text);
     call('scan_next');
@@ -124,3 +153,18 @@ for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: lexer preser
   assert.equal(call('scan_next'),3);assert.equal(call('error_code'),0);
   assert.equal(call('scan_tok'),pointer);assert.equal(call('scan_len'),9);
 });
+
+for(const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+  test(`${runtime}: trivia transitions preserve quoted identifier decoding and failed-load recovery`,async()=>{
+    const engine=await create(new URL('../build/wiw-opt.wasm',import.meta.url));
+    const guest=`(module (@note (; comment ;) (nested))
+      (func $"name with space" (export "run") (param $"λ" i32) (result i32)
+        ;; A quoted name follows a comment and mixed whitespace.
+        local.get (; nested (; inner ;) ;) $"λ"))`;
+    for(const invalid of ['(module (func $""))','(module (func $"a"b))','(module (func $"unfinished))']) {
+      assert.throws(()=>engine.load(invalid),/syntax/);
+      engine.load(guest);
+      assert.equal(engine.invoke('run',42),42);
+    }
+  });
+}
