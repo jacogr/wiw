@@ -1962,3 +1962,66 @@ across 258 files with zero failures/skips in 215,671.169 ms (3m35.67s), 8.7%
 less time than the preceding run. The bootstrap audit verifies the same frozen
 coverage. Source/binary hashes and the paired measurements are recorded in
 performance history; million-call stress inputs remain unchanged.
+
+### Same-function tail-call frame and root reuse
+
+After resolving and checking a defined tail-call target, dispatch now checks
+whether it is the current function with exactly one parameter and no additional
+locals. This case copies the argument's low and high halves directly into the
+existing frame, restores the operand base, discards nested controls above the
+existing implicit root, and restarts at the descriptor's first instruction.
+The function identity, end cursor, operand base and root's result shape already
+match; dispatch avoids rewriting the frame headers and root record. Remaining
+fuel is preserved and normal dispatch still charges every guest instruction.
+
+The path covers direct, indirect and typed-reference self tail calls. Table
+bounds, null references and indirect signature checks run before it. Imports
+still suspend through the existing path. Ordinary calls and tail calls to other
+functions retain their entry logic; other self-tail signatures still copy all
+parameters and clear additional locals through general entry. No new arena,
+cache, persistent state, API or opcode is introduced.
+
+The added regression runs all three tail-call forms for 1,000 replacements
+inside nested block/loop controls with a v128 parameter and mixed vector/scalar
+results. It checks both vector halves, caller operands below the frame's base,
+return through the retained root, repeated invocation, fuel exhaustion and
+recovery in both runtimes. Existing tests cover cleared locals, parameterless
+callees, imports, references and fuel offsets; the full spec retains its original
+million-call stress inputs.
+
+Instruction profiles count the complete hosted invocation through an instrumented
+native parent, with no child profiling markers. Direct, indirect and reference
+self-tail workloads execute 4.8–6.4% fewer parent instructions. Mutual indirect
+tail calls add 0.48% and self tail calls with extra locals add 0.82% due to the
+rejected guard; all non-tail workload instruction counts remain unchanged.
+Paired timings use 5,000 iterations and five samples per workload, first before
+then after, followed by a second pair in reversed order. Full reports, hashes and
+tradeoffs are retained in performance history.
+
+The initial sequential pair measured 6–10% faster self-tail workloads; a
+reversed-order repeat then showed broad slowdowns across unrelated workloads in
+its after run. A third comparison alternates warmed before/after engines in one
+process (5,000 iterations, seven samples) to control that variability:
+
+| Hosted workload | Before | After | Time reduction |
+| --- | ---: | ---: | ---: |
+| direct | 28.53 ms | 25.25 ms | 11.5% |
+| indirect | 38.80 ms | 35.59 ms | 8.3% |
+| reference | 31.56 ms | 28.03 ms | 11.2% |
+| globalReference | 32.66 ms | 29.11 ms | 10.9% |
+| indirectTypes (mutual tail calls) | 39.12 ms | 39.06 ms | 0.1% |
+| parameters (extra locals) | 59.86 ms | 60.35 ms | -0.8% |
+| ordinary | 322.83 ms | 322.83 ms | 0.0% |
+| loop | 26.35 ms | 26.23 ms | 0.4% |
+
+The targeted gains agree with the instruction reductions. The extra-local case
+pays the fallback guard cost; unrelated controls stay roughly unchanged in the
+alternating comparison. All three timing comparisons are retained, including
+the inconsistent repeat. No timing thresholds are added to CI.
+
+All 206 tests pass, including nested self-hosting and the full pinned spec, in
+216,660.653 ms (3m36.66s). Both standalone audits pass all 65,199 commands across
+258 files with zero failures/skips. The hosted audit takes 214,398.776 ms
+(3m34.40s), roughly flat overall (0.6% less time than the preceding run).
+Performance history records the full checks alongside the targeted gains and
+fallback costs, without attributing that small overall difference to this change.

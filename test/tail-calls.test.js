@@ -42,6 +42,33 @@ for (const [runtime, create] of [['bootstrap', createBootstrapInterpreter], ['in
     assert.deepEqual(engine.invokeRaw('run', vector), zero);
   });
 
+  test(`${runtime}: self tail calls retain the root, caller operands and both vector halves`, async () => {
+    const engine = await create(binary);
+    for (const instruction of ['return_call $step', 'return_call_indirect (type $t)', 'return_call_ref $t']) {
+      const selector = instruction.includes('indirect') ? '(i32.const 0)' : instruction.includes('_ref') ? '(ref.func $step)' : '';
+      engine.load(`(module
+        (type $t (func (param v128) (result v128 i32)))
+        (table funcref (elem $step))
+        (global $remaining (mut i32) (i32.const 0))
+        (func $step (type $t)
+          (if (i32.eqz (global.get $remaining))
+            (then (return (local.get 0) (i32.const 42))))
+          (global.set $remaining (i32.sub (global.get $remaining) (i32.const 1)))
+          (block (loop
+            (i32.const 777)
+            (${instruction} (local.get 0) ${selector}))) unreachable)
+        (func (export "run") (param v128) (result i32 v128 i32)
+          (global.set $remaining (i32.const 1000))
+          (i32.const 123) (call $step (local.get 0))))`);
+      const expected = [{type:'i32',bits:123n}, vector, {type:'i32',bits:42n}];
+      for (let repeat = 0; repeat < 2; repeat++) assert.deepEqual(engine.invokeRaw('run', vector), expected);
+      engine.setFuel(50);
+      assert.throws(() => engine.invokeRaw('run', vector), /exhausted fuel/);
+      engine.setFuel(100000);
+      assert.deepEqual(engine.invokeRaw('run', vector), expected);
+    }
+  });
+
   test(`${runtime}: reference dispatch keeps null traps and exact fuel boundaries`, async () => {
     const engine = await create(binary);
     const source = `(module

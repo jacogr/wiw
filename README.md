@@ -193,14 +193,19 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 204 tests in 217,580.988 ms
-(3m37.58s). The isolated hosted spec audit passes all 65,199 commands in
-215,671.169 ms (3m35.67s), with zero failures or skips.
+The latest complete `make check` run passes all 206 tests in 216,660.653 ms
+(3m36.66s). The isolated hosted spec audit passes all 65,199 commands in
+214,398.776 ms (3m34.40s), with zero failures or skips.
 Guarded keyword/name matching and bounded word equality improve the hosted
 shared-prefix and mixed-length name loaders by 70% and 85%, respectively.
 Fresh hosted construction improves by 18%; ordinary loader samples remain
-roughly flat or slightly slower. The standalone hosted audit takes 8.7% less
-time than the preceding run.
+roughly flat or slightly slower.
+Same-function tail calls with one parameter and no extra locals retain their
+frame headers and implicit root. Alternating warmed hosted samples improve
+8–12%, with 4.8–6.4% fewer parent instructions. Extra-local tail calls pay about
+0.8% fallback overhead; ordinary calls and mutual tail calls stay roughly flat.
+The standalone hosted audit is also roughly flat overall (0.6% less time than
+the preceding run).
 The annotation-string correctness fix retains nested content after payload
 strings and prevents ignored annotation bytes from entering data segments. No
 performance improvement is claimed for this fix. Local trivia scanning and guarded token
