@@ -362,6 +362,7 @@
 		(local $end i64)
 		(local $start i32)
 		(local $bytes i32)
+		(local $following i32)
 		(local $i i32)
 		(local $record i32)
 
@@ -379,6 +380,10 @@
 				(return (i32.const -1))
 			)
 		)
+		;; A zero delta retains the validated current size without touching backing memory or descriptors.
+		(if (i32.eqz (local.get $delta))
+			(then (return (local.get $old)))
+		)
 		(local.set $end
 			(i64.add
 				(i64.extend_i32_u (global.get $host-base))
@@ -395,12 +400,19 @@
 			(i32.add (global.get $guest-base) (i32.mul (local.get $old) (i32.const 65536)))
 		)
 		(local.set $bytes (i32.mul (local.get $delta) (i32.const 65536)))
-		(memory.copy
-			(i32.add (local.get $start) (local.get $bytes))
-			(local.get $start)
-			(i32.sub (global.get $host-base) (local.get $start))
+		(local.set $following (i32.sub (global.get $host-base) (local.get $start)))
+		;; Only packed bytes belonging to following memories need relocation; the last memory has none.
+		(if (local.get $following)
+			(then
+				(memory.copy
+					(i32.add (local.get $start) (local.get $bytes))
+					(local.get $start)
+					(local.get $following)
+				)
+			)
 		)
 		(call $zero-bytes (local.get $start) (local.get $bytes))
+		(local.set $i (i32.add (global.get $memory-index) (i32.const 1)))
 		;; Packed regions after this canonical memory move together, including zero-page declarations.
 		(block $done
 			;; Declaration order disambiguates adjacent empty memories that share a byte base.
@@ -409,10 +421,7 @@
 				(local.set $record (call $memory-record (local.get $i)))
 				;; Aliases follow their canonical descriptor and do not own a separate region.
 				(if
-					(i32.and
-						(i32.gt_u (local.get $i) (global.get $memory-index))
-						(i32.eqz (i32.load offset=52 (local.get $record)))
-					)
+					(i32.eqz (i32.load offset=52 (local.get $record)))
 					(then
 						(i32.store offset=20
 							(local.get $record)

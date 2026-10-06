@@ -22,7 +22,10 @@
 		;; Copy also validates its entire source before publishing destination writes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_MEMORY_COPY))
 			(then
-				(call $use-memory (local.get $source-memory))
+				;; Same-memory copies already have the complete canonical destination selected.
+				(if (i32.ne (local.get $source-memory) (local.get $destination-memory))
+					(then (call $use-memory (local.get $source-memory)))
+				)
 				(local.set $src
 					(call $guest-address (local.get $source) (i32.const 0) (local.get $length))
 				)
@@ -32,7 +35,10 @@
 						(return)
 					)
 				)
-				(call $use-memory (local.get $destination-memory))
+				;; Cross-memory copies restore the destination context after validating the source.
+				(if (i32.ne (local.get $source-memory) (local.get $destination-memory))
+					(then (call $use-memory (local.get $destination-memory)))
+				)
 				(memory.copy (local.get $dest) (local.get $src) (local.get $length))
 				(return)
 			)

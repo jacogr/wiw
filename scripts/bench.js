@@ -85,6 +85,32 @@ for (const [name, reference] of [['mutualDirect', false], ['mutualReference', tr
       (if (result i64) (i64.eqz (local.get 0)) (then (i64.const 0)) (else ${tail('$first')}))))`;
 }
 
+// Bulk/growth workloads distinguish byte movement from selection and no-op bookkeeping.
+cases.bulkCopy = `(module (memory 1)
+  (func (export "run") (param i64) (result i64)
+    (memory.fill (i32.const 0) (i32.const 90) (i32.const 1024))
+    (loop $again
+      (memory.copy (i32.const 2048) (i32.const 0) (i32.const 1024))
+      (memory.copy (i32.const 0) (i32.const 2048) (i32.const 1024))
+      (if (i32.ne (i32.load (i32.const 1020)) (i32.const 0x5a5a5a5a)) (then unreachable))
+      (local.set 0 (i64.sub (local.get 0) (i64.const 1)))
+      (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`;
+cases.bulkFill = `(module (memory 1)
+  (func (export "run") (param i64) (result i64)
+    (loop $again
+      (memory.fill (i32.const 0) (i32.const 90) (i32.const 1024))
+      (if (i32.ne (i32.load8_u (i32.const 1023)) (i32.const 90)) (then unreachable))
+      (local.set 0 (i64.sub (local.get 0) (i64.const 1)))
+      (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`;
+for (const [name,delta,expected] of [['growZero',0,1],['growFailure',1,-1]]) {
+  cases[name] = `(module (memory 1 1)
+    (func (export "run") (param i64) (result i64)
+      (loop $again
+        (if (i32.ne (memory.grow (i32.const ${delta})) (i32.const ${expected})) (then unreachable))
+        (local.set 0 (i64.sub (local.get 0) (i64.const 1)))
+        (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`;
+}
+
 // Exercise extended signature lookups during vector execution, checking the complete raw value.
 const vectorWorkloads = {
   vectorByteArithmetic: ['v128.const i64x2 0x0101010101010101 0x0101010101010101 v128.const i64x2 0x0202020202020202 0x0202020202020202 i8x16.add', '0x0303030303030303 0x0303030303030303'],

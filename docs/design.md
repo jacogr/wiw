@@ -2154,3 +2154,76 @@ and full pinned spec, in 212,102.925 ms (3m32.10s). Both standalone audits pass
 208,978.000 ms (3m28.98s), roughly flat overall (0.6% less time than the preceding
 run). Coverage and million-call stress inputs are unchanged; full-suite and
 standalone timings are recorded independently from the phase benchmarks.
+
+### Same-memory copy and guest growth bookkeeping
+
+The bulk-copy helper now retains the selected canonical destination context when
+its source index is already that canonical memory. It still validates the full
+destination and source ranges before writing, including zero-length endpoints,
+and uses memory.copy for overlap-safe movement. Cross-memory and alias-index
+copies retain source selection and destination restoration; runtime dispatch
+still selects the destination for every memory opcode. Fill and data lifetime
+paths are unchanged. This avoids introducing a new descriptor cache or relying
+on selection surviving host callbacks.
+
+Guest growth still checks the declared maximum and implementation capacity.
+After those checks, a zero delta returns the current size without backing checks,
+copy/fill or descriptor writes. Positive growth first ensures backing capacity,
+then relocates following memory bytes only if they exist and explicitly zeroes
+all newly exposed bytes. Only descriptors after the selected canonical memory
+are visited; aliases are skipped and empty canonical declarations still move.
+Earlier memories and the selected descriptor retain their existing semantics.
+Limits, wide-address rejection, host scratch placement and allocation-failure
+behavior are unchanged; zero growth still consumes one guest instruction's fuel.
+
+New regressions run in bootstrap and hosted engines. Packed first/empty/last
+memories cover zero and positive growth, failure atomicity, full new-page zeroing,
+empty-region relocation, mixed i32/i64 widths and exact no-op fuel boundaries.
+Copy tests cover both overlap directions, same offsets, zero-length endpoints,
+invalid source/destination atomicity, duplicate imports of one shared memory,
+cross-memory copies and subsequent growth preserving shared contents. Existing
+text/binary bulk oracle and full-spec tests retain their original inputs.
+
+Invocation benchmarks add bulkCopy, bulkFill, growZero and growFailure. They use
+5,000 iterations and five samples in sequential paired reports, followed by an
+alternating comparison of warmed engines with seven samples:
+
+| Hosted workload | Before | After | Time reduction | Instruction reduction |
+| --- | ---: | ---: | ---: | ---: |
+| bulkCopy (two 1 KiB copies per iteration) | 127.60 ms | 114.10 ms | 10.6% | 5.06% |
+| growZero | 61.01 ms | 58.60 ms | 3.9% | 4.34% |
+| bulkFill | 84.61 ms | 85.42 ms | -1.0% | 0.00% |
+| growFailure | 57.64 ms | 58.20 ms | -1.0% | 0.00% |
+| memory | 74.40 ms | 75.23 ms | -1.1% | 0.00% |
+| vectorMemory | 152.01 ms | 152.85 ms | -0.6% | 0.00% |
+| ordinary | 316.78 ms | 320.26 ms | -1.1% | 0.00% |
+| loop | 25.78 ms | 25.90 ms | -0.5% | 0.00% |
+
+Real positive growth is measured separately, alternating sixteen one-page grows
+in fresh guests. Construction, loading and verification are outside invocation
+timing; checks preserve both existing sentinels, the final logical size and zero
+bytes in the newly exposed range. Five samples with three repeats show:
+
+| Hosted growth target | Before | After | Time reduction | Instruction reduction |
+| --- | ---: | ---: | ---: | ---: |
+| first i32 memory, relocating a following page | 1.126 ms | 1.165 ms | -3.5% | 0.97% |
+| last i32 memory, no following bytes | 0.634 ms | 0.569 ms | 10.4% | 3.29% |
+| first i64 memory, relocating a following page | 1.164 ms | 1.128 ms | 3.1% | 0.96% |
+| last i64 memory, no following bytes | 0.616 ms | 0.583 ms | 5.3% | 3.28% |
+
+The last-memory case benefits most from removing empty copies and preceding
+record visits. Relocation dominates first-memory growth and its timings are
+mixed; no broad allocation or zeroing speedup is claimed. The separate sequential
+copy/zero-growth pair improves 11.5% and 4.3%, respectively. Performance history
+retains both invocation comparisons, real-growth guest inputs and raw samples,
+instruction profiles, hashes and complete checks. Counts use an instrumented
+native parent with no child markers; no compilation/tests/audits overlap timed
+benchmarks and no CI timing thresholds are added.
+
+All 212 tests pass, including full pinned coverage, nested self-hosting and the
+new memory regressions, in 218,520.759 ms (3m38.52s). Both standalone audits pass
+65,199 commands across 258 files with zero failures/skips. The hosted audit takes
+207,954.888 ms (3m27.95s), roughly flat overall (0.5% less time than the preceding
+run), while this complete test-suite run is slower than the preceding 3m32.10s.
+Performance history records both timings independently from the targeted gains;
+coverage, limits and million-call stress inputs remain unchanged.

@@ -183,7 +183,8 @@ mutual direct and typed-reference tails, indirect
 calls with many declared types and alternating table entries, sign-extension
 loops, reference calls
 through a mutable global, a call with multiple parameters and locals, a scalar
-loop, alternating conditional arms, memory reads/writes, and SIMD arithmetic,
+loop, alternating conditional arms, memory reads/writes, bulk copy/fill loops,
+zero-page and failed growth, and SIMD arithmetic,
 mixed scalar/vector operands, three-vector selection and vector loads/stores
 on both the bootstrap
 and hosted runtime. SIMD workloads check every byte of the result each iteration.
@@ -194,9 +195,9 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 208 tests in 212,102.925 ms
-(3m32.10s). The isolated hosted spec audit passes all 65,199 commands in
-208,978.000 ms (3m28.98s), with zero failures or skips.
+The latest complete `make check` run passes all 212 tests in 218,520.759 ms
+(3m38.52s). The isolated hosted spec audit passes all 65,199 commands in
+207,954.888 ms (3m27.95s), with zero failures or skips.
 Guarded keyword/name matching and bounded word equality improve the hosted
 shared-prefix and mixed-length name loaders by 70% and 85%, respectively.
 Fresh hosted construction improves by 18%; ordinary loader samples remain
@@ -212,8 +213,14 @@ parent instructions.
 Bounded word scanning of atoms, indentation and line comments improves fresh
 hosted construction by 3.7% (11.91 to 11.47 ms) in alternating samples. Guest
 line-comment and mixed-length name loads improve 24% and 16%; short integer,
-many-function and mixed-whitespace loads add about 4% overhead. The standalone
-hosted audit stays roughly flat overall (0.6% less time than the preceding run).
+many-function and mixed-whitespace loads add about 4% overhead.
+Same-memory copies avoid redundant descriptor selection, improving hosted copy
+loops by 11%; zero-page growth returns its validated size directly, improving
+no-op growth loops by 4%. Real last-memory growth samples improve 5–10%; growth
+that relocates following memory has mixed timings. Bounds, zeroing, alias handling
+and fuel rules are preserved. The standalone audit stays roughly flat overall
+(0.5% less time than the preceding run); this complete-suite run is slower than
+the preceding run.
 The annotation-string correctness fix retains nested content after payload
 strings and prevents ignored annotation bytes from entering data segments. No
 performance improvement is claimed for this fix. Local trivia scanning and guarded token
