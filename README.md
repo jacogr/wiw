@@ -195,15 +195,19 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 216 tests in 174,915.772 ms
-(2m54.92s). The isolated hosted spec audit passes all 65,199 commands in
-168,126.927 ms (2m48.13s), with zero failures or skips.
+The latest complete `make check` run passes all 220 tests in 173,279.121 ms
+(2m53.28s). The isolated hosted spec audit passes all 65,199 commands in
+168,122.896 ms (2m48.12s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
 calls improve 40–44%, and combined integer/float/many-function loading improves
 28–29%. A hybrid route-table experiment regressed and was reverted; paired
 reports and complete validation are recorded in the performance history.
+Trimmed scalar memory helpers and scalar float dispatch improve alternating
+hosted memory, float arithmetic and conversion samples by 18%, 35% and 27%,
+respectively. Earlier memory dispatch was tested and reverted. Whole-suite
+timing remains roughly flat; the targeted gains are retained separately.
 Guarded keyword/name matching and bounded word equality improve the hosted
 shared-prefix and mixed-length name loaders by 70% and 85%, respectively.
 Fresh hosted construction improves by 18%; ordinary loader samples remain

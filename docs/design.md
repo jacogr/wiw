@@ -2288,3 +2288,64 @@ run. Both standalone audits pass 65,199 commands across 258 files with zero
 failures/skips. The isolated hosted audit takes 168,126.927 ms (2m48.13s), 19.2%
 less time than the preceding 207,954.888 ms run. These whole-suite measurements
 are recorded separately from targeted benchmark gains.
+
+### Trimmed scalar memory access and floating-point dispatch
+
+Three candidates were measured in order. Moving the scalar memory handler just
+after integer dispatch was rejected: seven alternating hosted samples showed
+less than 1% memory benefit and slower call/control workloads. Production keeps
+its previous handler order. Performance history retains both the sequential and
+alternating measurements of this rejected experiment.
+
+The retained scalar memory path resolves the canonical descriptor on every
+operation, including shared-memory aliases, but refreshes only logical pages,
+physical base and address type. Scalar accesses do not read the remaining
+selection globals. Growth, bulk and SIMD operations still select their complete
+descriptors before use. The checked load/store implementation is shared with the
+resource helper, while scalar dispatch enters it directly. Scalar natural-width
+lookup bypasses SIMD probes, and successful stores return without testing the
+remaining opcode variants. Existing wide-address normalization, subtraction-based
+bounds checks, sign extension, raw floating bits and unaligned access remain.
+
+Floating arithmetic, comparisons, conversions and reinterpretations now consume
+one or two low-half slots directly. They replace the consumed left slot with the
+scalar result and clear its high half. The same generated float implementation
+retains NaN and overflow conversion checks; runtime still charges each guest
+instruction's fuel and preserves its source offset. The old generic float block
+is removed. New bootstrap/hosted regressions cover precise conversion traps,
+signaling-NaN payload transport, saturating limits, signed zero and fuel recovery.
+Memory regressions interleave i32/i64 scalar accesses with callback-driven growth,
+relocation, bulk copy/fill, logical size checks, memory64 bounds failure and
+recovery. Existing shared-memory alias, binary/text native oracle and nested
+self-hosting tests remain in the complete suite.
+
+Sequential paired samples use 29 workloads, 5,000 iterations and five samples.
+Two new workloads specifically exercise scalar float arithmetic and conversions;
+all previous benchmark and spec stress inputs remain unchanged. The memory
+helper stage improves hosted memory by 12.9% and calls by about 4–6%, with SIMD
+mostly flat. The following float stage improves arithmetic by 32.2% and
+conversions by 23.3%, while the other sequential workload families stay roughly
+flat. Combined retained changes are also measured with seven alternating warmed
+hosted samples; construction is outside timing:
+
+| Hosted workload | Before | After | Time reduction |
+| --- | ---: | ---: | ---: |
+| memory | 50.43 ms | 41.43 ms | 17.9% |
+| ordinary calls | 246.50 ms | 222.21 ms | 9.9% |
+| float arithmetic | 89.62 ms | 58.19 ms | 35.1% |
+| float conversions | 89.61 ms | 65.46 ms | 27.0% |
+| vector memory | 136.84 ms | 129.97 ms | 5.0% |
+| loop | 20.87 ms | 19.44 ms | 6.9% |
+
+Raw samples and engine hashes are retained in performance history. All timed
+comparisons run without overlapping compilation, tests or audits; measurements
+are diagnostic and add no CI thresholds. No persistent memory-selection cache,
+signature cache or prepared-engine state is introduced.
+
+All 220 tests pass in 173,279.121 ms (2m53.28s), including complete pinned
+coverage and nested self-hosting. The preceding complete run took 174,915.772 ms
+(2m54.92s), so the overall test-suite reduction is only 0.9%. Both standalone
+audits pass 65,199 commands across 258 files with zero failures/skips. The hosted
+audit takes 168,122.896 ms (2m48.12s), essentially unchanged from 168,126.927 ms.
+Targeted invocation gains are retained without claiming a broad spec-audit
+speedup; the performance record preserves both whole-suite and targeted results.

@@ -98,6 +98,8 @@ m4_define(<!M4_METADATA_ELSE_OFFSET!>,<!4!>)m4_dnl
 m4_define(<!M4_METADATA_PARAMETER_SHAPE_OFFSET!>,<!20!>)m4_dnl
 m4_define(<!M4_GLOBAL_VALUE_OFFSET!>,<!24!>)m4_dnl
 m4_define(<!M4_GLOBAL_HIGH_OFFSET!>,<!72!>)m4_dnl
+m4_define(<!M4_MEMORY_PAGES_OFFSET!>,<!16!>)m4_dnl
+m4_define(<!M4_MEMORY_BASE_OFFSET!>,<!20!>)m4_dnl
 m4_define(<!M4_MEMORY_ADDRESS_TYPE_OFFSET!>,<!24!>)m4_dnl
 m4_define(<!M4_TABLE_ADDRESS_TYPE_OFFSET!>,<!24!>)m4_dnl
 m4_define(<!M4_ELEMENT_LIVE_LENGTH_OFFSET!>,<!44!>)m4_dnl

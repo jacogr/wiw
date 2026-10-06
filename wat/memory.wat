@@ -9,6 +9,14 @@
 				(return (call $vector-memory-width (local.get $op)))
 			)
 		)
+		(call $scalar-access-width (local.get $op))
+	)
+
+	;; Return the natural scalar width without probing unrelated SIMD memory operations.
+	(func $scalar-access-width
+		(param $op i32)
+		(result i32)
+
 		;; Double-precision loads and stores access eight bytes.
 		(if
 			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_F64_LOAD)) (i32.eq (local.get $op) (i32.const M4_OP_F64_STORE)))
@@ -449,7 +457,6 @@
 		(param $b i64)
 		(param $immediate i32)
 		(result i64)
-		(local $address i32)
 
 		;; Global reads return their persistent current value.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_GET))
@@ -489,11 +496,23 @@
 				(return (i64.extend_i32_s (call $guest-grow (i32.wrap_i64 (local.get $a)))))
 			)
 		)
+		(call $scalar-memory-apply (local.get $op) (local.get $a) (local.get $b) (local.get $immediate))
+	)
+
+	;; Apply a scalar load/store with the existing address checks and exact raw-bit semantics.
+	(func $scalar-memory-apply
+		(param $op i32)
+		(param $a i64)
+		(param $b i64)
+		(param $immediate i32)
+		(result i64)
+		(local $address i32)
+
 		(local.set $address
 			(call $memory-address
 				(local.get $a)
 				(local.get $immediate)
-				(call $access-width (local.get $op))
+				(call $scalar-access-width (local.get $op))
 			)
 		)
 		;; Do not perform a native access after a guest bounds failure.
@@ -536,18 +555,21 @@
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32_STORE))
 			(then
 				(i32.store align=1 (local.get $address) (i32.wrap_i64 (local.get $b)))
+				(return (i64.const 0))
 			)
 		)
 		;; Byte stores truncate the value to its low eight bits.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32_STORE8))
 			(then
 				(i32.store8 (local.get $address) (i32.wrap_i64 (local.get $b)))
+				(return (i64.const 0))
 			)
 		)
 		;; Halfword stores truncate the value to its low sixteen bits.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32_STORE16))
 			(then
 				(i32.store16 align=1 (local.get $address) (i32.wrap_i64 (local.get $b)))
+				(return (i64.const 0))
 			)
 		)
 		;; Execute i64.load through the checked translated guest address.
@@ -596,24 +618,28 @@
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_STORE))
 			(then
 				(i64.store align=1 (local.get $address) (local.get $b))
+				(return (i64.const 0))
 			)
 		)
 		;; Execute i64.store8 through the checked translated guest address.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_STORE8))
 			(then
 				(i64.store8 (local.get $address) (local.get $b))
+				(return (i64.const 0))
 			)
 		)
 		;; Execute i64.store16 through the checked translated guest address.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_STORE16))
 			(then
 				(i64.store16 align=1 (local.get $address) (local.get $b))
+				(return (i64.const 0))
 			)
 		)
 		;; Execute i64.store32 through the checked translated guest address.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_STORE32))
 			(then
 				(i64.store32 align=1 (local.get $address) (local.get $b))
+				(return (i64.const 0))
 			)
 		)
 		;; Load single precision without evaluating or canonicalizing its NaN payload.
@@ -626,6 +652,7 @@
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32_STORE))
 			(then
 				(i32.store align=1 (local.get $address) (i32.wrap_i64 (local.get $b)))
+				(return (i64.const 0))
 			)
 		)
 		;; Double precision transports all eight bits-per-byte without float arithmetic.
@@ -638,6 +665,7 @@
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64_STORE))
 			(then
 				(i64.store align=1 (local.get $address) (local.get $b))
+				(return (i64.const 0))
 			)
 		)
 		(i64.const 0)
@@ -696,6 +724,17 @@
 			)
 		)
 		(local.get $record)
+	)
+
+	;; Select current scalar access fields on every operation, following shared-memory aliases.
+	(func $use-access-memory
+		(param $index i32)
+		(local $record i32)
+
+		(local.set $record (call $canonical-memory-record (local.get $index)))
+		(global.set $guest-pages (i32.load offset=M4_MEMORY_PAGES_OFFSET (local.get $record)))
+		(global.set $guest-base (i32.load offset=M4_MEMORY_BASE_OFFSET (local.get $record)))
+		(global.set $memory-type (i32.load offset=M4_MEMORY_ADDRESS_TYPE_OFFSET (local.get $record)))
 	)
 
 	;; Select one memory's logical limits and physical byte range for validation or execution.

@@ -130,6 +130,20 @@ for (const [name,[operation,expected]] of Object.entries(vectorWorkloads)) {
 }
 
 
+// Scalar float arithmetic and trapping conversions exercise their independent dispatch paths.
+cases.floatArithmetic = `(module (func (export "run") (param i64) (result i64)
+  (loop $again
+    f32.const 1.5 f32.const 2.5 f32.add f32.const 4 f32.eq i32.eqz if unreachable end
+    f64.const 3 f64.const 2 f64.div f64.sqrt drop
+    local.get 0 i64.const 1 i64.sub local.set 0
+    local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
+cases.floatConversions = `(module (func (export "run") (param i64) (result i64)
+  (loop $again
+    local.get 0 f64.convert_i64_u i64.trunc_f64_s local.get 0 i64.ne if unreachable end
+    f32.const -1.5 i32.trunc_sat_f32_s i32.const -1 i32.ne if unreachable end
+    local.get 0 i64.const 1 i64.sub local.set 0
+    local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
+
 // Vector memory dispatch must preserve and compare both halves after each write/read pair.
 cases.vectorMemory = `(module (memory 1) (func (export "run") (param i64) (result i64)
   (loop $again

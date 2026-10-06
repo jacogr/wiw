@@ -1302,7 +1302,7 @@
 				)
 				(then
 					(local.set $meta (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $record)))
-					(call $use-memory (i32.load offset=M4_MEMORY_OPERAND_OFFSET (local.get $meta)))
+					(call $use-access-memory (i32.load offset=M4_MEMORY_OPERAND_OFFSET (local.get $meta)))
 					(local.set $inputs
 						(i32.shr_u (i32.load8_u offset=M4_EFFECT_TABLE_BASE (i32.shl (local.get $op) (i32.const 1))) (i32.const M4_NIBBLE_SHIFT))
 					)
@@ -1314,7 +1314,7 @@
 					(if (i32.eq (local.get $inputs) (i32.const 2))
 						(then (local.set $b (i64.load offset=M4_SLOT_BYTES (local.get $target))))
 					)
-					(local.set $value (call $resource-apply (local.get $op) (local.get $a) (local.get $b) (local.get $meta)))
+					(local.set $value (call $scalar-memory-apply (local.get $op) (local.get $a) (local.get $b) (local.get $meta)))
 					;; Existing address helpers retain memory64 overflow checks and precise trap offsets.
 					(if (global.get $error)
 						(then (return (i64.const 0)))
@@ -1330,6 +1330,41 @@
 							(global.set $sp (i32.add (global.get $sp) (i32.const 1)))
 						)
 					)
+					(br $dispatch)
+				)
+			)
+			;; Scalar floating operations and conversions finish without generic vector operand handling.
+			(if
+				(i32.or
+					(i32.le_u (i32.sub (local.get $op) (i32.const M4_OP_F32_ABS)) (i32.const m4_eval(M4_OP_F64_GE-M4_OP_F32_ABS)))
+					(i32.or
+						(i32.le_u (i32.sub (local.get $op) (i32.const M4_OP_I32_TRUNC_F32_S)) (i32.const m4_eval(M4_OP_F64_REINTERPRET_I64-M4_OP_I32_TRUNC_F32_S)))
+						(i32.le_u (i32.sub (local.get $op) (i32.const M4_OP_I32_TRUNC_SAT_F32_S)) (i32.const m4_eval(M4_OP_I64_TRUNC_SAT_F64_U-M4_OP_I32_TRUNC_SAT_F32_S)))
+					)
+				)
+				(then
+					(local.set $inputs
+						(i32.shr_u (i32.load8_u offset=M4_EFFECT_TABLE_BASE (i32.shl (local.get $op) (i32.const 1))) (i32.const M4_NIBBLE_SHIFT))
+					)
+					(global.set $sp (i32.sub (global.get $sp) (local.get $inputs)))
+					(local.set $target (i32.add (global.get $stack-base) (i32.shl (global.get $sp) (i32.const M4_SLOT_SHIFT))))
+					(local.set $a (i64.load (local.get $target)))
+					(local.set $b (i64.const 0))
+					;; Binary arithmetic/comparisons consume the adjacent right scalar operand.
+					(if (i32.eq (local.get $inputs) (i32.const 2))
+						(then (local.set $b (i64.load offset=M4_SLOT_BYTES (local.get $target))))
+					)
+					(local.set $value (call $float-apply (local.get $op) (local.get $a) (local.get $b)))
+					;; Conversion traps retain the shared NaN/overflow checks and original instruction offset.
+					(if (global.get $error)
+						(then (return (i64.const 0)))
+					)
+					(i64.store (local.get $target) (local.get $value))
+					(i64.store
+						(i32.add (global.get $stack-high-base) (i32.sub (local.get $target) (global.get $stack-base)))
+						(i64.const 0)
+					)
+					(global.set $sp (i32.add (global.get $sp) (i32.const 1)))
 					(br $dispatch)
 				)
 			)
@@ -1461,31 +1496,6 @@
 				)
 				(then
 					(local.set $value (call $apply64 (local.get $op) (local.get $a) (local.get $b)))
-				)
-			)
-			;; Floating numeric operations decode raw slots and return typed result bits.
-			(if
-				(i32.and
-					(i32.ge_u (local.get $op) (i32.const M4_OP_F32_ABS))
-					(i32.or
-						(i32.and
-							(i32.lt_u (local.get $op) (i32.const M4_OP_F32_LOAD))
-							(i32.ne (local.get $op) (i32.const M4_OP_F64_CONST))
-						)
-						(i32.or
-							(i32.and
-								(i32.ge_u (local.get $op) (i32.const M4_OP_I32_TRUNC_F32_S))
-								(i32.le_u (local.get $op) (i32.const M4_OP_F64_REINTERPRET_I64))
-							)
-							(i32.and
-								(i32.ge_u (local.get $op) (i32.const M4_OP_I32_TRUNC_SAT_F32_S))
-								(i32.le_u (local.get $op) (i32.const M4_OP_I64_TRUNC_SAT_F64_U))
-							)
-						)
-					)
-				)
-				(then
-					(local.set $value (call $float-apply (local.get $op) (local.get $a) (local.get $b)))
 				)
 			)
 			;; Validated memory immediates select their canonical destination before address checks.
