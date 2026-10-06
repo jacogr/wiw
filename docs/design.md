@@ -1871,5 +1871,36 @@ content's opening delimiter while decoding the string. The reproducer is
 `(module (@note "(; string ;)" (; comment ;) (nested)) (func (export "run") (result i32) i32.const 0))`.
 WABT accepts it with --enable-annotations; both the baseline and candidate
 bootstrap engines reject it at byte 54. This optimization retains the existing
-annotation helper behavior. The performance record preserves the reproducer
-for a separate correctness fix; it is outside the pinned suite's current cases.
+annotation helper behavior. The performance record preserves the original reproducer. The following
+correctness fix resolves it with dedicated regression coverage beyond the pinned
+suite's existing cases.
+
+### Annotation string decoding without token advancement
+
+The shared byte-string decoder now takes an explicit private advancement flag.
+Data segments and name decoding retain their existing call behavior; annotation
+payload strings validate their escapes and UTF-8 without reading the next token.
+The annotation parser therefore sees every following parenthesis, comment and
+string itself, preserving its nesting depth.
+
+Ignored annotation payloads and quoted annotation names restore the decoded-data
+count after validation. They cannot become bytes in a surrounding concatenated
+data segment. Successful annotation skipping also clears temporary string token
+kind/length, so a trailing annotation yields EOF and following delimiters retain
+their zero-length token spans. Invalid strings retain their decoding error and
+leave later loads recoverable. No public ABI or spec pin changes.
+
+Both runtimes test the original string-followed-by-nested-content reproducer,
+empty strings, UTF-8/escaped payloads, comments and quoted annotation names.
+WABT with --enable-annotations supplies independent native results and memory
+bytes; the guests execute through wiw's text and binary loaders. Memory-end
+scanner tests now include string-bearing annotations followed by EOF, a single
+parenthesis/semicolon or an atom. Malformed escapes, surrogate scalars and
+unterminated strings verify their error offsets and subsequent-load recovery.
+
+All 200 tests pass, including nested self-hosting and the full pinned spec, in
+239,462.350 ms (3m59.46s). The isolated hosted audit passes all 65,199 commands
+across 258 files with zero failures/skips in 236,273.614 ms
+(236.27s). The bootstrap audit verifies the same frozen coverage.
+This is a correctness change with no performance improvement claimed; timings,
+source/binary hashes and the resolved issue are recorded in performance history.

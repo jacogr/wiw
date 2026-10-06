@@ -32661,6 +32661,63 @@
         "reproducer": "(module (@note \"(; string ;)\" (; comment ;) (nested)) (func (export \"run\") (result i32) i32.const 0))",
         "verification": "Accepted by wat2wasm --enable-annotations as an independent oracle; both baseline and candidate bootstrap engines reject at byte 54. Annotation grammar/decoder behavior is unchanged by this optimization."
       }
+    },
+    {
+      "retained": true,
+      "label": "Annotation string decoding correctness",
+      "purpose": "Correctness fix; no performance improvement claimed.",
+      "node": "v24.11.1",
+      "binaryen": "wasm-opt version 133",
+      "tag": "wg-3.0",
+      "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
+      "runtime": "interpreted",
+      "interpreterDepth": 1,
+      "engineSourceSha256": "7cf0e37b331f75b01ff5c96f13d3c6008c18352f237ad9c9d3697e4e88a98ab3",
+      "binarySha256": "653ed08ee4d72b5e74cb08984fd114fe764fd7b08e9e78ce512264924b1117f5",
+      "fullSpec": {
+        "elapsedMs": 236273.613917,
+        "previousElapsedMs": 222368.809541,
+        "passed": 65199,
+        "failed": 0,
+        "skipped": 0,
+        "fileCount": 258,
+        "underFourMinutes": true,
+        "slowestFiles": [
+          {
+            "file": "return_call_ref.wast",
+            "elapsedMs": 32699.42429200001
+          },
+          {
+            "file": "return_call.wast",
+            "elapsedMs": 28631.254499999995
+          },
+          {
+            "file": "simd/simd_const.wast",
+            "elapsedMs": 9429.276459000015
+          },
+          {
+            "file": "const.wast",
+            "elapsedMs": 9195.995416000002
+          },
+          {
+            "file": "memory_grow.wast",
+            "elapsedMs": 6190.786250000005
+          }
+        ]
+      },
+      "completeTestSuite": {
+        "elapsedMs": 239462.34975,
+        "underFourMinutes": true
+      },
+      "validation": {
+        "tests": 200,
+        "failed": 0,
+        "skipped": 0,
+        "bootstrapPassed": 65199,
+        "bootstrapFileCount": 258
+      },
+      "resolvedIssue": "The annotation-string edge case recorded in the preceding trivia measurement. Dedicated native-oracle tests cover cursor ownership, ignored data bytes, EOF/delimiter token state and malformed-string recovery in both runtimes.",
+      "timingNote": "Standalone hosted audit after make check, followed by the bootstrap audit. Original spec stress inputs and frozen coverage remain unchanged."
     }
   ],
   "experiments": [

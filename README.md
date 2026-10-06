@@ -193,10 +193,12 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 198 tests in 229,419.598 ms
-(3m49.42s). The isolated hosted spec audit passes all 65,199 commands in
-222,368.810 ms (222.37s), with zero failures or skips—about
-7.2% faster than the previous audit. Local trivia scanning and guarded token
+The latest complete `make check` run passes all 200 tests in 239,462.350 ms
+(3m59.46s). The isolated hosted spec audit passes all 65,199 commands in
+236,273.614 ms (236.27s), with zero failures or skips.
+The annotation-string correctness fix retains nested content after payload
+strings and prevents ignored annotation bytes from entering data segments. No
+performance improvement is claimed for this fix. Local trivia scanning and guarded token
 classification improve hosted trivia-heavy loads by 29–65%, while common text integer/float/vector/many-function samples improving 6–9%.
 Coverage and million-call stress inputs remain unchanged; performance history
 retains the paired measurements and tradeoffs.

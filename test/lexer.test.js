@@ -81,7 +81,9 @@ for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: lexer preser
     ';; " λ (; ignored ;)\r\n',
     '(; " λ () ; stray ; characters (; inner ;) ;)',
     '(;'.repeat(128)+'content'+ ';)'.repeat(128),
-    '(@note (; comment ;) (nested)) \t(;other;)'
+    '(@note (; comment ;) (nested)) \t(;other;)',
+    '(@note "(; string ;)" (; comment ;) (nested)) \t(;other;)',
+    '(@note "")', '(@note "(" (nested "λ") ";)")'
   ]) {
     for(const suffix of ['', '(', ';', 'abc']) {
       const text=trivia+suffix,pointer=init(text);

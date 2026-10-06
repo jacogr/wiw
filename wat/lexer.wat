@@ -107,6 +107,9 @@
 						(call $skip-annotation)
 						;; Failed annotation parsing already publishes its cursor and first error.
 						(if (global.get $error) (then (return)))
+						;; Strings inside trivia must not leak their token kind/span into EOF or delimiters.
+						(global.set $kind (i32.const 0))
+						(global.set $len (i32.const 0))
 						(local.set $cursor (global.get $pos))
 						(br $skip)
 					)
@@ -368,6 +371,7 @@
 		(local $depth i32)
 		(local $comments i32)
 		(local $c i32)
+		(local $saved-data-count i32)
 
 		(call $advance)
 		(call $advance)
@@ -385,8 +389,11 @@
 		;; Quoted annotation names obey the same UTF-8 and escape rules as string names.
 		(if (i32.eq (call $peek) (i32.const 34))
 			(then
+				(local.set $saved-data-count (global.get $data-count))
 				(call $quoted-token)
 				(drop (call $export-name (global.get $tok) (global.get $len)))
+				;; Annotation names are validated but never retained as module data.
+				(global.set $data-count (local.get $saved-data-count))
 				;; Empty decoded annotation names are malformed.
 				(if (i32.eqz (global.get $decoded-name-length))
 					(then
@@ -472,8 +479,11 @@
 			;; Strings may contain otherwise significant delimiters and escaped arbitrary bytes.
 			(if (i32.eq (local.get $c) (i32.const 34))
 				(then
+					(local.set $saved-data-count (global.get $data-count))
 					(call $quoted-token)
-					(call $decode-data)
+					(call $decode-data (i32.const 0))
+					;; Ignored payload bytes must not join a surrounding concatenated data string.
+					(global.set $data-count (local.get $saved-data-count))
 					(br $content)
 				)
 			)

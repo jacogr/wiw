@@ -18,7 +18,7 @@
 		(local.set $start (i32.add (global.get $data-base) (global.get $data-count)))
 		(global.set $tok (local.get $p))
 		(global.set $len (local.get $n))
-		(call $decode-data)
+		(call $decode-data (i32.const 1))
 		(local.set $end (i32.add (global.get $data-base) (global.get $data-count)))
 		(local.set $cursor (local.get $start))
 		;; Byte escapes can introduce invalid encodings, so validate after decoding as well.

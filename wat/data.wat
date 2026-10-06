@@ -87,8 +87,9 @@
 		(call $data-byte (i32.or (i32.const 128) (i32.and (local.get $c) (i32.const 63))))
 	)
 
-	;; Decode a data string's raw UTF-8 bytes, byte escapes, short escapes and Unicode scalar escapes.
+	;; Decode string bytes and escapes; advance only when the owning grammar requests the next token.
 	(func $decode-data
+		(param $advance-token i32)
 		(local $p i32)
 		(local $end i32)
 		(local $c i32)
@@ -272,7 +273,10 @@
 				(br $bytes)
 			)
 		)
-		(call $next)
+		;; Data segments own token advancement; annotation strings leave their following content untouched.
+		(if (local.get $advance-token)
+			(then (call $next))
+		)
 	)
 
 	;; Decode concatenated strings and publish an active segment at the supplied offset; return its byte length.
@@ -297,7 +301,7 @@
 			(loop $strings
 				(br_if $done (global.get $error))
 				(br_if $done (i32.ne (global.get $kind) (i32.const 4)))
-				(call $decode-data)
+				(call $decode-data (i32.const 1))
 				(br $strings)
 			)
 		)
