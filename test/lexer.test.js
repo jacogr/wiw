@@ -94,6 +94,73 @@ for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: lexer preser
       assert.equal(call('scan_pos'),65536,text);
     }
   }
+  // Word skips preserve every tail length and never read beyond the physical memory endpoint.
+  for(const length of [...Array.from({length:34},(_,index)=>index),63,64,65]) {
+    for(const byte of [' ', '\t']) {
+      init(byte.repeat(length));
+      assert.equal(call('scan_next'),0,`indent ${length}/${byte}`);
+      assert.equal(call('error_code'),0);
+      assert.equal(call('scan_pos'),65536);
+    }
+    init(';;'+'x'.repeat(length));
+    assert.equal(call('scan_next'),0,`comment tail ${length}`);
+    assert.equal(call('error_code'),0);
+    assert.equal(call('scan_pos'),65536);
+  }
+  // Every byte in every word lane checks conservative control detection, including high-bit bytes.
+  for(let byte=0;byte<256;byte++) for(let lane=0;lane<8;lane++) {
+    const payload=Buffer.alloc(24,97);payload[8+lane]=byte;
+    const pointer=init(Buffer.concat([Buffer.from(';;'),payload]));
+    const ending=byte===10||byte===13;
+    assert.equal(call('scan_next'),ending ? 3 : 0,`line byte ${byte}/${lane}`);
+    assert.equal(call('error_code'),0,`line byte ${byte}/${lane}`);
+    if(ending) {
+      assert.equal(call('scan_tok')-pointer,11+lane);
+      assert.equal(call('scan_len'),15-lane);
+    }
+    assert.equal(call('scan_pos'),65536);
+  }
+  // Atom word scanning must preserve each byte's delimiter/error rule in every lane.
+  for(let byte=0;byte<256;byte++) for(let lane=0;lane<8;lane++) {
+    const bytes=Buffer.alloc(24,97);bytes[8+lane]=byte;
+    const pointer=init(bytes);
+    assert.equal(call('scan_next'),3,`atom byte ${byte}/${lane}`);
+    if(byte===0||byte===34) {
+      assert.equal(call('error_code'),1);
+      assert.equal(call('error_offset'),pointer);
+      assert.equal(call('scan_pos')-pointer,8+lane);
+      assert.equal(call('scan_len'),0);
+    } else {
+      assert.equal(call('error_code'),0);
+      const delimiter=[9,10,13,32,40,41].includes(byte);
+      assert.equal(call('scan_len'),delimiter ? 8+lane : 24);
+      assert.equal(call('scan_pos')-pointer,delimiter ? 8+lane : 24);
+    }
+  }
+  for(const length of [7,8,9,15,16,17,31,32,33,63,64,65]) {
+    const pointer=init('a'.repeat(length));
+    assert.equal(call('scan_next'),3);
+    assert.equal(call('error_code'),0);
+    assert.equal(call('scan_tok'),pointer);
+    assert.equal(call('scan_len'),length);
+    assert.equal(call('scan_pos'),65536);
+    init('a'.repeat(length)+';;ignored');
+    assert.equal(call('scan_next'),3);
+    assert.equal(call('scan_len'),length);
+    assert.equal(call('scan_next'),0);
+    assert.equal(call('error_code'),0);
+    assert.equal(call('scan_pos'),65536);
+  }
+  // Adjacent control/high-bit bytes exercise cross-lane borrows without hiding a line ending.
+  for(const ending of [10,13]) for(let lane=0;lane<8;lane++) {
+    const prefix=Buffer.from([0,32,127,128,255,11,12,1]);
+    const pointer=init(Buffer.concat([Buffer.from(';;'),prefix.subarray(0,lane),Buffer.from([ending]),Buffer.from(' token')]));
+    assert.equal(call('scan_next'),3);
+    assert.equal(call('error_code'),0);
+    assert.equal(call('scan_tok')-pointer,4+lane);
+    assert.equal(call('scan_len'),5);
+    assert.equal(call('scan_pos'),65536);
+  }
   const commentBytes=Buffer.from([40,59,...Array.from({length:256},(_,byte)=>byte),59,41]);
   init(commentBytes);
   assert.equal(call('scan_next'),0);

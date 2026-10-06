@@ -169,3 +169,14 @@ m4_define(<!M4_WORD_BYTES!>,<!4!>)m4_dnl
 
 m4_dnl Eight-byte comparison words use bounded i64 loads.
 m4_define(<!M4_DOUBLEWORD_BYTES!>,<!8!>)m4_dnl
+
+m4_dnl Repeated byte lanes used by bounded eight-byte token scanning.
+m4_define(<!M4_BYTE_LANES_SPACE!>,<!0x2020202020202020!>)m4_dnl
+m4_define(<!M4_BYTE_LANES_TAB!>,<!0x0909090909090909!>)m4_dnl
+m4_define(<!M4_BYTE_LANES_HIGH_BIT!>,<!0x8080808080808080!>)m4_dnl
+m4_define(<!M4_BYTE_LANES_ONE!>,<!0x0101010101010101!>)m4_dnl
+m4_define(<!M4_BYTE_LANES_ATOM_MIN!>,<!0x2121212121212121!>)m4_dnl
+m4_define(<!M4_BYTE_LANES_QUOTE!>,<!0x2222222222222222!>)m4_dnl
+m4_define(<!M4_BYTE_LANES_LPAREN!>,<!0x2828282828282828!>)m4_dnl
+m4_define(<!M4_BYTE_LANES_RPAREN!>,<!0x2929292929292929!>)m4_dnl
+m4_define(<!M4_BYTE_LANES_SEMICOLON!>,<!0x3b3b3b3b3b3b3b3b!>)m4_dnl

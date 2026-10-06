@@ -2089,3 +2089,68 @@ All 208 tests pass, including nested self-hosting and the full pinned spec, in
 64.48s, down from 66.56s; the full-suite test run is slightly slower than its
 preceding run. Coverage and stress inputs are unchanged; performance history
 retains these independent measurements, instruction counts and source hashes.
+
+### Fresh construction through bounded word scanning
+
+A temporary native-parent phase probe identifies engine-source parsing as the
+largest fresh-construction phase: about 5.6 ms, compared with 1.2 ms for linking,
+1.9 ms for validation and under 1 ms for native instantiation. These diagnostic
+phase medians exclude some frontend work and use preloaded bytes; the public
+construction benchmark still instantiates a fresh bootstrap, loads the complete
+readable expanded engine source, and wraps its independent ABI on every creation.
+No prepared engine, source rewriting, snapshot or compilation cache is introduced.
+
+The lexer now skips complete eight-byte words in ordinary atom runs, uniform
+space/tab indentation and control-free line comments. Every word load is guarded
+by the remaining source length. Atoms use subtraction/high-bit masks to detect
+low control bytes and zero lanes after XOR with quotes, parentheses or semicolons.
+Potential boundaries, short tails and conservative borrow false positives switch
+to the original byte scanner. An atom or whitespace run switches once, avoiding
+repeated word probes of the same boundary-containing tail. Line comments retain
+CR/LF termination and ignore other control bytes as before. Quoted identifiers,
+strings, annotations and nested block comments keep their existing parsing paths.
+All lane patterns and widths use named M4 constants; comments and indentation
+remain in both checked-in WAT and the expanded engine source.
+
+Scanner regressions end at physical memory's final byte. They cover every short
+word/tail length plus 63/64/65 bytes, all 256 byte values in every lane for both
+atoms and line comments, CR/LF termination, UTF-8/high-bit bytes, NUL/quote errors,
+VT/FF atom rules, cross-lane borrows, lone/double semicolons and repeated scanning.
+They run through both native and WAT-interpreted probe engines. Existing tests
+retain annotation-string recovery and lexical error offsets.
+
+Alternating fresh constructions (seven samples, seven repeats) measure hosted
+construction at 11.91 ms before and 11.47 ms after, a 3.7% reduction. The separate
+sequential pair measures 11.95 to 11.69 ms, a smaller 2.2% reduction. Every fresh
+instance loads and executes a guest after timing and verifies mutable-global
+isolation. Bootstrap samples are about 1 ms and fluctuate across the two methods;
+no bootstrap improvement is claimed.
+
+Paired hosted loader samples (three repeats, five samples, unchanged inputs) show:
+
+| Workload | Before | After | Time reduction | Instruction reduction |
+| --- | ---: | ---: | ---: | ---: |
+| lineComments | 7.10 ms | 5.38 ms | 24.3% | 26.75% |
+| namesLengths | 9.94 ms | 8.35 ms | 16.1% | 18.58% |
+| integersWide | 13.60 ms | 12.57 ms | 7.6% | 8.65% |
+| decimalDigits | 51.57 ms | 48.66 ms | 5.6% | 6.38% |
+| hexDigits | 57.06 ms | 53.69 ms | 5.9% | 6.02% |
+| namesPrefix | 16.75 ms | 16.11 ms | 3.8% | 4.32% |
+| integers | 18.12 ms | 18.97 ms | -4.7% | -3.66% |
+| functions | 37.27 ms | 38.71 ms | -3.9% | -4.12% |
+| whitespace (mixed) | 7.94 ms | 8.29 ms | -4.4% | -4.13% |
+
+Word probes add overhead to short-token inputs and mixed whitespace; the larger
+atom/comment workloads benefit. Binary guest decoding also uses the shared atom
+scanner for canonical mnemonic lookup, so its counts can change. Complete paired
+reports, native-parent invocation counts for hosted loads, construction-phase
+probe results and source/binary hashes are retained in performance history.
+There are no child profiling markers or CI timing thresholds. Memory growth and
+bulk-memory optimization remain reserved for the following round.
+
+All 208 tests pass with the expanded scanner boundary checks, nested self-hosting
+and full pinned spec, in 212,102.925 ms (3m32.10s). Both standalone audits pass
+65,199 commands across 258 files with zero failures/skips. The hosted audit takes
+208,978.000 ms (3m28.98s), roughly flat overall (0.6% less time than the preceding
+run). Coverage and million-call stress inputs are unchanged; full-suite and
+standalone timings are recorded independently from the phase benchmarks.

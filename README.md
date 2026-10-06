@@ -194,9 +194,9 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 208 tests in 221,173.157 ms
-(3m41.17s). The isolated hosted spec audit passes all 65,199 commands in
-210,157.199 ms (3m30.16s), with zero failures or skips.
+The latest complete `make check` run passes all 208 tests in 212,102.925 ms
+(3m32.10s). The isolated hosted spec audit passes all 65,199 commands in
+208,978.000 ms (3m28.98s), with zero failures or skips.
 Guarded keyword/name matching and bounded word equality improve the hosted
 shared-prefix and mixed-length name loaders by 70% and 85%, respectively.
 Fresh hosted construction improves by 18%; ordinary loader samples remain
@@ -208,8 +208,12 @@ frame headers and implicit root. Alternating warmed hosted samples improve
 Mutual tails to one-parameter functions without extra locals also retain their
 allocated root, updating only callee-dependent fields. Alternating warmed
 hosted direct/reference/indirect samples improve 3–4%, with 2.2–3.0% fewer
-parent instructions. The standalone hosted audit takes 2.0% less time than the
-preceding run; the complete test suite is slightly slower this run.
+parent instructions.
+Bounded word scanning of atoms, indentation and line comments improves fresh
+hosted construction by 3.7% (11.91 to 11.47 ms) in alternating samples. Guest
+line-comment and mixed-length name loads improve 24% and 16%; short integer,
+many-function and mixed-whitespace loads add about 4% overhead. The standalone
+hosted audit stays roughly flat overall (0.6% less time than the preceding run).
 The annotation-string correctness fix retains nested content after payload
 strings and prevents ignored annotation bytes from entering data segments. No
 performance improvement is claimed for this fix. Local trivia scanning and guarded token

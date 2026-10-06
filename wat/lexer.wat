@@ -58,6 +58,9 @@
 	;; Consume whitespace and comments, then expose the next token through kind, tok and len.
 	;; Leave kind as EOF at end of input; report lexical failures through the shared status.
 	(func $next
+		(local $word i64)
+		(local $special i64)
+		(local $boundary i64)
 		(local $c i32)
 		(local $depth i32)
 		(local $name i32)
@@ -85,8 +88,44 @@
 						)
 					)
 					(then
-						(local.set $cursor (i32.add (local.get $cursor) (i32.const 1)))
-						(br $skip)
+						;; Long uniform indentation consumes complete words without crossing the source end.
+						(block $white-words-done
+							;; The first mixed word switches once to byte scanning for the rest of this whitespace run.
+							(loop $white-words
+								(br_if $white-words-done
+									(i32.lt_u (i32.sub (local.get $end) (local.get $cursor)) (i32.const M4_DOUBLEWORD_BYTES))
+								)
+								(local.set $word (i64.load (local.get $cursor)))
+								(br_if $white-words-done
+									(i32.eqz
+										(i32.or
+											(i64.eq (local.get $word) (i64.const M4_BYTE_LANES_TAB))
+											(i64.eq (local.get $word) (i64.const M4_BYTE_LANES_SPACE))
+										)
+									)
+								)
+								(local.set $cursor (i32.add (local.get $cursor) (i32.const M4_DOUBLEWORD_BYTES)))
+								(br $white-words)
+							)
+						)
+						;; Mixed whitespace and short tails preserve the four exact WAT whitespace bytes.
+						(loop $white-bytes
+							(br_if $skip (i32.ge_u (local.get $cursor) (local.get $end)))
+							(local.set $c (i32.load8_u (local.get $cursor)))
+							(br_if $skip
+								(i32.eqz
+									(i32.or
+										(i32.eq (local.get $c) (i32.const M4_BYTE_SPACE))
+										(i32.or
+											(i32.le_u (i32.sub (local.get $c) (i32.const M4_BYTE_TAB)) (i32.const 1))
+											(i32.eq (local.get $c) (i32.const M4_BYTE_CR))
+										)
+									)
+								)
+							)
+							(local.set $cursor (i32.add (local.get $cursor) (i32.const 1)))
+							(br $white-bytes)
+						)
 					)
 				)
 				;; Ordinary token prefixes cannot introduce comments or annotations.
@@ -114,13 +153,36 @@
 						(br $skip)
 					)
 				)
-				;; Line comments skip their delimiter and scan once per byte to CR, LF or EOF.
+				;; Line comments skip complete control-free words, then scan byte tails to CR, LF or EOF.
 				(if (i32.eq (local.get $prefix) (i32.const M4_PAIR_LINE_COMMENT))
 					(then
 						(local.set $cursor (i32.add (local.get $cursor) (i32.const 2)))
 						;; Leave line endings for the whitespace path and preserve EOF without a sentinel load.
 						(loop $line
 							(br_if $skip (i32.ge_u (local.get $cursor) (local.get $end)))
+							;; A full word with no byte below space cannot contain a CR or LF terminator.
+							(if (i32.ge_u (i32.sub (local.get $end) (local.get $cursor)) (i32.const M4_DOUBLEWORD_BYTES))
+								(then
+									(local.set $word (i64.load (local.get $cursor)))
+									;; Subtraction and high-bit masking conservatively detect low control-byte lanes.
+									;; Borrows may also flag neighboring bytes; they only send the word to the byte path.
+									(if
+										(i64.eqz
+											(i64.and
+												(i64.and
+													(i64.sub (local.get $word) (i64.const M4_BYTE_LANES_SPACE))
+													(i64.xor (local.get $word) (i64.const -1))
+												)
+												(i64.const M4_BYTE_LANES_HIGH_BIT)
+											)
+										)
+										(then
+											(local.set $cursor (i32.add (local.get $cursor) (i32.const M4_DOUBLEWORD_BYTES)))
+											(br $line)
+										)
+									)
+								)
+							)
 							(local.set $c (i32.load8_u (local.get $cursor)))
 							(br_if $skip
 								(i32.or (i32.eq (local.get $c) (i32.const M4_BYTE_LF)) (i32.eq (local.get $c) (i32.const M4_BYTE_CR)))
@@ -255,6 +317,66 @@
 			)
 		)
 		(global.set $kind (i32.const 3))
+		;; A word containing any possible boundary switches permanently to the byte tail for this atom.
+		(block $atom-words-done
+			;; Skip complete bounded words without repeatedly testing a boundary-containing tail.
+			(loop $atom-words
+				(br_if $atom-words-done
+					(i32.lt_u (i32.sub (local.get $end) (local.get $cursor)) (i32.const M4_DOUBLEWORD_BYTES))
+				)
+				(local.set $word (i64.load (local.get $cursor)))
+				;; Low-byte detection includes all whitespace and NUL, conservatively including VT/FF.
+				(local.set $boundary
+					(i64.and
+						(i64.sub (local.get $word) (i64.const M4_BYTE_LANES_ATOM_MIN))
+						(i64.xor (local.get $word) (i64.const -1))
+					)
+				)
+				;; XOR turns each punctuation match into a zero lane; subtraction marks those lanes.
+				(local.set $special (i64.xor (local.get $word) (i64.const M4_BYTE_LANES_QUOTE)))
+				(local.set $boundary
+					(i64.or (local.get $boundary)
+						(i64.and
+							(i64.sub (local.get $special) (i64.const M4_BYTE_LANES_ONE))
+							(i64.xor (local.get $special) (i64.const -1))
+						)
+					)
+				)
+				(local.set $special (i64.xor (local.get $word) (i64.const M4_BYTE_LANES_LPAREN)))
+				(local.set $boundary
+					(i64.or (local.get $boundary)
+						(i64.and
+							(i64.sub (local.get $special) (i64.const M4_BYTE_LANES_ONE))
+							(i64.xor (local.get $special) (i64.const -1))
+						)
+					)
+				)
+				(local.set $special (i64.xor (local.get $word) (i64.const M4_BYTE_LANES_RPAREN)))
+				(local.set $boundary
+					(i64.or (local.get $boundary)
+						(i64.and
+							(i64.sub (local.get $special) (i64.const M4_BYTE_LANES_ONE))
+							(i64.xor (local.get $special) (i64.const -1))
+						)
+					)
+				)
+				(local.set $special (i64.xor (local.get $word) (i64.const M4_BYTE_LANES_SEMICOLON)))
+				(local.set $boundary
+					(i64.or (local.get $boundary)
+						(i64.and
+							(i64.sub (local.get $special) (i64.const M4_BYTE_LANES_ONE))
+							(i64.xor (local.get $special) (i64.const -1))
+						)
+					)
+				)
+				;; Borrow false positives only select the original byte scanner; no boundary may be skipped.
+				(br_if $atom-words-done
+					(i64.ne (i64.and (local.get $boundary) (i64.const M4_BYTE_LANES_HIGH_BIT)) (i64.const 0))
+				)
+				(local.set $cursor (i32.add (local.get $cursor) (i32.const M4_DOUBLEWORD_BYTES)))
+				(br $atom-words)
+			)
+		)
 		;; Exit here at an atom boundary, leaving the delimiter for the next token.
 		(block $atom-done
 			;; Scan an atom until EOF, whitespace, a parenthesis or a line comment.
