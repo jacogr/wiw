@@ -2025,3 +2025,67 @@ All 206 tests pass, including nested self-hosting and the full pinned spec, in
 (3m34.40s), roughly flat overall (0.6% less time than the preceding run).
 Performance history records the full checks alongside the targeted gains and
 fallback costs, without attributing that small overall difference to this change.
+
+### Mutual tail-call frame and root reuse
+
+One-parameter defined tail calls without extra locals now retain the allocated
+implicit root even when the target function changes. After copying both argument
+halves and restoring the operand base, dispatch discards nested controls above
+that root. On a function transition it refreshes the frame's instruction/end and
+function fields, the root's start/end and result shape, and the cached end cursor.
+Self calls keep the previous header shortcut. The root index, kind, operand base
+and empty parameter shape already match and remain unchanged; there is no new
+root reservation or capacity check because the existing root is allocated.
+
+The optimization does not require identical parameter or result types between
+the old and new descriptors: validation checks the tail-call arguments/results,
+and the new descriptor supplies its actual result shape. Both argument halves
+are copied, including vectors and references. Additional-local and other-arity
+signatures still use general entry and its local clearing. Imports, null/table
+traps, indirect type checks, exception handling and fuel charging retain their
+existing paths. No arena, cache, API or opcode is added.
+
+Regressions alternate between distinct functions with different instruction
+ends and separate mixed vector/scalar result declarations. One function returns
+naturally and the other uses an explicit return through the updated root. Nested
+block/loop controls, discarded operands, an ordinary intervening call, retained
+caller values, repeated invocation and fuel exhaustion/recovery are checked in
+both runtimes for direct, indirect and typed-reference tails. The original
+million-call spec stress inputs remain unchanged.
+
+The invocation benchmark adds mutualDirect and mutualReference; the existing
+indirectTypes workload also alternates functions. Paired reports use 5,000
+iterations and five samples, followed by an alternating comparison of warmed
+before/after engines with seven samples. No compilation, tests or audits overlap
+these timings. The alternating comparison gives:
+
+| Hosted workload | Before | After | Time reduction |
+| --- | ---: | ---: | ---: |
+| mutualDirect | 28.79 ms | 27.62 ms | 4.1% |
+| mutualReference | 31.49 ms | 30.27 ms | 3.9% |
+| indirectTypes | 39.14 ms | 37.98 ms | 3.0% |
+| direct (self tail) | 25.04 ms | 25.15 ms | -0.5% |
+| reference (self tail) | 28.95 ms | 28.84 ms | 0.4% |
+| parameters (extra locals) | 60.22 ms | 60.08 ms | 0.2% |
+| ordinary | 322.86 ms | 324.43 ms | -0.5% |
+| loop | 26.07 ms | 26.18 ms | -0.4% |
+
+The initial sequential pair measures smaller mutual-tail gains (1.4–2.3%) with
+broader timing drift across unrelated workloads; both comparisons are retained.
+These are targeted modest gains, with control timings roughly flat. Performance
+history also records complete hosted invocation instruction profiles from an
+instrumented native parent, without child profiling markers or CI thresholds.
+Mutual direct/reference/indirect instruction counts fall by 2.95%, 2.64% and
+2.24%, respectively. Self tails add about 0.1% from the revised guard order;
+the extra-local parameter workload removes 0.29%, and non-tail counts remain
+unchanged.
+Fresh interpreter construction and memory growth/bulk-memory work are reserved
+for the following two optimization rounds.
+
+All 208 tests pass, including nested self-hosting and the full pinned spec, in
+221,173.157 ms (3m41.17s). Both standalone audits pass 65,199 commands across
+258 files with zero failures/skips. The hosted audit takes 210,157.199 ms
+(3m30.16s), 2.0% less time than the preceding run. The three tail-call files total
+64.48s, down from 66.56s; the full-suite test run is slightly slower than its
+preceding run. Coverage and stress inputs are unchanged; performance history
+retains these independent measurements, instruction counts and source hashes.

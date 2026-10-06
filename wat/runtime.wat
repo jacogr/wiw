@@ -787,33 +787,49 @@
 					;; Defined tail calls retain this frame and its cached high-half region.
 					(if (local.get $tail)
 						(then
-							;; Self tail calls with one parameter and no extra locals retain the existing root and headers.
-							(if (i32.eq (local.get $callee) (i32.load offset=M4_CALL_FUNCTION_OFFSET (local.get $frame)))
+							;; One-parameter tails without extra locals retain the existing root and frame base.
+							(if
+								(i32.and
+									(i32.eq (i32.load offset=M4_FUNCTION_PARAMETERS_OFFSET (local.get $meta)) (i32.const 1))
+									(i32.eq (i32.load offset=M4_FUNCTION_LOCALS_OFFSET (local.get $meta)) (i32.const 1))
+								)
 								(then
-									;; Other signatures still use general entry so additional locals are always cleared.
-									(if
-										(i32.and
-											(i32.eq (i32.load offset=M4_FUNCTION_PARAMETERS_OFFSET (local.get $meta)) (i32.const 1))
-											(i32.eq (i32.load offset=M4_FUNCTION_LOCALS_OFFSET (local.get $meta)) (i32.const 1))
-										)
+									(i64.store offset=M4_CALL_LOCALS_OFFSET (local.get $frame) (i64.load (local.get $target)))
+									(i64.store (local.get $frame-high)
+										(i64.load (i32.add (global.get $stack-high-base) (i32.sub (local.get $target) (global.get $stack-base))))
+									)
+									(global.set $sp (i32.load offset=M4_CALL_STACK_BASE_OFFSET (local.get $frame)))
+									;; Discard nested controls while retaining the allocated implicit root.
+									(global.set $control-count
+										(i32.add (i32.load offset=M4_CALL_ROOT_OFFSET (local.get $frame)) (i32.const 1))
+									)
+									;; Self calls retain all headers; mutual calls refresh only callee-dependent fields.
+									(if (i32.ne (local.get $callee) (i32.load offset=M4_CALL_FUNCTION_OFFSET (local.get $frame)))
 										(then
-											(i64.store offset=M4_CALL_LOCALS_OFFSET (local.get $frame) (i64.load (local.get $target)))
-											(i64.store (local.get $frame-high)
-												(i64.load (i32.add (global.get $stack-high-base) (i32.sub (local.get $target) (global.get $stack-base))))
-											)
-											(global.set $sp (i32.load offset=M4_CALL_STACK_BASE_OFFSET (local.get $frame)))
-											;; Discard nested controls while retaining this function's unchanged implicit root.
-											(global.set $control-count
-												(i32.add (i32.load offset=M4_CALL_ROOT_OFFSET (local.get $frame)) (i32.const 1))
-											)
-											(local.set $next
-												(i32.add (local.get $code)
-													(i32.shl (i32.load offset=M4_FUNCTION_START_OFFSET (local.get $meta)) (i32.const M4_INSTRUCTION_SHIFT))
+											(i32.store (local.get $frame) (i32.load offset=M4_FUNCTION_START_OFFSET (local.get $meta)))
+											(i32.store offset=M4_CALL_END_OFFSET (local.get $frame) (i32.load offset=M4_FUNCTION_END_OFFSET (local.get $meta)))
+											(i32.store offset=M4_CALL_FUNCTION_OFFSET (local.get $frame) (local.get $callee))
+											(local.set $entry-control
+												(i32.add (global.get $control-base)
+													(i32.mul (i32.load offset=M4_CALL_ROOT_OFFSET (local.get $frame)) (i32.const M4_CONTROL_BYTES))
 												)
 											)
-											(br $dispatch)
+											(i32.store offset=M4_CONTROL_START_OFFSET (local.get $entry-control) (i32.load offset=M4_FUNCTION_START_OFFSET (local.get $meta)))
+											(i32.store offset=M4_CONTROL_END_OFFSET (local.get $entry-control) (i32.load offset=M4_FUNCTION_END_OFFSET (local.get $meta)))
+											(i32.store offset=M4_CONTROL_RESULT_SHAPE_OFFSET (local.get $entry-control) (i32.load offset=M4_FUNCTION_RESULT_SHAPE_OFFSET (local.get $meta)))
+											(local.set $finish
+												(i32.add (local.get $code)
+													(i32.shl (i32.load offset=M4_FUNCTION_END_OFFSET (local.get $meta)) (i32.const M4_INSTRUCTION_SHIFT))
+												)
+											)
 										)
 									)
+									(local.set $next
+										(i32.add (local.get $code)
+											(i32.shl (i32.load offset=M4_FUNCTION_START_OFFSET (local.get $meta)) (i32.const M4_INSTRUCTION_SHIFT))
+										)
+									)
+									(br $dispatch)
 								)
 							)
 							(global.set $sp (i32.load offset=M4_CALL_STACK_BASE_OFFSET (local.get $frame)))

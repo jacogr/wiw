@@ -69,6 +69,50 @@ for (const [runtime, create] of [['bootstrap', createBootstrapInterpreter], ['in
     }
   });
 
+  test(`${runtime}: mutual tails refresh callee ends and result shapes while retaining caller values`, async () => {
+    const engine = await create(binary);
+    for (const mode of ['direct', 'indirect', 'reference']) {
+      const tail = (target, index) => mode === 'direct'
+        ? `(return_call ${target} (local.get 0))`
+        : mode === 'indirect'
+          ? `(return_call_indirect (type $t) (local.get 0) (i32.const ${index}))`
+          : `(return_call_ref $t (local.get 0) (ref.func ${target}))`;
+      engine.load(`(module
+        (type $t (func (param v128) (result v128 i32)))
+        (table funcref (elem $first $second))
+        (global $remaining (mut i32) (i32.const 0))
+        (func $noop)
+        (func $first (type $t)
+          (if (result v128 i32) (i32.eqz (global.get $remaining))
+            (then (local.get 0) (i32.const 42))
+            (else
+              (call $noop)
+              (global.set $remaining (i32.sub (global.get $remaining) (i32.const 1)))
+              (block (loop (i32.const 777) ${tail('$second', 1)}))
+              unreachable)))
+        (func $second (param v128) (result v128 i32)
+          (if (i32.eqz (global.get $remaining))
+            (then (return (local.get 0) (i32.const 43))))
+          (global.set $remaining (i32.sub (global.get $remaining) (i32.const 1)))
+          (block (loop (i64.const 999) ${tail('$first', 0)}))
+          unreachable)
+        (func (export "even") (param v128) (result i32 v128 i32)
+          (global.set $remaining (i32.const 1000))
+          (i32.const 123) (call $first (local.get 0)))
+        (func (export "odd") (param v128) (result i32 v128 i32)
+          (global.set $remaining (i32.const 1001))
+          (i32.const 123) (call $first (local.get 0))))`);
+      for (let repeat = 0; repeat < 2; repeat++) {
+        assert.deepEqual(engine.invokeRaw('even', vector), [{type:'i32',bits:123n}, vector, {type:'i32',bits:42n}]);
+        assert.deepEqual(engine.invokeRaw('odd', vector), [{type:'i32',bits:123n}, vector, {type:'i32',bits:43n}]);
+      }
+      engine.setFuel(50);
+      assert.throws(() => engine.invokeRaw('odd', vector), /exhausted fuel/);
+      engine.setFuel(100000);
+      assert.deepEqual(engine.invokeRaw('odd', vector), [{type:'i32',bits:123n}, vector, {type:'i32',bits:43n}]);
+    }
+  });
+
   test(`${runtime}: reference dispatch keeps null traps and exact fuel boundaries`, async () => {
     const engine = await create(binary);
     const source = `(module

@@ -73,6 +73,18 @@ const cases = {
       (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`
 };
 
+// Mutual tails exercise frame transitions rather than the same-function restart path.
+for (const [name, reference] of [['mutualDirect', false], ['mutualReference', true]]) {
+  const tail = target => reference
+    ? `(return_call_ref $t (i64.sub (local.get 0) (i64.const 1)) (ref.func ${target}))`
+    : `(return_call ${target} (i64.sub (local.get 0) (i64.const 1)))`;
+  cases[name] = `(module ${common} (elem declare func $first $second)
+    (func $first (export "run") (type $t)
+      (if (result i64) (i64.eqz (local.get 0)) (then (i64.const 0)) (else ${tail('$second')})))
+    (func $second (type $t)
+      (if (result i64) (i64.eqz (local.get 0)) (then (i64.const 0)) (else ${tail('$first')}))))`;
+}
+
 // Exercise extended signature lookups during vector execution, checking the complete raw value.
 const vectorWorkloads = {
   vectorByteArithmetic: ['v128.const i64x2 0x0101010101010101 0x0101010101010101 v128.const i64x2 0x0202020202020202 0x0202020202020202 i8x16.add', '0x0303030303030303 0x0303030303030303'],
