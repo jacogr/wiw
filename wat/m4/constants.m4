@@ -180,3 +180,7 @@ m4_define(<!M4_BYTE_LANES_QUOTE!>,<!0x2222222222222222!>)m4_dnl
 m4_define(<!M4_BYTE_LANES_LPAREN!>,<!0x2828282828282828!>)m4_dnl
 m4_define(<!M4_BYTE_LANES_RPAREN!>,<!0x2929292929292929!>)m4_dnl
 m4_define(<!M4_BYTE_LANES_SEMICOLON!>,<!0x3b3b3b3b3b3b3b3b!>)m4_dnl
+
+m4_dnl Packed scalar effects hold operand/result type nibbles in the second byte.
+m4_define(<!M4_EFFECT_OPERAND_SHIFT!>,<!12!>)m4_dnl
+m4_define(<!M4_BYTE_SHIFT!>,<!8!>)m4_dnl

@@ -208,7 +208,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     }
     return value;
   }
-  function functionSignature(/** @type {string} */ name) {
+  function functionSignature(/** @type {string} */ name, includeResults = true) {
     requireLoaded();
     const at = e.host_base();
     const n = write(name, at);
@@ -217,7 +217,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     return {
       index,
       params: Array.from({ length: e.function_params(index) }, (_, slot) => e.function_param_type(index, slot)),
-      results: resultSignature(index)
+      results: includeResults ? resultSignature(index) : undefined
     };
   }
   // Reference descriptors carry opaque values; numeric descriptors retain exact bits.
@@ -484,29 +484,33 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       check(e.error_code());
     }
     check(e.error_code());
-    if (e.result_count() > 1) {
+    const resultCount = e.result_count();
+    if (resultCount > 1) {
       const output = new DataView(e.memory.buffer, memoryOffset), at = e.result_base();
-      return Array.from({length: e.result_count()}, (_, slot) => {
+      return Array.from({length: resultCount}, (_, slot) => {
         let bits = output.getBigInt64(at + slot * 8, true);
         const type = e.result_type(slot);
         if (type === 7) bits = BigInt.asUintN(64, bits) | (BigInt.asUintN(64, output.getBigInt64(e.result_high_base() + slot * 8, true)) << 64n);
         return raw ? rawResult(bits, type) : decodedValue(bits, type);
       });
     }
-    if (e.result_type(0) === 7) value = BigInt.asUintN(64, value) | (BigInt.asUintN(64, new DataView(e.memory.buffer, memoryOffset).getBigInt64(e.result_high_base(), true)) << 64n);
-    return raw ? rawResult(value, e.result_type(0)) : decodedValue(value, e.result_type(0));
+    const resultType = e.result_type(0);
+    if (resultType === 7) value = BigInt.asUintN(64, value) | (BigInt.asUintN(64, new DataView(e.memory.buffer, memoryOffset).getBigInt64(e.result_high_base(), true)) << 64n);
+    return raw ? rawResult(value, resultType) : decodedValue(value, resultType);
   }
   // Run either public scalar values or exact raw slots through the same protected invocation.
   function invokeValues(name, values, raw = false, index = undefined) {
       synchronizeIn();
       const at = e.host_base();
-      const n = write(name, at);
+      // Indexed calls already resolved their export and need no second name write.
+      const n = index === undefined ? write(name, at) : 0;
       const argumentsAt = Math.ceil((at + n) / 8) * 8;
       ensure(argumentsAt + values.length * 8);
       const view = new DataView(e.memory.buffer, memoryOffset);
+      const highAt = values.length ? e.argument_high_base() : 0;
       values.forEach((value, index) => {
         view.setBigInt64(argumentsAt + index * 8, BigInt.asIntN(64, value), true);
-        view.setBigInt64(e.argument_high_base() + index * 8, value > 0n ? BigInt.asIntN(64, value >> 64n) : 0n, true);
+        view.setBigInt64(highAt + index * 8, value > 0n ? BigInt.asIntN(64, value >> 64n) : 0n, true);
       });
       invoking = true;
       if (backend.countsForwardingDepth) invocationDepth++;
@@ -638,7 +642,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       requireLoaded();
       if (backend.countsForwardingDepth && invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
       if (args.length > 128) throw new Error('too many arguments (maximum 128)');
-      const signature = functionSignature(name);
+      const signature = functionSignature(name, false);
       if (args.length !== signature.params.length) throw new Error('argument mismatch');
       const values = args.map((arg, index) => {
         try { return typedValue(arg, signature.params[index]); }
@@ -647,19 +651,19 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
           throw new Error(signature.params[index] === 2 ? 'arguments must be i64 BigInt integers' : signature.params[index] === 1 ? 'arguments must be i32 integers' : `arguments must be ${scalarNames[signature.params[index]]} Numbers`);
         }
       });
-      return invokeValues(name, values);
+      return invokeValues('', values, false, signature.index);
     },
     // Raw scalar slots preserve signaling NaNs and payloads for conformance assertions.
     invokeRaw(name, ...args) {
       requireIdle();
       requireLoaded();
       if (backend.countsForwardingDepth && invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
-      const signature = functionSignature(name);
+      const signature = functionSignature(name, false);
       if (args.length !== signature.params.length) throw new Error('argument mismatch');
       const values = args.map((arg, index) => {
         return rawSlot(arg, signature.params[index]);
       });
-      return invokeValues(name, values, true);
+      return invokeValues('', values, true, signature.index);
     },
     signature(/** @type {string} */ name) {
       const signature = functionSignature(name);

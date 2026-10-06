@@ -215,6 +215,7 @@
 		(local $pc i32)
 		(local $record i32)
 		(local $op i32)
+		(local $effect i32)
 		(local $type i32)
 		(local $other i32)
 		(local $j i32)
@@ -264,6 +265,40 @@
 				(local.set $op (i32.load (local.get $record)))
 				(global.set $tok (i32.load offset=8 (local.get $record)))
 				(local.set $pc (i32.add (local.get $pc) (i32.const 1)))
+				;; Ordinary scalar constants, arithmetic and conversions use one compact fixed signature.
+				(if
+					(i32.or
+						(i32.le_u (i32.sub (local.get $op) (i32.const M4_OP_I32_CONST)) (i32.const m4_eval(M4_OP_I32_POPCNT-M4_OP_I32_CONST)))
+						(i32.or
+							(i32.le_u (i32.sub (local.get $op) (i32.const M4_OP_I64_CONST)) (i32.const m4_eval(M4_OP_I64_EXTEND_I32_U-M4_OP_I64_CONST)))
+							(i32.or
+								(i32.le_u (i32.sub (local.get $op) (i32.const M4_OP_F32_CONST)) (i32.const m4_eval(M4_OP_F64_GE-M4_OP_F32_CONST)))
+								(i32.le_u (i32.sub (local.get $op) (i32.const M4_OP_I32_TRUNC_F32_S)) (i32.const m4_eval(M4_OP_I64_TRUNC_SAT_F64_U-M4_OP_I32_TRUNC_F32_S)))
+							)
+						)
+					)
+					(then
+						(local.set $effect
+							(i32.load16_u offset=M4_EFFECT_TABLE_BASE (i32.shl (local.get $op) (i32.const 1)))
+						)
+						(local.set $count (i32.and (i32.shr_u (local.get $effect) (i32.const M4_NIBBLE_SHIFT)) (i32.const M4_NIBBLE_MASK)))
+						(local.set $type (i32.shr_u (local.get $effect) (i32.const M4_EFFECT_OPERAND_SHIFT)))
+						;; Zero-input constants need no pops; unary/binary operators preserve the usual floor/type checks.
+						(if (local.get $count)
+							(then
+								(drop (call $validation-pop (local.get $type)))
+								;; Both operands of these binary scalar operations share one expected type.
+								(if (i32.eq (local.get $count) (i32.const 2))
+									(then (drop (call $validation-pop (local.get $type))))
+								)
+							)
+						)
+						(call $validation-value
+							(i32.and (i32.shr_u (local.get $effect) (i32.const M4_BYTE_SHIFT)) (i32.const M4_NIBBLE_MASK))
+						)
+						(br $code)
+					)
+				)
 				;; Structured entries save their floor after consuming an i32 if condition.
 				(if (call $control-op (local.get $op))
 					(then

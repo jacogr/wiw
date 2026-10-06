@@ -1293,6 +1293,46 @@
 					)
 				)
 			)
+			;; Scalar loads/stores consume only low halves and finish before generic SIMD/resource dispatch.
+			(if
+				(i32.and
+					(i32.eq (local.get $route) (i32.const M4_ROUTE_MEMORY))
+					(i32.le_u (i32.sub (local.get $op) (i32.const M4_OP_I32_LOAD))
+						(i32.const m4_eval(M4_OP_F64_STORE-M4_OP_I32_LOAD)))
+				)
+				(then
+					(local.set $meta (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $record)))
+					(call $use-memory (i32.load offset=M4_MEMORY_OPERAND_OFFSET (local.get $meta)))
+					(local.set $inputs
+						(i32.shr_u (i32.load8_u offset=M4_EFFECT_TABLE_BASE (i32.shl (local.get $op) (i32.const 1))) (i32.const M4_NIBBLE_SHIFT))
+					)
+					(global.set $sp (i32.sub (global.get $sp) (local.get $inputs)))
+					(local.set $target (i32.add (global.get $stack-base) (i32.shl (global.get $sp) (i32.const M4_SLOT_SHIFT))))
+					(local.set $a (i64.load (local.get $target)))
+					(local.set $b (i64.const 0))
+					;; Stores read their scalar value next to the address; loads need just one operand.
+					(if (i32.eq (local.get $inputs) (i32.const 2))
+						(then (local.set $b (i64.load offset=M4_SLOT_BYTES (local.get $target))))
+					)
+					(local.set $value (call $resource-apply (local.get $op) (local.get $a) (local.get $b) (local.get $meta)))
+					;; Existing address helpers retain memory64 overflow checks and precise trap offsets.
+					(if (global.get $error)
+						(then (return (i64.const 0)))
+					)
+					;; Only loads publish a result, preserving its raw low bits and clearing stale vector high bits.
+					(if (i32.eq (local.get $inputs) (i32.const 1))
+						(then
+							(i64.store (local.get $target) (local.get $value))
+							(i64.store
+								(i32.add (global.get $stack-high-base) (i32.sub (local.get $target) (global.get $stack-base)))
+								(i64.const 0)
+							)
+							(global.set $sp (i32.add (global.get $sp) (i32.const 1)))
+						)
+					)
+					(br $dispatch)
+				)
+			)
 			(local.set $inputs (call $inputs (local.get $op)))
 			(local.set $a (i64.const 0))
 			(local.set $a-high (i64.const 0))

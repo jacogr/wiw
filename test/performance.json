@@ -41940,6 +41940,4660 @@
           }
         ]
       }
+    },
+    {
+      "retained": true,
+      "label": "Sequential scalar validation, scalar memory dispatch and public host invocation improvements",
+      "node": "v24.11.1",
+      "binaryen": "wasm-opt version 133",
+      "tag": "wg-3.0",
+      "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
+      "runtime": "interpreted",
+      "interpreterDepth": 1,
+      "engineSourceSha256": "e0abd9c097d6ddbf7a4341fc724663580f6a1fbbc69c63f26766867d2428d603",
+      "binarySha256": "1b9b87d5842fe9334489981215970824afc96152b3be8361a3db73fded44c0e2",
+      "frontendSha256": "eae8790b62be0cb19a1f007ed6fefd826b695f779de1f0a1a71c0be6d0f85e8c",
+      "frontendSha256Before": "b437593e882379b3c2c76f19f50d8b6d395ff029d6a0e6241111512c58105945",
+      "fullSpec": {
+        "elapsedMs": 168126.926667,
+        "passed": 65199,
+        "skipped": 0,
+        "failed": 0,
+        "fileCount": 258,
+        "previousElapsedMs": 207954.88829200002,
+        "speedup": 12.176686366770008,
+        "reductionPercent": 91.78758514525771,
+        "speedupVsPrevious": 1.2368922243126774,
+        "reductionPercentVsPrevious": 19.1522122668622,
+        "underFourMinutes": true,
+        "slowestFiles": [
+          {
+            "file": "return_call_ref.wast",
+            "elapsedMs": 23262.470499999996
+          },
+          {
+            "file": "return_call.wast",
+            "elapsedMs": 20137.19179099999
+          },
+          {
+            "file": "simd/simd_const.wast",
+            "elapsedMs": 6782.293166999996
+          },
+          {
+            "file": "const.wast",
+            "elapsedMs": 6528.115749999997
+          },
+          {
+            "file": "return_call_indirect.wast",
+            "elapsedMs": 4484.2322910000075
+          }
+        ]
+      },
+      "validation": {
+        "tests": 216,
+        "failed": 0,
+        "skipped": 0,
+        "bootstrapPassed": 65199,
+        "bootstrapFileCount": 258
+      },
+      "completeTestSuite": {
+        "elapsedMs": 174915.771667,
+        "underFourMinutes": true
+      },
+      "stages": [
+        {
+          "name": "Scalar validation",
+          "retained": true,
+          "loadBenchmarkBefore": {
+            "node": "v24.11.1",
+            "binaryen": "wasm-opt version 133",
+            "engineSourceSha256": "e060b8d652aa1d68677d7b1a3a9f0727baff5be56ee22943b0f221a2ff9a9557",
+            "binarySha256": "5f779be63f31c81126e322cbd60f976f354826231ef7721d860d5e276e7a5438",
+            "phase": "load",
+            "repeats": 5,
+            "samples": 5,
+            "cases": [
+              {
+                "runtime": "bootstrap",
+                "name": "integers",
+                "format": "text",
+                "sourceBytes": 19004,
+                "medianMs": 0.22344999999999687,
+                "elapsedMs": [
+                  0.3117750000000001,
+                  0.2341665999999975,
+                  0.22344999999999687,
+                  0.21025840000000356,
+                  0.21128320000000259
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "floats",
+                "format": "text",
+                "sourceBytes": 22588,
+                "medianMs": 0.17400820000000294,
+                "elapsedMs": [
+                  0.3941417999999999,
+                  0.1838167999999996,
+                  0.1700333999999998,
+                  0.16323340000000144,
+                  0.17400820000000294
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectors",
+                "format": "text",
+                "sourceBytes": 18492,
+                "medianMs": 0.12959999999999922,
+                "elapsedMs": [
+                  0.13226680000000215,
+                  0.13067499999999654,
+                  0.12959999999999922,
+                  0.12344160000000101,
+                  0.11284160000000157
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "functions",
+                "format": "text",
+                "sourceBytes": 40755,
+                "medianMs": 0.32364160000000197,
+                "elapsedMs": [
+                  0.32364160000000197,
+                  0.33722500000000083,
+                  0.48960819999999783,
+                  0.3141834000000017,
+                  0.31171659999999973
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "integersWide",
+                "format": "text",
+                "sourceBytes": 18746,
+                "medianMs": 0.09961679999999547,
+                "elapsedMs": [
+                  0.1063666000000012,
+                  0.10014160000000061,
+                  0.09903340000000185,
+                  0.09961679999999547,
+                  0.09898340000000302
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "decimalScales",
+                "format": "text",
+                "sourceBytes": 13882,
+                "medianMs": 0.5397831999999994,
+                "elapsedMs": [
+                  0.5690249999999992,
+                  0.5432915999999978,
+                  0.5359083999999996,
+                  0.5321665999999994,
+                  0.5397831999999994
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "decimalDigits",
+                "format": "text",
+                "sourceBytes": 17722,
+                "medianMs": 0.24238320000000044,
+                "elapsedMs": [
+                  0.26711680000000226,
+                  0.23317499999999997,
+                  0.23283339999999839,
+                  0.24238320000000044,
+                  0.250324999999998
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "floatsHex",
+                "format": "text",
+                "sourceBytes": 10810,
+                "medianMs": 0.40674159999999804,
+                "elapsedMs": [
+                  0.4210082,
+                  0.4127582000000018,
+                  0.40674159999999804,
+                  0.39998319999999693,
+                  0.4010084000000006
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "hexDigits",
+                "format": "text",
+                "sourceBytes": 18490,
+                "medianMs": 0.25713340000000356,
+                "elapsedMs": [
+                  0.2644084000000021,
+                  0.26630819999999744,
+                  0.2543583999999953,
+                  0.25620819999999755,
+                  0.25713340000000356
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "dataBytes",
+                "format": "text",
+                "sourceBytes": 12382,
+                "medianMs": 0.06666660000000206,
+                "elapsedMs": [
+                  0.11904159999999706,
+                  0.09590000000000032,
+                  0.06666660000000206,
+                  0.05868340000000103,
+                  0.05861659999999915
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "whitespace",
+                "format": "text",
+                "sourceBytes": 37434,
+                "medianMs": 0.08844179999999824,
+                "elapsedMs": [
+                  0.08732500000000414,
+                  0.08844179999999824,
+                  0.08894999999999982,
+                  0.08840000000000145,
+                  0.09251659999999902
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "lineComments",
+                "format": "text",
+                "sourceBytes": 35898,
+                "medianMs": 0.11559159999999906,
+                "elapsedMs": [
+                  0.12004160000000183,
+                  0.11485000000000127,
+                  0.11489179999999806,
+                  0.11851659999999811,
+                  0.11559159999999906
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "blockComments",
+                "format": "text",
+                "sourceBytes": 44602,
+                "medianMs": 0.1593500000000006,
+                "elapsedMs": [
+                  0.17475820000000225,
+                  0.1593500000000006,
+                  0.15836659999999939,
+                  0.15320000000000392,
+                  0.16810839999999985
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "namesPrefix",
+                "format": "text",
+                "sourceBytes": 13407,
+                "medianMs": 0.10155000000000314,
+                "elapsedMs": [
+                  0.11406659999999533,
+                  0.10155000000000314,
+                  0.10333320000000298,
+                  0.10155000000000314,
+                  0.10105819999999995
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "namesLengths",
+                "format": "text",
+                "sourceBytes": 19599,
+                "medianMs": 0.08841659999999933,
+                "elapsedMs": [
+                  0.09488319999999817,
+                  0.08889179999999897,
+                  0.08841659999999933,
+                  0.08559999999999945,
+                  0.0870584000000008
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "integersBinary",
+                "format": "binary",
+                "sourceBytes": 3110,
+                "medianMs": 0.207224999999994,
+                "elapsedMs": [
+                  0.2832334000000003,
+                  0.20544160000000034,
+                  0.21001659999999447,
+                  0.207224999999994,
+                  0.20180000000000292
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "floatsBinary",
+                "format": "binary",
+                "sourceBytes": 10285,
+                "medianMs": 0.5094749999999977,
+                "elapsedMs": [
+                  0.5257000000000062,
+                  0.5053584000000001,
+                  0.5031334000000015,
+                  0.5119665999999938,
+                  0.5094749999999977
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorsBinary",
+                "format": "binary",
+                "sourceBytes": 10278,
+                "medianMs": 0.17644159999999828,
+                "elapsedMs": [
+                  0.18654999999999972,
+                  0.17644159999999828,
+                  0.1768831999999975,
+                  0.17393339999999852,
+                  0.16888320000000476
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "functionsBinary",
+                "format": "binary",
+                "sourceBytes": 6565,
+                "medianMs": 0.36548320000000556,
+                "elapsedMs": [
+                  0.3695166000000086,
+                  0.3713250000000016,
+                  0.364316800000006,
+                  0.36548320000000556,
+                  0.36367500000000064
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "integers",
+                "format": "text",
+                "sourceBytes": 19004,
+                "medianMs": 18.316174999999998,
+                "elapsedMs": [
+                  18.580449999999995,
+                  18.308249999999997,
+                  18.316174999999998,
+                  18.309450000000016,
+                  18.604891599999995
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "floats",
+                "format": "text",
+                "sourceBytes": 22588,
+                "medianMs": 20.621225000000003,
+                "elapsedMs": [
+                  20.6422916,
+                  20.621225000000003,
+                  21.01635839999999,
+                  20.557566599999973,
+                  20.477599999999985
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectors",
+                "format": "text",
+                "sourceBytes": 18492,
+                "medianMs": 12.486633399999983,
+                "elapsedMs": [
+                  12.6818084,
+                  12.54770840000001,
+                  12.47745,
+                  12.481625000000031,
+                  12.486633399999983
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "functions",
+                "format": "text",
+                "sourceBytes": 40755,
+                "medianMs": 37.44860000000008,
+                "elapsedMs": [
+                  37.71788319999996,
+                  37.33541660000001,
+                  37.44860000000008,
+                  38.011275000000026,
+                  37.34742500000002
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "integersWide",
+                "format": "text",
+                "sourceBytes": 18746,
+                "medianMs": 12.10932499999999,
+                "elapsedMs": [
+                  12.10932499999999,
+                  12.244916600000034,
+                  12.213783400000011,
+                  12.090083400000003,
+                  12.100925000000007
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "decimalScales",
+                "format": "text",
+                "sourceBytes": 13882,
+                "medianMs": 121.93600819999992,
+                "elapsedMs": [
+                  121.92806660000005,
+                  121.93600819999992,
+                  122.33928340000003,
+                  121.8491915999999,
+                  122.12498340000002
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "decimalDigits",
+                "format": "text",
+                "sourceBytes": 17722,
+                "medianMs": 47.174983400000016,
+                "elapsedMs": [
+                  47.44138339999991,
+                  47.14899999999998,
+                  47.263716600000045,
+                  47.174983400000016,
+                  47.17347499999996
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "floatsHex",
+                "format": "text",
+                "sourceBytes": 10810,
+                "medianMs": 97.91081659999982,
+                "elapsedMs": [
+                  96.85298340000008,
+                  97.58672500000011,
+                  98.36317500000004,
+                  98.16661679999997,
+                  97.91081659999982
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "hexDigits",
+                "format": "text",
+                "sourceBytes": 18490,
+                "medianMs": 52.947516600000014,
+                "elapsedMs": [
+                  52.947516600000014,
+                  53.08478340000001,
+                  53.15609180000028,
+                  52.7833418000002,
+                  52.7021084
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "dataBytes",
+                "format": "text",
+                "sourceBytes": 12382,
+                "medianMs": 6.849399999999878,
+                "elapsedMs": [
+                  6.816108199999872,
+                  6.8776831999999555,
+                  6.861658200000238,
+                  6.849399999999878,
+                  6.849125000000276
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "whitespace",
+                "format": "text",
+                "sourceBytes": 37434,
+                "medianMs": 8.125050000000192,
+                "elapsedMs": [
+                  8.246783399999913,
+                  8.125050000000192,
+                  8.117333399999916,
+                  8.107200000000011,
+                  8.277266599999711
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "lineComments",
+                "format": "text",
+                "sourceBytes": 35898,
+                "medianMs": 5.265933399999994,
+                "elapsedMs": [
+                  5.306674999999814,
+                  5.265933399999994,
+                  5.358183400000053,
+                  5.228291800000079,
+                  5.209408400000029
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "blockComments",
+                "format": "text",
+                "sourceBytes": 44602,
+                "medianMs": 8.20064999999995,
+                "elapsedMs": [
+                  8.24898319999993,
+                  8.19928340000006,
+                  8.153558200000043,
+                  8.201591800000097,
+                  8.20064999999995
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "namesPrefix",
+                "format": "text",
+                "sourceBytes": 13407,
+                "medianMs": 15.811866799999915,
+                "elapsedMs": [
+                  15.876124999999956,
+                  15.888316599999962,
+                  15.787208400000235,
+                  15.80792500000025,
+                  15.811866799999915
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "namesLengths",
+                "format": "text",
+                "sourceBytes": 19599,
+                "medianMs": 8.253199999999925,
+                "elapsedMs": [
+                  8.22284159999981,
+                  8.313166600000113,
+                  8.260874999999942,
+                  8.253199999999925,
+                  8.244908399999986
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "integersBinary",
+                "format": "binary",
+                "sourceBytes": 3110,
+                "medianMs": 25.496299999999973,
+                "elapsedMs": [
+                  25.72578319999993,
+                  25.783791599999677,
+                  25.496299999999973,
+                  25.454266599999755,
+                  25.356891800000085
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "floatsBinary",
+                "format": "binary",
+                "sourceBytes": 10285,
+                "medianMs": 87.51442500000012,
+                "elapsedMs": [
+                  87.51442500000012,
+                  87.59899159999986,
+                  87.87808340000011,
+                  87.31748320000005,
+                  87.5080334000002
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorsBinary",
+                "format": "binary",
+                "sourceBytes": 10278,
+                "medianMs": 23.86861659999995,
+                "elapsedMs": [
+                  23.86861659999995,
+                  23.757033200000297,
+                  23.94696660000009,
+                  23.806550000000424,
+                  23.870724999999947
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "functionsBinary",
+                "format": "binary",
+                "sourceBytes": 6565,
+                "medianMs": 50.929233399999795,
+                "elapsedMs": [
+                  51.120041599999965,
+                  50.98586660000001,
+                  50.85824999999968,
+                  50.80463320000054,
+                  50.929233399999795
+                ]
+              }
+            ]
+          },
+          "loadBenchmark": {
+            "node": "v24.11.1",
+            "binaryen": "wasm-opt version 133",
+            "engineSourceSha256": "e7ea2cc529910f6a7d79dc7bc60b78e847cc5a183ea6f8f1319727ce83da3130",
+            "binarySha256": "ad10207b6a60f9ef3baac3e0a115052162feb2e39987c1185608dc4362df5934",
+            "phase": "load",
+            "repeats": 5,
+            "samples": 5,
+            "cases": [
+              {
+                "runtime": "bootstrap",
+                "name": "integers",
+                "format": "text",
+                "sourceBytes": 19004,
+                "medianMs": 0.1472999999999999,
+                "elapsedMs": [
+                  0.7144999999999996,
+                  0.16484999999999986,
+                  0.14113320000000015,
+                  0.1472999999999999,
+                  0.1397500000000008
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "floats",
+                "format": "text",
+                "sourceBytes": 22588,
+                "medianMs": 0.16155819999999893,
+                "elapsedMs": [
+                  0.18830000000000097,
+                  0.1900583999999995,
+                  0.16155819999999893,
+                  0.1348249999999993,
+                  0.13544160000000005
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectors",
+                "format": "text",
+                "sourceBytes": 18492,
+                "medianMs": 0.1393168000000003,
+                "elapsedMs": [
+                  0.1509749999999997,
+                  0.1393168000000003,
+                  0.1413333999999992,
+                  0.12759160000000236,
+                  0.13331680000000007
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "functions",
+                "format": "text",
+                "sourceBytes": 40755,
+                "medianMs": 0.23683340000000044,
+                "elapsedMs": [
+                  0.23640000000000044,
+                  0.23904179999999825,
+                  0.24824160000000006,
+                  0.2368249999999989,
+                  0.23683340000000044
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "integersWide",
+                "format": "text",
+                "sourceBytes": 18746,
+                "medianMs": 0.08752499999999941,
+                "elapsedMs": [
+                  0.08752499999999941,
+                  0.08799159999999802,
+                  0.08629999999999996,
+                  0.0944168000000019,
+                  0.08659159999999985
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "decimalScales",
+                "format": "text",
+                "sourceBytes": 13882,
+                "medianMs": 0.5330000000000013,
+                "elapsedMs": [
+                  0.5955000000000013,
+                  0.5421500000000009,
+                  0.5330000000000013,
+                  0.5234581999999989,
+                  0.5268917999999985
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "decimalDigits",
+                "format": "text",
+                "sourceBytes": 17722,
+                "medianMs": 0.23757500000000106,
+                "elapsedMs": [
+                  0.25568339999999806,
+                  0.23757500000000106,
+                  0.2464667999999989,
+                  0.23130820000000085,
+                  0.23293339999999887
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "floatsHex",
+                "format": "text",
+                "sourceBytes": 10810,
+                "medianMs": 0.3967250000000007,
+                "elapsedMs": [
+                  0.4091665999999975,
+                  0.3967250000000007,
+                  0.3965499999999992,
+                  0.39966659999999765,
+                  0.3942000000000007
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "hexDigits",
+                "format": "text",
+                "sourceBytes": 18490,
+                "medianMs": 0.2531999999999982,
+                "elapsedMs": [
+                  0.25279999999999914,
+                  0.25233340000000054,
+                  0.25774999999999865,
+                  0.2531999999999982,
+                  0.25380820000000026
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "dataBytes",
+                "format": "text",
+                "sourceBytes": 12382,
+                "medianMs": 0.07035000000000195,
+                "elapsedMs": [
+                  0.1273083999999983,
+                  0.10266680000000009,
+                  0.07035000000000195,
+                  0.06149159999999938,
+                  0.06179159999999797
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "whitespace",
+                "format": "text",
+                "sourceBytes": 37434,
+                "medianMs": 0.08609160000000315,
+                "elapsedMs": [
+                  0.08725819999999658,
+                  0.08761659999999552,
+                  0.08609160000000315,
+                  0.0819500000000005,
+                  0.08527500000000146
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "lineComments",
+                "format": "text",
+                "sourceBytes": 35898,
+                "medianMs": 0.11615840000000048,
+                "elapsedMs": [
+                  0.11844159999999988,
+                  0.1172081999999989,
+                  0.11385839999999803,
+                  0.11605000000000132,
+                  0.11615840000000048
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "blockComments",
+                "format": "text",
+                "sourceBytes": 44602,
+                "medianMs": 0.14950840000000198,
+                "elapsedMs": [
+                  0.15918340000000059,
+                  0.14950840000000198,
+                  0.14846660000000042,
+                  0.14716660000000276,
+                  0.15336660000000393
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "namesPrefix",
+                "format": "text",
+                "sourceBytes": 13407,
+                "medianMs": 0.10150840000000017,
+                "elapsedMs": [
+                  0.1113081999999963,
+                  0.10090000000000146,
+                  0.10150840000000017,
+                  0.09987500000000296,
+                  0.10787500000000136
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "namesLengths",
+                "format": "text",
+                "sourceBytes": 19599,
+                "medianMs": 0.089549999999997,
+                "elapsedMs": [
+                  0.09194159999999556,
+                  0.089549999999997,
+                  0.08696659999999952,
+                  0.08969180000000279,
+                  0.08500000000000227
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "integersBinary",
+                "format": "binary",
+                "sourceBytes": 3110,
+                "medianMs": 0.1850499999999954,
+                "elapsedMs": [
+                  0.24435819999999922,
+                  0.1850499999999954,
+                  0.18743319999999813,
+                  0.17162500000000022,
+                  0.1712418000000014
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "floatsBinary",
+                "format": "binary",
+                "sourceBytes": 10285,
+                "medianMs": 0.47564160000000016,
+                "elapsedMs": [
+                  0.47564160000000016,
+                  0.4828000000000031,
+                  0.4596749999999986,
+                  0.5029749999999978,
+                  0.45450000000000157
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorsBinary",
+                "format": "binary",
+                "sourceBytes": 10278,
+                "medianMs": 0.1820916000000011,
+                "elapsedMs": [
+                  0.1820916000000011,
+                  0.18538340000000061,
+                  0.18325000000000385,
+                  0.18029999999999974,
+                  0.17251660000000016
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "functionsBinary",
+                "format": "binary",
+                "sourceBytes": 6565,
+                "medianMs": 0.3011000000000024,
+                "elapsedMs": [
+                  0.3121334000000047,
+                  0.3013083999999992,
+                  0.3011000000000024,
+                  0.30012499999999703,
+                  0.30066679999999907
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "integers",
+                "format": "text",
+                "sourceBytes": 19004,
+                "medianMs": 14.662208399999987,
+                "elapsedMs": [
+                  14.9054332,
+                  14.722183399999995,
+                  14.642383199999994,
+                  14.662208399999987,
+                  14.65145
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "floats",
+                "format": "text",
+                "sourceBytes": 22588,
+                "medianMs": 16.85574180000001,
+                "elapsedMs": [
+                  16.85083339999999,
+                  16.86495,
+                  16.845841599999993,
+                  16.921400000000016,
+                  16.85574180000001
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectors",
+                "format": "text",
+                "sourceBytes": 18492,
+                "medianMs": 12.575766599999998,
+                "elapsedMs": [
+                  12.549374999999964,
+                  12.575766599999998,
+                  12.607624999999961,
+                  12.598041599999988,
+                  12.554408399999966
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "functions",
+                "format": "text",
+                "sourceBytes": 40755,
+                "medianMs": 30.129750000000012,
+                "elapsedMs": [
+                  30.129750000000012,
+                  30.052141600000006,
+                  30.06912500000003,
+                  30.30190819999998,
+                  30.17461659999999
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "integersWide",
+                "format": "text",
+                "sourceBytes": 18746,
+                "medianMs": 10.295241600000008,
+                "elapsedMs": [
+                  10.353691799999979,
+                  10.356566800000019,
+                  10.289941799999998,
+                  10.295241600000008,
+                  10.276199999999971
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "decimalScales",
+                "format": "text",
+                "sourceBytes": 13882,
+                "medianMs": 121.31881659999999,
+                "elapsedMs": [
+                  121.92378340000005,
+                  121.31881659999999,
+                  121.45348340000001,
+                  120.81531679999989,
+                  120.95571660000004
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "decimalDigits",
+                "format": "text",
+                "sourceBytes": 17722,
+                "medianMs": 47.00905839999996,
+                "elapsedMs": [
+                  47.06044160000001,
+                  46.97362499999999,
+                  47.22654999999995,
+                  46.92963340000006,
+                  47.00905839999996
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "floatsHex",
+                "format": "text",
+                "sourceBytes": 10810,
+                "medianMs": 96.56759999999994,
+                "elapsedMs": [
+                  96.73893339999995,
+                  96.01623340000006,
+                  96.04650840000014,
+                  96.56759999999994,
+                  99.6416165999999
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "hexDigits",
+                "format": "text",
+                "sourceBytes": 18490,
+                "medianMs": 53.48475819999985,
+                "elapsedMs": [
+                  52.99966659999991,
+                  53.58820000000014,
+                  53.519633200000314,
+                  53.48475819999985,
+                  53.411941600000134
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "dataBytes",
+                "format": "text",
+                "sourceBytes": 12382,
+                "medianMs": 6.963841800000227,
+                "elapsedMs": [
+                  6.963841800000227,
+                  6.767474999999831,
+                  6.980283200000121,
+                  7.075216799999907,
+                  6.8847332000001185
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "whitespace",
+                "format": "text",
+                "sourceBytes": 37434,
+                "medianMs": 7.802400000000125,
+                "elapsedMs": [
+                  7.802400000000125,
+                  7.720724999999947,
+                  7.9181167999999165,
+                  7.641733399999794,
+                  7.890133400000195
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "lineComments",
+                "format": "text",
+                "sourceBytes": 35898,
+                "medianMs": 4.917249999999695,
+                "elapsedMs": [
+                  5.028508199999851,
+                  4.917249999999695,
+                  4.7431418000000125,
+                  4.8590749999999385,
+                  4.963166600000113
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "blockComments",
+                "format": "text",
+                "sourceBytes": 44602,
+                "medianMs": 7.890283400000044,
+                "elapsedMs": [
+                  8.001425000000017,
+                  7.712391600000046,
+                  7.890283400000044,
+                  7.9414084,
+                  7.831000000000131
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "namesPrefix",
+                "format": "text",
+                "sourceBytes": 13407,
+                "medianMs": 15.854850000000079,
+                "elapsedMs": [
+                  15.994024999999965,
+                  15.595174999999653,
+                  16.080725000000164,
+                  15.653800000000047,
+                  15.854850000000079
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "namesLengths",
+                "format": "text",
+                "sourceBytes": 19599,
+                "medianMs": 8.148316799999884,
+                "elapsedMs": [
+                  8.108416600000055,
+                  8.14945000000007,
+                  8.096750000000247,
+                  8.148316799999884,
+                  8.207283400000232
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "integersBinary",
+                "format": "binary",
+                "sourceBytes": 3110,
+                "medianMs": 22.16820000000007,
+                "elapsedMs": [
+                  22.5424500000001,
+                  22.10586680000015,
+                  22.16820000000007,
+                  22.225633399999786,
+                  22.058266599999843
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "floatsBinary",
+                "format": "binary",
+                "sourceBytes": 10285,
+                "medianMs": 84.75859180000006,
+                "elapsedMs": [
+                  85.46699159999989,
+                  84.15,
+                  84.74650000000001,
+                  84.96217499999985,
+                  84.75859180000006
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorsBinary",
+                "format": "binary",
+                "sourceBytes": 10278,
+                "medianMs": 24.27305840000008,
+                "elapsedMs": [
+                  24.27305840000008,
+                  24.290508399999815,
+                  24.365849999999774,
+                  24.127316600000267,
+                  24.16425820000004
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "functionsBinary",
+                "format": "binary",
+                "sourceBytes": 6565,
+                "medianMs": 44.11424160000024,
+                "elapsedMs": [
+                  44.0851834000001,
+                  44.359033400000044,
+                  44.17747500000005,
+                  43.95475000000006,
+                  44.11424160000024
+                ]
+              }
+            ]
+          },
+          "constructionBenchmarkBefore": {
+            "node": "v24.11.1",
+            "binaryen": "wasm-opt version 133",
+            "engineSourceSha256": "e060b8d652aa1d68677d7b1a3a9f0727baff5be56ee22943b0f221a2ff9a9557",
+            "binarySha256": "5f779be63f31c81126e322cbd60f976f354826231ef7721d860d5e276e7a5438",
+            "phase": "construction",
+            "repeats": 5,
+            "samples": 5,
+            "cases": [
+              {
+                "name": "bootstrap",
+                "firstMs": 0.757792000000002,
+                "medianMs": 1.0177249999999987,
+                "elapsedMs": [
+                  1.3574752000000003,
+                  1.1924498000000014,
+                  1.0177249999999987,
+                  0.8128835999999978,
+                  0.9883579999999966
+                ]
+              },
+              {
+                "name": "interpreted",
+                "firstMs": 15.810749999999999,
+                "medianMs": 11.087991599999999,
+                "elapsedMs": [
+                  11.46801659999999,
+                  11.197891799999997,
+                  11.054408800000015,
+                  11.087991599999999,
+                  11.01198320000002
+                ]
+              }
+            ]
+          },
+          "constructionBenchmark": {
+            "node": "v24.11.1",
+            "binaryen": "wasm-opt version 133",
+            "engineSourceSha256": "e7ea2cc529910f6a7d79dc7bc60b78e847cc5a183ea6f8f1319727ce83da3130",
+            "binarySha256": "ad10207b6a60f9ef3baac3e0a115052162feb2e39987c1185608dc4362df5934",
+            "phase": "construction",
+            "repeats": 5,
+            "samples": 5,
+            "cases": [
+              {
+                "name": "bootstrap",
+                "firstMs": 0.7609580000000022,
+                "medianMs": 0.928600000000003,
+                "elapsedMs": [
+                  0.9802666000000002,
+                  1.1261082000000002,
+                  0.8643166000000008,
+                  0.928600000000003,
+                  0.8358081999999996
+                ]
+              },
+              {
+                "name": "interpreted",
+                "firstMs": 14.55170799999999,
+                "medianMs": 10.47946659999999,
+                "elapsedMs": [
+                  10.783758200000003,
+                  10.324516400000004,
+                  10.545933399999996,
+                  10.29833339999999,
+                  10.47946659999999
+                ]
+              }
+            ]
+          },
+          "tradeoff": "Fixed scalar signatures use the existing packed effect metadata; validation-pop/value retain stack-floor, polymorphic unreachable, type and capacity checks."
+        },
+        {
+          "name": "Scalar memory dispatch",
+          "retained": true,
+          "invocationBenchmarkBefore": {
+            "node": "v24.11.1",
+            "binaryen": "wasm-opt version 133",
+            "engineSourceSha256": "e7ea2cc529910f6a7d79dc7bc60b78e847cc5a183ea6f8f1319727ce83da3130",
+            "binarySha256": "ad10207b6a60f9ef3baac3e0a115052162feb2e39987c1185608dc4362df5934",
+            "iterations": 5000,
+            "samples": 5,
+            "cases": [
+              {
+                "runtime": "bootstrap",
+                "name": "direct",
+                "medianMs": 0.23504199999999997,
+                "elapsedMs": [
+                  0.2674170000000018,
+                  0.2591249999999974,
+                  0.23416600000000187,
+                  0.23504199999999997,
+                  0.2241250000000008
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "indirect",
+                "medianMs": 0.37333399999999983,
+                "elapsedMs": [
+                  0.39962500000000034,
+                  0.37333399999999983,
+                  0.3684590000000014,
+                  0.3627910000000014,
+                  0.4179579999999987
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "indirectTypes",
+                "medianMs": 0.34079200000000043,
+                "elapsedMs": [
+                  0.37912500000000193,
+                  0.34283299999999883,
+                  0.34079200000000043,
+                  0.33245900000000006,
+                  0.32591599999999943
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "reference",
+                "medianMs": 0.2613330000000005,
+                "elapsedMs": [
+                  0.37324999999999875,
+                  0.2613330000000005,
+                  0.2659579999999977,
+                  0.25987500000000097,
+                  0.2534169999999989
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "globalReference",
+                "medianMs": 0.2591669999999979,
+                "elapsedMs": [
+                  0.2672499999999971,
+                  0.2576660000000004,
+                  0.26095800000000224,
+                  0.2591669999999979,
+                  0.25549999999999784
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "ordinary",
+                "medianMs": 2.7819999999999965,
+                "elapsedMs": [
+                  2.8666669999999925,
+                  2.772874999999999,
+                  2.645667000000003,
+                  2.7819999999999965,
+                  2.8596670000000017
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "parameters",
+                "medianMs": 0.598667000000006,
+                "elapsedMs": [
+                  0.598667000000006,
+                  0.6462919999999883,
+                  0.6006670000000014,
+                  0.5222919999999931,
+                  0.5577080000000052
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "memory",
+                "medianMs": 0.600291999999996,
+                "elapsedMs": [
+                  0.7405420000000049,
+                  0.6573329999999942,
+                  0.600291999999996,
+                  0.5821660000000008,
+                  0.5725419999999986
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "conditions",
+                "medianMs": 0.2943750000000023,
+                "elapsedMs": [
+                  0.2943750000000023,
+                  0.28095900000000995,
+                  0.29879200000000594,
+                  0.29837499999999295,
+                  0.29079199999999616
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "loop",
+                "medianMs": 0.1872500000000059,
+                "elapsedMs": [
+                  0.15666699999999878,
+                  0.20766600000000324,
+                  0.19062499999999716,
+                  0.1872500000000059,
+                  0.1637500000000074
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "mutualDirect",
+                "medianMs": 0.13708400000000154,
+                "elapsedMs": [
+                  0.13708400000000154,
+                  0.1377910000000071,
+                  0.14075000000001125,
+                  0.1348339999999979,
+                  0.13383299999999565
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "mutualReference",
+                "medianMs": 0.1659169999999932,
+                "elapsedMs": [
+                  0.2659579999999977,
+                  0.21783299999999883,
+                  0.16304099999999266,
+                  0.1659169999999932,
+                  0.1641660000000087
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "bulkCopy",
+                "medianMs": 0.9557080000000013,
+                "elapsedMs": [
+                  0.9722500000000025,
+                  0.9557080000000013,
+                  1.0092910000000046,
+                  0.9402919999999995,
+                  0.9058750000000089
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "bulkFill",
+                "medianMs": 0.5750409999999988,
+                "elapsedMs": [
+                  0.6167919999999896,
+                  0.5750409999999988,
+                  0.569082999999992,
+                  0.5839579999999955,
+                  0.5738339999999909
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "growZero",
+                "medianMs": 0.36379200000000367,
+                "elapsedMs": [
+                  0.3562909999999988,
+                  0.3564580000000035,
+                  0.3671250000000015,
+                  0.3669170000000008,
+                  0.36379200000000367
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "growFailure",
+                "medianMs": 0.3841249999999974,
+                "elapsedMs": [
+                  0.4639580000000052,
+                  0.3939579999999978,
+                  0.3674170000000032,
+                  0.3841249999999974,
+                  0.37691600000000847
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorByteArithmetic",
+                "medianMs": 1.0717500000000086,
+                "elapsedMs": [
+                  1.0748749999999916,
+                  1.0735420000000033,
+                  1.0679999999999978,
+                  1.0717500000000086,
+                  1.0701669999999979
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorShortArithmetic",
+                "medianMs": 1.0354580000000055,
+                "elapsedMs": [
+                  1.1678339999999992,
+                  1.0426250000000152,
+                  1.0336250000000007,
+                  1.0354580000000055,
+                  1.0323750000000018
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorFloatArithmetic",
+                "medianMs": 1.0954169999999976,
+                "elapsedMs": [
+                  1.0969160000000215,
+                  1.1628329999999778,
+                  1.0954169999999976,
+                  1.0617499999999893,
+                  1.0486659999999972
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorArithmetic",
+                "medianMs": 1.0316669999999988,
+                "elapsedMs": [
+                  1.1165410000000122,
+                  1.0322920000000124,
+                  1.0283749999999827,
+                  1.0254999999999939,
+                  1.0316669999999988
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorMixed",
+                "medianMs": 0.9761249999999961,
+                "elapsedMs": [
+                  0.9814580000000035,
+                  0.9889579999999967,
+                  0.9685000000000059,
+                  0.9761249999999961,
+                  0.950000000000017
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorSelect",
+                "medianMs": 1.1236659999999858,
+                "elapsedMs": [
+                  1.2319999999999993,
+                  1.1236659999999858,
+                  1.126749999999987,
+                  1.1226249999999993,
+                  1.122084000000001
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorMemory",
+                "medianMs": 1.1511670000000152,
+                "elapsedMs": [
+                  1.1298329999999908,
+                  1.13095899999999,
+                  1.1562089999999898,
+                  1.1727500000000077,
+                  1.1511670000000152
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "integerSignExtension",
+                "medianMs": 0.7572079999999914,
+                "elapsedMs": [
+                  0.7861660000000086,
+                  0.756875000000008,
+                  0.7462920000000111,
+                  0.7572079999999914,
+                  0.7733340000000055
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "branchScalar",
+                "medianMs": 0.20020900000000097,
+                "elapsedMs": [
+                  0.19983400000000984,
+                  0.20020900000000097,
+                  0.19854100000000585,
+                  0.20720900000000597,
+                  0.20512500000000955
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "branchVector",
+                "medianMs": 0.8752920000000017,
+                "elapsedMs": [
+                  0.954291000000012,
+                  0.8752920000000017,
+                  0.8997079999999755,
+                  0.8704169999999749,
+                  0.8734579999999994
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "branchMany",
+                "medianMs": 5.578665999999998,
+                "elapsedMs": [
+                  5.574374999999975,
+                  5.578665999999998,
+                  5.69512499999999,
+                  5.516499999999979,
+                  5.609250000000003
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "direct",
+                "medianMs": 28.578458000000012,
+                "elapsedMs": [
+                  28.578458000000012,
+                  29.37700000000001,
+                  28.49399999999997,
+                  28.735749999999996,
+                  28.537082999999996
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "indirect",
+                "medianMs": 40.50341700000007,
+                "elapsedMs": [
+                  40.84887500000002,
+                  40.61250000000001,
+                  40.50341700000007,
+                  40.43258300000002,
+                  40.055834000000004
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "indirectTypes",
+                "medianMs": 42.41112499999997,
+                "elapsedMs": [
+                  42.41112499999997,
+                  42.62962500000003,
+                  42.436916,
+                  42.25762499999996,
+                  42.261792000000014
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "reference",
+                "medianMs": 31.46516699999995,
+                "elapsedMs": [
+                  31.611208000000033,
+                  31.463166,
+                  31.50208400000008,
+                  31.46516699999995,
+                  31.411166999999978
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "globalReference",
+                "medianMs": 33.30162500000006,
+                "elapsedMs": [
+                  32.70999999999992,
+                  33.30162500000006,
+                  33.75774999999999,
+                  33.743790999999874,
+                  33.01383399999986
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "ordinary",
+                "medianMs": 363.52649999999994,
+                "elapsedMs": [
+                  362.81999999999994,
+                  363.52649999999994,
+                  363.82375000000025,
+                  363.1188339999999,
+                  363.5484999999999
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "parameters",
+                "medianMs": 66.66141700000026,
+                "elapsedMs": [
+                  66.66141700000026,
+                  66.93595900000037,
+                  66.66379200000029,
+                  66.55320799999981,
+                  66.33766699999978
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "memory",
+                "medianMs": 84.2539999999999,
+                "elapsedMs": [
+                  84.2539999999999,
+                  84.16399999999976,
+                  84.64283299999988,
+                  84.52637500000037,
+                  84.21283399999993
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "conditions",
+                "medianMs": 51.62470799999983,
+                "elapsedMs": [
+                  51.370750000000044,
+                  51.98579199999995,
+                  51.41395800000009,
+                  51.62470799999983,
+                  51.75237500000003
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "loop",
+                "medianMs": 29.291291999999885,
+                "elapsedMs": [
+                  29.387708000000202,
+                  29.155416999999943,
+                  29.291291999999885,
+                  29.33141599999999,
+                  29.113083000000188
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "mutualDirect",
+                "medianMs": 30.50145799999973,
+                "elapsedMs": [
+                  30.832250000000386,
+                  30.81958299999951,
+                  30.50145799999973,
+                  30.215582999999242,
+                  30.214332999999897
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "mutualReference",
+                "medianMs": 33.83770800000002,
+                "elapsedMs": [
+                  33.811500000000706,
+                  33.89366700000028,
+                  33.83770800000002,
+                  33.83545800000047,
+                  33.943333999999595
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "bulkCopy",
+                "medianMs": 126.12724999999955,
+                "elapsedMs": [
+                  126.33962500000052,
+                  126.4705840000006,
+                  126.00766699999986,
+                  126.12724999999955,
+                  126.09320800000023
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "bulkFill",
+                "medianMs": 94.874417,
+                "elapsedMs": [
+                  95.49158399999942,
+                  94.874417,
+                  94.72158299999955,
+                  95.05349999999999,
+                  94.8628749999998
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "growZero",
+                "medianMs": 65.00529099999949,
+                "elapsedMs": [
+                  64.8720830000002,
+                  64.81520900000032,
+                  65.42737500000021,
+                  65.21258300000045,
+                  65.00529099999949
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "growFailure",
+                "medianMs": 64.68825000000015,
+                "elapsedMs": [
+                  65.07758399999966,
+                  64.68825000000015,
+                  64.7246669999995,
+                  64.53187500000058,
+                  64.54708300000038
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorByteArithmetic",
+                "medianMs": 175.0934589999997,
+                "elapsedMs": [
+                  170.3654170000009,
+                  172.0203330000004,
+                  176.83066700000018,
+                  177.31104200000027,
+                  175.0934589999997
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorShortArithmetic",
+                "medianMs": 161.55820800000038,
+                "elapsedMs": [
+                  161.7001250000003,
+                  161.10029200000008,
+                  199.5466660000002,
+                  161.1965420000006,
+                  161.55820800000038
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorFloatArithmetic",
+                "medianMs": 162.1492500000004,
+                "elapsedMs": [
+                  162.10216700000092,
+                  162.0220420000005,
+                  162.1492500000004,
+                  163.8613750000004,
+                  163.83116599999994
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorArithmetic",
+                "medianMs": 157.54941599999984,
+                "elapsedMs": [
+                  157.54941599999984,
+                  158.3605830000015,
+                  157.85662500000035,
+                  156.81237499999952,
+                  156.40712499999972
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorMixed",
+                "medianMs": 144.2408749999995,
+                "elapsedMs": [
+                  144.38237499999923,
+                  145.31124999999884,
+                  144.2408749999995,
+                  143.55570799999987,
+                  143.65958300000057
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorSelect",
+                "medianMs": 161.4375830000008,
+                "elapsedMs": [
+                  161.80912499999977,
+                  161.3099999999995,
+                  161.68979200000103,
+                  161.4375830000008,
+                  161.39816699999938
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorMemory",
+                "medianMs": 170.26004099999955,
+                "elapsedMs": [
+                  169.99241699999948,
+                  170.6541670000006,
+                  173.49625000000015,
+                  170.26004099999955,
+                  169.77341700000034
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "integerSignExtension",
+                "medianMs": 137.4940000000006,
+                "elapsedMs": [
+                  138.35012500000084,
+                  138.47433300000012,
+                  137.4940000000006,
+                  137.10675000000083,
+                  136.9778750000005
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "branchScalar",
+                "medianMs": 43.05091600000014,
+                "elapsedMs": [
+                  42.993124999999054,
+                  43.05091600000014,
+                  43.11320899999919,
+                  43.27012500000092,
+                  42.81762499999968
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "branchVector",
+                "medianMs": 143.07424999999967,
+                "elapsedMs": [
+                  143.07424999999967,
+                  143.88266599999952,
+                  142.99762499999997,
+                  142.7619999999988,
+                  143.2884580000009
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "branchMany",
+                "medianMs": 799.3959170000016,
+                "elapsedMs": [
+                  799.3959170000016,
+                  799.1366670000007,
+                  798.4072500000002,
+                  802.3719579999997,
+                  801.3217910000021
+                ]
+              }
+            ]
+          },
+          "invocationBenchmark": {
+            "node": "v24.11.1",
+            "binaryen": "wasm-opt version 133",
+            "engineSourceSha256": "e0abd9c097d6ddbf7a4341fc724663580f6a1fbbc69c63f26766867d2428d603",
+            "binarySha256": "1b9b87d5842fe9334489981215970824afc96152b3be8361a3db73fded44c0e2",
+            "iterations": 5000,
+            "samples": 5,
+            "cases": [
+              {
+                "runtime": "bootstrap",
+                "name": "direct",
+                "medianMs": 0.23166699999999452,
+                "elapsedMs": [
+                  0.25841599999999687,
+                  0.24908299999999883,
+                  0.22929099999999636,
+                  0.23166699999999452,
+                  0.22495899999999835
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "indirect",
+                "medianMs": 0.3533339999999967,
+                "elapsedMs": [
+                  0.3780000000000001,
+                  0.3533339999999967,
+                  0.36283300000000196,
+                  0.34712499999999835,
+                  0.3254579999999976
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "indirectTypes",
+                "medianMs": 0.3434999999999988,
+                "elapsedMs": [
+                  0.3516249999999985,
+                  0.348124999999996,
+                  0.3434999999999988,
+                  0.33345800000000025,
+                  0.3218749999999986
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "reference",
+                "medianMs": 0.2775829999999999,
+                "elapsedMs": [
+                  0.32800000000000296,
+                  0.29683400000000404,
+                  0.2775829999999999,
+                  0.25670800000000327,
+                  0.2452910000000017
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "globalReference",
+                "medianMs": 0.24716699999999747,
+                "elapsedMs": [
+                  0.25791700000000617,
+                  0.2478750000000005,
+                  0.24645899999999443,
+                  0.24716699999999747,
+                  0.2470829999999964
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "ordinary",
+                "medianMs": 2.7195409999999995,
+                "elapsedMs": [
+                  2.7195409999999995,
+                  2.642249999999997,
+                  2.6658330000000063,
+                  2.7767920000000004,
+                  2.781583999999995
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "parameters",
+                "medianMs": 0.5751670000000075,
+                "elapsedMs": [
+                  0.5751670000000075,
+                  0.5961250000000007,
+                  0.5910829999999976,
+                  0.517707999999999,
+                  0.5089169999999967
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "memory",
+                "medianMs": 0.3547500000000099,
+                "elapsedMs": [
+                  0.5595409999999958,
+                  0.5066249999999997,
+                  0.3547500000000099,
+                  0.34054199999999923,
+                  0.3207919999999973
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "conditions",
+                "medianMs": 0.29258399999999085,
+                "elapsedMs": [
+                  0.29520899999999983,
+                  0.2866250000000008,
+                  0.2933749999999975,
+                  0.29258399999999085,
+                  0.2804169999999999
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "loop",
+                "medianMs": 0.18687500000000057,
+                "elapsedMs": [
+                  0.18687500000000057,
+                  0.20904199999999662,
+                  0.18854200000001242,
+                  0.14525000000000432,
+                  0.14416699999999594
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "mutualDirect",
+                "medianMs": 0.13458300000000634,
+                "elapsedMs": [
+                  0.13983400000000756,
+                  0.13562500000000455,
+                  0.13325000000000387,
+                  0.13445900000000677,
+                  0.13458300000000634
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "mutualReference",
+                "medianMs": 0.16254199999998775,
+                "elapsedMs": [
+                  0.22333399999999415,
+                  0.21274999999999977,
+                  0.1597499999999883,
+                  0.16254199999998775,
+                  0.1551250000000124
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "bulkCopy",
+                "medianMs": 0.866250000000008,
+                "elapsedMs": [
+                  0.8834170000000086,
+                  0.8740420000000029,
+                  0.866250000000008,
+                  0.84375,
+                  0.839500000000001
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "bulkFill",
+                "medianMs": 0.4942909999999898,
+                "elapsedMs": [
+                  0.5212500000000091,
+                  0.5563749999999885,
+                  0.48791699999999594,
+                  0.49404100000000994,
+                  0.4942909999999898
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "growZero",
+                "medianMs": 0.40508299999999053,
+                "elapsedMs": [
+                  0.40808300000000486,
+                  0.40508299999999053,
+                  0.3994160000000022,
+                  0.4304169999999914,
+                  0.39929200000000264
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "growFailure",
+                "medianMs": 0.38066600000000506,
+                "elapsedMs": [
+                  0.40125000000000455,
+                  0.37879100000000676,
+                  0.4076249999999959,
+                  0.3777499999999918,
+                  0.38066600000000506
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorByteArithmetic",
+                "medianMs": 1.0857499999999902,
+                "elapsedMs": [
+                  1.173249999999996,
+                  1.1136250000000132,
+                  1.0836249999999978,
+                  1.0843330000000009,
+                  1.0857499999999902
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorShortArithmetic",
+                "medianMs": 1.0467499999999887,
+                "elapsedMs": [
+                  1.0467499999999887,
+                  1.0423330000000135,
+                  1.0692919999999901,
+                  1.047208000000012,
+                  1.0436250000000058
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorFloatArithmetic",
+                "medianMs": 1.0895419999999945,
+                "elapsedMs": [
+                  1.181083000000001,
+                  1.1580830000000049,
+                  1.0685420000000079,
+                  1.0620830000000012,
+                  1.0895419999999945
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorArithmetic",
+                "medianMs": 1.0375829999999837,
+                "elapsedMs": [
+                  1.043834000000004,
+                  1.0353749999999877,
+                  1.037417000000005,
+                  1.0375829999999837,
+                  1.0725830000000087
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorMixed",
+                "medianMs": 0.9799580000000105,
+                "elapsedMs": [
+                  1.0742079999999987,
+                  0.9799580000000105,
+                  0.9489590000000021,
+                  0.9692919999999958,
+                  1.0264160000000118
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorSelect",
+                "medianMs": 1.1315000000000168,
+                "elapsedMs": [
+                  1.137709000000001,
+                  1.1614170000000001,
+                  1.1298330000000192,
+                  1.1315000000000168,
+                  1.1290830000000085
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorMemory",
+                "medianMs": 1.167874999999981,
+                "elapsedMs": [
+                  1.2381249999999966,
+                  1.1602499999999907,
+                  1.167874999999981,
+                  1.1687909999999988,
+                  1.165208000000007
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "integerSignExtension",
+                "medianMs": 0.7405840000000126,
+                "elapsedMs": [
+                  0.7405840000000126,
+                  0.741500000000002,
+                  0.7419579999999826,
+                  0.7405000000000257,
+                  0.7375419999999906
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "branchScalar",
+                "medianMs": 0.21358299999999986,
+                "elapsedMs": [
+                  0.2712500000000091,
+                  0.2627080000000035,
+                  0.21358299999999986,
+                  0.1998749999999916,
+                  0.1978330000000028
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "branchVector",
+                "medianMs": 0.8777080000000126,
+                "elapsedMs": [
+                  0.8777080000000126,
+                  0.8816659999999956,
+                  0.9020419999999945,
+                  0.8740000000000236,
+                  0.8744580000000042
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "branchMany",
+                "medianMs": 5.5745000000000005,
+                "elapsedMs": [
+                  5.7831250000000125,
+                  5.614874999999984,
+                  5.531917000000021,
+                  5.571084000000013,
+                  5.5745000000000005
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "direct",
+                "medianMs": 21.289792000000006,
+                "elapsedMs": [
+                  21.591707999999983,
+                  21.289792000000006,
+                  22.042250000000024,
+                  20.933749999999975,
+                  21.14654200000001
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "indirect",
+                "medianMs": 30.316584000000034,
+                "elapsedMs": [
+                  30.512833,
+                  30.480542000000014,
+                  30.316584000000034,
+                  30.224999999999966,
+                  30.23154199999999
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "indirectTypes",
+                "medianMs": 31.471250000000055,
+                "elapsedMs": [
+                  31.471250000000055,
+                  32.051000000000045,
+                  31.64650000000006,
+                  31.265791000000036,
+                  31.422124999999937
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "reference",
+                "medianMs": 23.65229099999999,
+                "elapsedMs": [
+                  23.65229099999999,
+                  23.641624999999976,
+                  23.96783400000004,
+                  23.834625000000074,
+                  23.540666999999985
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "globalReference",
+                "medianMs": 24.535124999999994,
+                "elapsedMs": [
+                  24.681041999999934,
+                  24.484375,
+                  24.560749999999985,
+                  24.535124999999994,
+                  24.438292000000047
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "ordinary",
+                "medianMs": 265.7884999999999,
+                "elapsedMs": [
+                  266.519417,
+                  266.548583,
+                  265.6917090000002,
+                  265.6444170000002,
+                  265.7884999999999
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "parameters",
+                "medianMs": 50.209499999999935,
+                "elapsedMs": [
+                  50.00370800000019,
+                  50.14787499999966,
+                  50.730499999999665,
+                  50.46008299999994,
+                  50.209499999999935
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "memory",
+                "medianMs": 54.65062500000022,
+                "elapsedMs": [
+                  54.86612500000001,
+                  54.65062500000022,
+                  54.84812499999998,
+                  54.61270800000011,
+                  54.502290999999786
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "conditions",
+                "medianMs": 40.339792000000216,
+                "elapsedMs": [
+                  40.339792000000216,
+                  40.392459000000144,
+                  40.18495900000016,
+                  40.141625000000204,
+                  40.484249999999975
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "loop",
+                "medianMs": 22.390125000000353,
+                "elapsedMs": [
+                  22.434791000000132,
+                  22.37599999999975,
+                  22.346250000000055,
+                  22.390125000000353,
+                  22.660415999999714
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "mutualDirect",
+                "medianMs": 22.328500000000076,
+                "elapsedMs": [
+                  22.202374999999847,
+                  22.23558299999968,
+                  22.328500000000076,
+                  22.410292000000027,
+                  22.397750000000087
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "mutualReference",
+                "medianMs": 25.021707999999762,
+                "elapsedMs": [
+                  24.907584000000043,
+                  25.021707999999762,
+                  25.057458999999653,
+                  25.2699590000002,
+                  24.88924999999972
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "bulkCopy",
+                "medianMs": 95.60991600000034,
+                "elapsedMs": [
+                  95.60991600000034,
+                  95.55554200000006,
+                  95.66162500000019,
+                  95.65820800000029,
+                  95.411791
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "bulkFill",
+                "medianMs": 70.22658399999955,
+                "elapsedMs": [
+                  70.13516699999991,
+                  70.22658399999955,
+                  70.40779100000054,
+                  70.75616699999955,
+                  70.11737499999981
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "growZero",
+                "medianMs": 51.84808299999986,
+                "elapsedMs": [
+                  51.87095800000043,
+                  51.932042000000365,
+                  51.6587499999996,
+                  51.84808299999986,
+                  51.840290999999525
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "growFailure",
+                "medianMs": 51.879249999999956,
+                "elapsedMs": [
+                  51.799167000000125,
+                  51.801666999999725,
+                  51.879249999999956,
+                  54.30066600000009,
+                  52.167958
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorByteArithmetic",
+                "medianMs": 155.73800000000028,
+                "elapsedMs": [
+                  155.73800000000028,
+                  156.17349999999988,
+                  155.80324999999993,
+                  155.51600000000053,
+                  155.68395899999996
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorShortArithmetic",
+                "medianMs": 145.27516699999978,
+                "elapsedMs": [
+                  145.27516699999978,
+                  144.9790410000005,
+                  144.85616599999958,
+                  146.08904200000052,
+                  145.69404100000065
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorFloatArithmetic",
+                "medianMs": 146.22591700000066,
+                "elapsedMs": [
+                  146.390625,
+                  146.22591700000066,
+                  146.04295899999943,
+                  146.50845800000025,
+                  145.5999579999998
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorArithmetic",
+                "medianMs": 139.3276249999999,
+                "elapsedMs": [
+                  140.55954100000054,
+                  139.38595799999985,
+                  139.3276249999999,
+                  138.862666,
+                  138.91070800000034
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorMixed",
+                "medianMs": 128.82675000000017,
+                "elapsedMs": [
+                  128.27995800000008,
+                  129.3833340000001,
+                  129.19183299999986,
+                  128.82675000000017,
+                  128.0185419999998
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorSelect",
+                "medianMs": 144.67704199999935,
+                "elapsedMs": [
+                  144.3458750000009,
+                  144.61612499999865,
+                  144.67704199999935,
+                  144.93933300000026,
+                  145.53749999999854
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorMemory",
+                "medianMs": 150.40287499999977,
+                "elapsedMs": [
+                  150.50254099999984,
+                  150.27779200000077,
+                  150.40287499999977,
+                  150.76608299999862,
+                  150.32083299999977
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "integerSignExtension",
+                "medianMs": 107.78800000000047,
+                "elapsedMs": [
+                  107.38125000000036,
+                  107.92312500000116,
+                  107.46858299999985,
+                  108.71108400000048,
+                  107.78800000000047
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "branchScalar",
+                "medianMs": 33.005708999999115,
+                "elapsedMs": [
+                  33.0172079999993,
+                  32.93983300000036,
+                  32.94141599999966,
+                  33.005708999999115,
+                  33.03758300000118
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "branchVector",
+                "medianMs": 126.03429200000028,
+                "elapsedMs": [
+                  125.85716599999978,
+                  126.03429200000028,
+                  126.0963329999995,
+                  126.74958399999923,
+                  125.77037500000006
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "branchMany",
+                "medianMs": 738.453125,
+                "elapsedMs": [
+                  738.453125,
+                  737.1687500000007,
+                  739.8009999999995,
+                  737.9047499999997,
+                  739.8934170000011
+                ]
+              }
+            ]
+          },
+          "tradeoff": "Dedicated scalar operand/result handling uses unchanged resource-apply/address helpers and selects memory on every operation. SIMD/bulk and generic resource paths remain unchanged."
+        },
+        {
+          "name": "Hybrid opcode route metadata",
+          "retained": false,
+          "invocationBenchmarkBefore": {
+            "node": "v24.11.1",
+            "binaryen": "wasm-opt version 133",
+            "engineSourceSha256": "e0abd9c097d6ddbf7a4341fc724663580f6a1fbbc69c63f26766867d2428d603",
+            "binarySha256": "1b9b87d5842fe9334489981215970824afc96152b3be8361a3db73fded44c0e2",
+            "iterations": 5000,
+            "samples": 5,
+            "cases": [
+              {
+                "runtime": "bootstrap",
+                "name": "direct",
+                "medianMs": 0.23166699999999452,
+                "elapsedMs": [
+                  0.25841599999999687,
+                  0.24908299999999883,
+                  0.22929099999999636,
+                  0.23166699999999452,
+                  0.22495899999999835
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "indirect",
+                "medianMs": 0.3533339999999967,
+                "elapsedMs": [
+                  0.3780000000000001,
+                  0.3533339999999967,
+                  0.36283300000000196,
+                  0.34712499999999835,
+                  0.3254579999999976
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "indirectTypes",
+                "medianMs": 0.3434999999999988,
+                "elapsedMs": [
+                  0.3516249999999985,
+                  0.348124999999996,
+                  0.3434999999999988,
+                  0.33345800000000025,
+                  0.3218749999999986
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "reference",
+                "medianMs": 0.2775829999999999,
+                "elapsedMs": [
+                  0.32800000000000296,
+                  0.29683400000000404,
+                  0.2775829999999999,
+                  0.25670800000000327,
+                  0.2452910000000017
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "globalReference",
+                "medianMs": 0.24716699999999747,
+                "elapsedMs": [
+                  0.25791700000000617,
+                  0.2478750000000005,
+                  0.24645899999999443,
+                  0.24716699999999747,
+                  0.2470829999999964
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "ordinary",
+                "medianMs": 2.7195409999999995,
+                "elapsedMs": [
+                  2.7195409999999995,
+                  2.642249999999997,
+                  2.6658330000000063,
+                  2.7767920000000004,
+                  2.781583999999995
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "parameters",
+                "medianMs": 0.5751670000000075,
+                "elapsedMs": [
+                  0.5751670000000075,
+                  0.5961250000000007,
+                  0.5910829999999976,
+                  0.517707999999999,
+                  0.5089169999999967
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "memory",
+                "medianMs": 0.3547500000000099,
+                "elapsedMs": [
+                  0.5595409999999958,
+                  0.5066249999999997,
+                  0.3547500000000099,
+                  0.34054199999999923,
+                  0.3207919999999973
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "conditions",
+                "medianMs": 0.29258399999999085,
+                "elapsedMs": [
+                  0.29520899999999983,
+                  0.2866250000000008,
+                  0.2933749999999975,
+                  0.29258399999999085,
+                  0.2804169999999999
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "loop",
+                "medianMs": 0.18687500000000057,
+                "elapsedMs": [
+                  0.18687500000000057,
+                  0.20904199999999662,
+                  0.18854200000001242,
+                  0.14525000000000432,
+                  0.14416699999999594
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "mutualDirect",
+                "medianMs": 0.13458300000000634,
+                "elapsedMs": [
+                  0.13983400000000756,
+                  0.13562500000000455,
+                  0.13325000000000387,
+                  0.13445900000000677,
+                  0.13458300000000634
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "mutualReference",
+                "medianMs": 0.16254199999998775,
+                "elapsedMs": [
+                  0.22333399999999415,
+                  0.21274999999999977,
+                  0.1597499999999883,
+                  0.16254199999998775,
+                  0.1551250000000124
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "bulkCopy",
+                "medianMs": 0.866250000000008,
+                "elapsedMs": [
+                  0.8834170000000086,
+                  0.8740420000000029,
+                  0.866250000000008,
+                  0.84375,
+                  0.839500000000001
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "bulkFill",
+                "medianMs": 0.4942909999999898,
+                "elapsedMs": [
+                  0.5212500000000091,
+                  0.5563749999999885,
+                  0.48791699999999594,
+                  0.49404100000000994,
+                  0.4942909999999898
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "growZero",
+                "medianMs": 0.40508299999999053,
+                "elapsedMs": [
+                  0.40808300000000486,
+                  0.40508299999999053,
+                  0.3994160000000022,
+                  0.4304169999999914,
+                  0.39929200000000264
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "growFailure",
+                "medianMs": 0.38066600000000506,
+                "elapsedMs": [
+                  0.40125000000000455,
+                  0.37879100000000676,
+                  0.4076249999999959,
+                  0.3777499999999918,
+                  0.38066600000000506
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorByteArithmetic",
+                "medianMs": 1.0857499999999902,
+                "elapsedMs": [
+                  1.173249999999996,
+                  1.1136250000000132,
+                  1.0836249999999978,
+                  1.0843330000000009,
+                  1.0857499999999902
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorShortArithmetic",
+                "medianMs": 1.0467499999999887,
+                "elapsedMs": [
+                  1.0467499999999887,
+                  1.0423330000000135,
+                  1.0692919999999901,
+                  1.047208000000012,
+                  1.0436250000000058
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorFloatArithmetic",
+                "medianMs": 1.0895419999999945,
+                "elapsedMs": [
+                  1.181083000000001,
+                  1.1580830000000049,
+                  1.0685420000000079,
+                  1.0620830000000012,
+                  1.0895419999999945
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorArithmetic",
+                "medianMs": 1.0375829999999837,
+                "elapsedMs": [
+                  1.043834000000004,
+                  1.0353749999999877,
+                  1.037417000000005,
+                  1.0375829999999837,
+                  1.0725830000000087
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorMixed",
+                "medianMs": 0.9799580000000105,
+                "elapsedMs": [
+                  1.0742079999999987,
+                  0.9799580000000105,
+                  0.9489590000000021,
+                  0.9692919999999958,
+                  1.0264160000000118
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorSelect",
+                "medianMs": 1.1315000000000168,
+                "elapsedMs": [
+                  1.137709000000001,
+                  1.1614170000000001,
+                  1.1298330000000192,
+                  1.1315000000000168,
+                  1.1290830000000085
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorMemory",
+                "medianMs": 1.167874999999981,
+                "elapsedMs": [
+                  1.2381249999999966,
+                  1.1602499999999907,
+                  1.167874999999981,
+                  1.1687909999999988,
+                  1.165208000000007
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "integerSignExtension",
+                "medianMs": 0.7405840000000126,
+                "elapsedMs": [
+                  0.7405840000000126,
+                  0.741500000000002,
+                  0.7419579999999826,
+                  0.7405000000000257,
+                  0.7375419999999906
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "branchScalar",
+                "medianMs": 0.21358299999999986,
+                "elapsedMs": [
+                  0.2712500000000091,
+                  0.2627080000000035,
+                  0.21358299999999986,
+                  0.1998749999999916,
+                  0.1978330000000028
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "branchVector",
+                "medianMs": 0.8777080000000126,
+                "elapsedMs": [
+                  0.8777080000000126,
+                  0.8816659999999956,
+                  0.9020419999999945,
+                  0.8740000000000236,
+                  0.8744580000000042
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "branchMany",
+                "medianMs": 5.5745000000000005,
+                "elapsedMs": [
+                  5.7831250000000125,
+                  5.614874999999984,
+                  5.531917000000021,
+                  5.571084000000013,
+                  5.5745000000000005
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "direct",
+                "medianMs": 21.289792000000006,
+                "elapsedMs": [
+                  21.591707999999983,
+                  21.289792000000006,
+                  22.042250000000024,
+                  20.933749999999975,
+                  21.14654200000001
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "indirect",
+                "medianMs": 30.316584000000034,
+                "elapsedMs": [
+                  30.512833,
+                  30.480542000000014,
+                  30.316584000000034,
+                  30.224999999999966,
+                  30.23154199999999
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "indirectTypes",
+                "medianMs": 31.471250000000055,
+                "elapsedMs": [
+                  31.471250000000055,
+                  32.051000000000045,
+                  31.64650000000006,
+                  31.265791000000036,
+                  31.422124999999937
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "reference",
+                "medianMs": 23.65229099999999,
+                "elapsedMs": [
+                  23.65229099999999,
+                  23.641624999999976,
+                  23.96783400000004,
+                  23.834625000000074,
+                  23.540666999999985
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "globalReference",
+                "medianMs": 24.535124999999994,
+                "elapsedMs": [
+                  24.681041999999934,
+                  24.484375,
+                  24.560749999999985,
+                  24.535124999999994,
+                  24.438292000000047
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "ordinary",
+                "medianMs": 265.7884999999999,
+                "elapsedMs": [
+                  266.519417,
+                  266.548583,
+                  265.6917090000002,
+                  265.6444170000002,
+                  265.7884999999999
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "parameters",
+                "medianMs": 50.209499999999935,
+                "elapsedMs": [
+                  50.00370800000019,
+                  50.14787499999966,
+                  50.730499999999665,
+                  50.46008299999994,
+                  50.209499999999935
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "memory",
+                "medianMs": 54.65062500000022,
+                "elapsedMs": [
+                  54.86612500000001,
+                  54.65062500000022,
+                  54.84812499999998,
+                  54.61270800000011,
+                  54.502290999999786
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "conditions",
+                "medianMs": 40.339792000000216,
+                "elapsedMs": [
+                  40.339792000000216,
+                  40.392459000000144,
+                  40.18495900000016,
+                  40.141625000000204,
+                  40.484249999999975
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "loop",
+                "medianMs": 22.390125000000353,
+                "elapsedMs": [
+                  22.434791000000132,
+                  22.37599999999975,
+                  22.346250000000055,
+                  22.390125000000353,
+                  22.660415999999714
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "mutualDirect",
+                "medianMs": 22.328500000000076,
+                "elapsedMs": [
+                  22.202374999999847,
+                  22.23558299999968,
+                  22.328500000000076,
+                  22.410292000000027,
+                  22.397750000000087
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "mutualReference",
+                "medianMs": 25.021707999999762,
+                "elapsedMs": [
+                  24.907584000000043,
+                  25.021707999999762,
+                  25.057458999999653,
+                  25.2699590000002,
+                  24.88924999999972
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "bulkCopy",
+                "medianMs": 95.60991600000034,
+                "elapsedMs": [
+                  95.60991600000034,
+                  95.55554200000006,
+                  95.66162500000019,
+                  95.65820800000029,
+                  95.411791
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "bulkFill",
+                "medianMs": 70.22658399999955,
+                "elapsedMs": [
+                  70.13516699999991,
+                  70.22658399999955,
+                  70.40779100000054,
+                  70.75616699999955,
+                  70.11737499999981
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "growZero",
+                "medianMs": 51.84808299999986,
+                "elapsedMs": [
+                  51.87095800000043,
+                  51.932042000000365,
+                  51.6587499999996,
+                  51.84808299999986,
+                  51.840290999999525
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "growFailure",
+                "medianMs": 51.879249999999956,
+                "elapsedMs": [
+                  51.799167000000125,
+                  51.801666999999725,
+                  51.879249999999956,
+                  54.30066600000009,
+                  52.167958
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorByteArithmetic",
+                "medianMs": 155.73800000000028,
+                "elapsedMs": [
+                  155.73800000000028,
+                  156.17349999999988,
+                  155.80324999999993,
+                  155.51600000000053,
+                  155.68395899999996
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorShortArithmetic",
+                "medianMs": 145.27516699999978,
+                "elapsedMs": [
+                  145.27516699999978,
+                  144.9790410000005,
+                  144.85616599999958,
+                  146.08904200000052,
+                  145.69404100000065
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorFloatArithmetic",
+                "medianMs": 146.22591700000066,
+                "elapsedMs": [
+                  146.390625,
+                  146.22591700000066,
+                  146.04295899999943,
+                  146.50845800000025,
+                  145.5999579999998
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorArithmetic",
+                "medianMs": 139.3276249999999,
+                "elapsedMs": [
+                  140.55954100000054,
+                  139.38595799999985,
+                  139.3276249999999,
+                  138.862666,
+                  138.91070800000034
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorMixed",
+                "medianMs": 128.82675000000017,
+                "elapsedMs": [
+                  128.27995800000008,
+                  129.3833340000001,
+                  129.19183299999986,
+                  128.82675000000017,
+                  128.0185419999998
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorSelect",
+                "medianMs": 144.67704199999935,
+                "elapsedMs": [
+                  144.3458750000009,
+                  144.61612499999865,
+                  144.67704199999935,
+                  144.93933300000026,
+                  145.53749999999854
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorMemory",
+                "medianMs": 150.40287499999977,
+                "elapsedMs": [
+                  150.50254099999984,
+                  150.27779200000077,
+                  150.40287499999977,
+                  150.76608299999862,
+                  150.32083299999977
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "integerSignExtension",
+                "medianMs": 107.78800000000047,
+                "elapsedMs": [
+                  107.38125000000036,
+                  107.92312500000116,
+                  107.46858299999985,
+                  108.71108400000048,
+                  107.78800000000047
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "branchScalar",
+                "medianMs": 33.005708999999115,
+                "elapsedMs": [
+                  33.0172079999993,
+                  32.93983300000036,
+                  32.94141599999966,
+                  33.005708999999115,
+                  33.03758300000118
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "branchVector",
+                "medianMs": 126.03429200000028,
+                "elapsedMs": [
+                  125.85716599999978,
+                  126.03429200000028,
+                  126.0963329999995,
+                  126.74958399999923,
+                  125.77037500000006
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "branchMany",
+                "medianMs": 738.453125,
+                "elapsedMs": [
+                  738.453125,
+                  737.1687500000007,
+                  739.8009999999995,
+                  737.9047499999997,
+                  739.8934170000011
+                ]
+              }
+            ]
+          },
+          "invocationBenchmark": {
+            "node": "v24.11.1",
+            "binaryen": "wasm-opt version 133",
+            "engineSourceSha256": "07269cc45200bde391bc3d956bf4f00e5798b2842f9c5b28dd0535bab3ab4aa8",
+            "binarySha256": "1ff92cbea73896b98cb2a73ab78dbdab3a569e788faa4ba4ab05f48ccee6fb63",
+            "iterations": 5000,
+            "samples": 5,
+            "cases": [
+              {
+                "runtime": "bootstrap",
+                "name": "direct",
+                "medianMs": 0.23220799999999997,
+                "elapsedMs": [
+                  0.2560000000000002,
+                  0.2431669999999997,
+                  0.23220799999999997,
+                  0.23116599999999465,
+                  0.22075000000000244
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "indirect",
+                "medianMs": 0.404791000000003,
+                "elapsedMs": [
+                  0.4340000000000046,
+                  0.404791000000003,
+                  1.2375839999999982,
+                  0.3531249999999986,
+                  0.33191699999999713
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "indirectTypes",
+                "medianMs": 0.3472500000000025,
+                "elapsedMs": [
+                  0.35333300000000634,
+                  0.3480830000000026,
+                  0.3472500000000025,
+                  0.3332499999999996,
+                  0.32337499999999864
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "reference",
+                "medianMs": 0.2759580000000028,
+                "elapsedMs": [
+                  0.30545800000000156,
+                  0.3191670000000002,
+                  0.2759580000000028,
+                  0.25849999999999795,
+                  0.2446249999999992
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "globalReference",
+                "medianMs": 0.2615419999999986,
+                "elapsedMs": [
+                  0.268416000000002,
+                  0.2608329999999981,
+                  0.25987500000000097,
+                  0.26241699999999923,
+                  0.2615419999999986
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "ordinary",
+                "medianMs": 2.8466670000000036,
+                "elapsedMs": [
+                  2.861165999999997,
+                  2.8466670000000036,
+                  2.8276670000000053,
+                  2.849375000000009,
+                  2.8301659999999913
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "parameters",
+                "medianMs": 0.5887910000000005,
+                "elapsedMs": [
+                  0.5906659999999988,
+                  0.5887910000000005,
+                  0.6058330000000041,
+                  0.5278330000000011,
+                  0.5285829999999976
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "memory",
+                "medianMs": 0.3645839999999936,
+                "elapsedMs": [
+                  0.5700829999999968,
+                  0.512999999999991,
+                  0.3645839999999936,
+                  0.359375,
+                  0.34166700000000105
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "conditions",
+                "medianMs": 0.31183300000000713,
+                "elapsedMs": [
+                  0.31183300000000713,
+                  0.3186670000000049,
+                  0.31441699999999173,
+                  0.308125000000004,
+                  0.3011250000000132
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "loop",
+                "medianMs": 0.20591699999999946,
+                "elapsedMs": [
+                  0.2224170000000072,
+                  0.16774999999999807,
+                  0.21920799999999474,
+                  0.20591699999999946,
+                  0.16095799999999372
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "mutualDirect",
+                "medianMs": 0.14083400000001234,
+                "elapsedMs": [
+                  0.1363330000000076,
+                  0.14124999999999943,
+                  0.1409579999999977,
+                  0.13470900000000086,
+                  0.14083400000001234
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "mutualReference",
+                "medianMs": 0.1659169999999932,
+                "elapsedMs": [
+                  0.22745899999999608,
+                  0.22395899999999358,
+                  0.1659169999999932,
+                  0.1657080000000093,
+                  0.1585409999999996
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "bulkCopy",
+                "medianMs": 0.8796250000000043,
+                "elapsedMs": [
+                  0.8820830000000086,
+                  0.8796250000000043,
+                  0.8895420000000058,
+                  0.8608750000000072,
+                  0.8523330000000016
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "bulkFill",
+                "medianMs": 0.5144170000000088,
+                "elapsedMs": [
+                  0.5482500000000101,
+                  0.5144170000000088,
+                  0.5114580000000046,
+                  0.5179169999999971,
+                  0.5120409999999964
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "growZero",
+                "medianMs": 0.4021250000000123,
+                "elapsedMs": [
+                  0.4021250000000123,
+                  0.3999170000000021,
+                  0.39954099999999926,
+                  0.4039580000000029,
+                  0.4164999999999992
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "growFailure",
+                "medianMs": 0.3991669999999914,
+                "elapsedMs": [
+                  0.4105420000000066,
+                  0.39791700000000674,
+                  0.3991669999999914,
+                  0.40075000000000216,
+                  0.39725000000001387
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorByteArithmetic",
+                "medianMs": 1.1472499999999997,
+                "elapsedMs": [
+                  1.2226249999999936,
+                  1.153209000000004,
+                  1.1472499999999997,
+                  1.147166999999996,
+                  1.1445000000000078
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorShortArithmetic",
+                "medianMs": 1.0673749999999984,
+                "elapsedMs": [
+                  1.0729579999999999,
+                  1.063333,
+                  1.0673749999999984,
+                  1.0724579999999975,
+                  1.0672089999999912
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorFloatArithmetic",
+                "medianMs": 1.0885000000000105,
+                "elapsedMs": [
+                  1.2036669999999958,
+                  1.176708000000005,
+                  1.082958000000005,
+                  1.0885000000000105,
+                  1.0856250000000074
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorArithmetic",
+                "medianMs": 1.0599169999999987,
+                "elapsedMs": [
+                  1.0599169999999987,
+                  1.0578339999999997,
+                  1.0578330000000165,
+                  1.0657089999999982,
+                  1.0917080000000112
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorMixed",
+                "medianMs": 0.9649579999999958,
+                "elapsedMs": [
+                  1.046999999999997,
+                  0.9652080000000183,
+                  0.963249999999988,
+                  0.9649579999999958,
+                  0.9618330000000128
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorSelect",
+                "medianMs": 1.1668750000000045,
+                "elapsedMs": [
+                  1.1629159999999956,
+                  1.1619169999999883,
+                  1.1668750000000045,
+                  1.1737080000000049,
+                  1.1687089999999785
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vectorMemory",
+                "medianMs": 1.1905829999999753,
+                "elapsedMs": [
+                  1.2877090000000067,
+                  1.194166999999993,
+                  1.1905829999999753,
+                  1.1660829999999862,
+                  1.1805000000000234
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "integerSignExtension",
+                "medianMs": 0.798957999999999,
+                "elapsedMs": [
+                  0.800042000000019,
+                  0.7992500000000007,
+                  0.798957999999999,
+                  0.7988750000000095,
+                  0.7974159999999983
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "branchScalar",
+                "medianMs": 0.21258399999999256,
+                "elapsedMs": [
+                  0.2871250000000032,
+                  0.25979199999997604,
+                  0.21258399999999256,
+                  0.21145800000002168,
+                  0.21070900000000847
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "branchVector",
+                "medianMs": 0.9021249999999839,
+                "elapsedMs": [
+                  0.898083000000014,
+                  0.9134170000000097,
+                  0.9221670000000017,
+                  0.9021249999999839,
+                  0.899124999999998
+                ]
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "branchMany",
+                "medianMs": 5.625209000000012,
+                "elapsedMs": [
+                  5.710791,
+                  5.629166999999995,
+                  5.616957999999983,
+                  5.62308299999998,
+                  5.625209000000012
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "direct",
+                "medianMs": 21.77129199999999,
+                "elapsedMs": [
+                  22.091499999999996,
+                  21.77129199999999,
+                  22.344375000000014,
+                  21.607124999999996,
+                  21.535458000000006
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "indirect",
+                "medianMs": 30.823833000000036,
+                "elapsedMs": [
+                  30.823833000000036,
+                  30.93179200000003,
+                  30.872749999999996,
+                  30.620959000000028,
+                  30.771457999999996
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "indirectTypes",
+                "medianMs": 32.09845800000005,
+                "elapsedMs": [
+                  32.18870900000002,
+                  31.999625000000037,
+                  32.186500000000024,
+                  32.03004099999998,
+                  32.09845800000005
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "reference",
+                "medianMs": 24.379082999999923,
+                "elapsedMs": [
+                  24.379082999999923,
+                  24.25654200000008,
+                  24.249458000000004,
+                  24.644042000000013,
+                  25.981917000000067
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "globalReference",
+                "medianMs": 24.98120899999992,
+                "elapsedMs": [
+                  26.646125000000097,
+                  25.555417000000034,
+                  24.98120899999992,
+                  24.97745800000007,
+                  24.947917000000075
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "ordinary",
+                "medianMs": 269.18729200000007,
+                "elapsedMs": [
+                  268.54499999999996,
+                  269.85920899999996,
+                  269.18729200000007,
+                  268.68554199999994,
+                  269.2310000000002
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "parameters",
+                "medianMs": 51.2036250000001,
+                "elapsedMs": [
+                  51.046584000000166,
+                  50.88933399999996,
+                  51.41775000000007,
+                  51.37162500000022,
+                  51.2036250000001
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "memory",
+                "medianMs": 55.67329199999995,
+                "elapsedMs": [
+                  55.579959000000144,
+                  55.589082999999846,
+                  55.839750000000095,
+                  55.67329199999995,
+                  55.69862499999999
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "conditions",
+                "medianMs": 40.8537080000001,
+                "elapsedMs": [
+                  40.86629200000016,
+                  40.80708400000003,
+                  40.97487500000034,
+                  40.8537080000001,
+                  40.77991699999984
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "loop",
+                "medianMs": 22.657874999999876,
+                "elapsedMs": [
+                  22.847041999999874,
+                  22.613417000000027,
+                  22.657874999999876,
+                  22.640041999999994,
+                  22.733124999999745
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "mutualDirect",
+                "medianMs": 22.87587500000018,
+                "elapsedMs": [
+                  22.83633299999974,
+                  23.134791999999834,
+                  22.87587500000018,
+                  22.890957999999955,
+                  22.872458999999708
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "mutualReference",
+                "medianMs": 25.575916999999663,
+                "elapsedMs": [
+                  25.55991700000004,
+                  25.6007910000003,
+                  25.54266600000028,
+                  25.575916999999663,
+                  25.647459000000254
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "bulkCopy",
+                "medianMs": 97.7677090000002,
+                "elapsedMs": [
+                  101.27066700000023,
+                  97.7677090000002,
+                  97.7950420000002,
+                  97.714833,
+                  97.74387499999966
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "bulkFill",
+                "medianMs": 71.61962499999936,
+                "elapsedMs": [
+                  71.47483299999976,
+                  71.55354100000022,
+                  72.03412500000013,
+                  71.63900000000012,
+                  71.61962499999936
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "growZero",
+                "medianMs": 53.11962499999936,
+                "elapsedMs": [
+                  53.16895900000054,
+                  53.08045800000036,
+                  53.171875,
+                  53.03370899999936,
+                  53.11962499999936
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "growFailure",
+                "medianMs": 52.947791999999936,
+                "elapsedMs": [
+                  52.918290999999954,
+                  53.14091599999938,
+                  52.895791999999346,
+                  52.947791999999936,
+                  52.97112500000003
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorByteArithmetic",
+                "medianMs": 163.94858300000033,
+                "elapsedMs": [
+                  164.10433399999965,
+                  163.9170409999997,
+                  163.68716700000004,
+                  163.94858300000033,
+                  164.23700000000008
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorShortArithmetic",
+                "medianMs": 153.09799999999996,
+                "elapsedMs": [
+                  152.58616600000005,
+                  152.85725000000002,
+                  153.45625000000018,
+                  153.11916699999983,
+                  153.09799999999996
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorFloatArithmetic",
+                "medianMs": 152.87024999999994,
+                "elapsedMs": [
+                  152.81825000000026,
+                  152.63566600000013,
+                  152.87024999999994,
+                  152.99920800000018,
+                  153.64391699999942
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorArithmetic",
+                "medianMs": 146.48412500000086,
+                "elapsedMs": [
+                  146.48412500000086,
+                  146.27829199999996,
+                  146.48633400000017,
+                  145.89745800000037,
+                  146.89537500000006
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorMixed",
+                "medianMs": 135.3199999999997,
+                "elapsedMs": [
+                  135.0936669999992,
+                  135.3199999999997,
+                  135.47950000000128,
+                  136.08549999999923,
+                  135.15379200000098
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorSelect",
+                "medianMs": 152.59479199999987,
+                "elapsedMs": [
+                  152.67404200000055,
+                  152.3550839999989,
+                  152.73062500000015,
+                  152.59479199999987,
+                  152.56762499999968
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vectorMemory",
+                "medianMs": 157.73754200000076,
+                "elapsedMs": [
+                  157.597667,
+                  158.00183399999878,
+                  157.73754200000076,
+                  158.2191670000011,
+                  157.7252499999995
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "integerSignExtension",
+                "medianMs": 109.46504199999981,
+                "elapsedMs": [
+                  109.27358399999866,
+                  109.38537499999984,
+                  109.54625000000124,
+                  109.73945800000001,
+                  109.46504199999981
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "branchScalar",
+                "medianMs": 33.47808299999997,
+                "elapsedMs": [
+                  33.889916999998604,
+                  33.47808299999997,
+                  33.45479199999863,
+                  33.46116699999948,
+                  34.377416999999696
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "branchVector",
+                "medianMs": 131.37795800000094,
+                "elapsedMs": [
+                  131.37795800000094,
+                  131.33658300000025,
+                  131.24191600000086,
+                  131.63954100000046,
+                  131.58449999999903
+                ]
+              },
+              {
+                "runtime": "interpreted",
+                "name": "branchMany",
+                "medianMs": 778.5939999999991,
+                "elapsedMs": [
+                  778.5939999999991,
+                  777.6927919999998,
+                  777.9449999999997,
+                  779.605791,
+                  778.6024170000001
+                ]
+              }
+            ]
+          },
+          "tradeoff": "Dense scalar/control route bytes and packed extended routes fit the existing reserved space, but sequential timings regress about 1–3% for scalar and about 5% for SIMD. Experiment reverted before final validation."
+        },
+        {
+          "name": "Host invocation",
+          "retained": true,
+          "benchmark": {
+            "phase": "public-invocation",
+            "node": "v24.11.1",
+            "samples": 7,
+            "iterations": 1000,
+            "guest": "(module\n  (func (export \"scalar\") (param i32 i32) (result i32) local.get 0 local.get 1 i32.add)\n  (func (export \"float\") (param f64) (result f64) local.get 0)\n  (func (export \"vector\") (param v128) (result v128) local.get 0)\n  (func (export \"many\") (param i32 i64 f64 v128) (result i32 i64 f64 v128)\n    local.get 0 local.get 1 local.get 2 local.get 3))",
+            "engineSourceSha256": "e0abd9c097d6ddbf7a4341fc724663580f6a1fbbc69c63f26766867d2428d603",
+            "binarySha256": "1b9b87d5842fe9334489981215970824afc96152b3be8361a3db73fded44c0e2",
+            "frontendSha256Before": "eae3a5d90bcff31c51c68b47fc86bfcace24890368d0cd79f83624616bb9d58b",
+            "frontendSha256": "eae8790b62be0cb19a1f007ed6fefd826b695f779de1f0a1a71c0be6d0f85e8c",
+            "cases": [
+              {
+                "runtime": "bootstrap",
+                "name": "scalar",
+                "elapsedMsBefore": [
+                  3.0023750000000007,
+                  1.8354580000000027,
+                  1.7268749999999997,
+                  1.5880830000000046,
+                  1.8222499999999968,
+                  1.6699589999999986,
+                  1.397750000000002
+                ],
+                "elapsedMs": [
+                  2.158833000000005,
+                  1.5498750000000001,
+                  1.3531249999999986,
+                  1.1242090000000005,
+                  1.101707999999995,
+                  1.2560839999999942,
+                  1.1033749999999998
+                ],
+                "medianMsBefore": 1.7268749999999997,
+                "medianMs": 1.2560839999999942
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "float",
+                "elapsedMsBefore": [
+                  1.6657500000000027,
+                  1.654207999999997,
+                  1.748584000000001,
+                  1.777124999999998,
+                  1.7597499999999968,
+                  2.1724589999999893,
+                  1.616500000000002
+                ],
+                "elapsedMs": [
+                  1.6713749999999976,
+                  1.4621250000000003,
+                  1.3134579999999971,
+                  1.7738749999999968,
+                  1.8212919999999997,
+                  1.3429589999999934,
+                  1.7061250000000001
+                ],
+                "medianMsBefore": 1.748584000000001,
+                "medianMs": 1.6713749999999976
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "vector",
+                "elapsedMsBefore": [
+                  1.5556250000000063,
+                  1.3832909999999998,
+                  1.5414999999999992,
+                  1.4589170000000138,
+                  1.3711659999999881,
+                  1.3302500000000066,
+                  1.386209000000008
+                ],
+                "elapsedMs": [
+                  1.2398749999999978,
+                  1.2279999999999944,
+                  1.0606250000000017,
+                  1.0926249999999982,
+                  1.138666999999998,
+                  1.014458999999988,
+                  1.0003749999999911
+                ],
+                "medianMsBefore": 1.386209000000008,
+                "medianMs": 1.0926249999999982
+              },
+              {
+                "runtime": "bootstrap",
+                "name": "many",
+                "elapsedMsBefore": [
+                  4.243666999999988,
+                  3.208457999999993,
+                  3.2375000000000114,
+                  2.7392079999999908,
+                  2.810791999999992,
+                  2.7847500000000025,
+                  2.6850409999999982
+                ],
+                "elapsedMs": [
+                  2.899040999999997,
+                  2.304040999999998,
+                  2.543750000000003,
+                  2.259709000000001,
+                  2.0836669999999913,
+                  2.036292000000003,
+                  1.965167000000008
+                ],
+                "medianMsBefore": 2.810791999999992,
+                "medianMs": 2.259709000000001
+              },
+              {
+                "runtime": "interpreted",
+                "name": "scalar",
+                "elapsedMsBefore": [
+                  38.144082999999995,
+                  31.529875000000004,
+                  29.903750000000002,
+                  29.656709000000035,
+                  29.51341599999995,
+                  29.406999999999982,
+                  30.71162499999997
+                ],
+                "elapsedMs": [
+                  22.633332999999993,
+                  19.254084000000034,
+                  17.832667000000015,
+                  17.755957999999964,
+                  17.818916,
+                  17.836415999999986,
+                  18.718083000000036
+                ],
+                "medianMsBefore": 29.903750000000002,
+                "medianMs": 17.836415999999986
+              },
+              {
+                "runtime": "interpreted",
+                "name": "float",
+                "elapsedMsBefore": [
+                  25.828125,
+                  25.810542000000055,
+                  25.757125000000087,
+                  25.82974999999999,
+                  25.858292000000006,
+                  25.856583999999998,
+                  25.83533299999999
+                ],
+                "elapsedMs": [
+                  15.619874999999979,
+                  15.599666999999954,
+                  15.596332999999959,
+                  15.661082999999962,
+                  15.663208000000054,
+                  15.688541999999984,
+                  15.58420799999999
+                ],
+                "medianMsBefore": 25.82974999999999,
+                "medianMs": 15.619874999999979
+              },
+              {
+                "runtime": "interpreted",
+                "name": "vector",
+                "elapsedMsBefore": [
+                  27.947124999999915,
+                  27.485958000000096,
+                  27.51333299999999,
+                  27.387499999999932,
+                  27.468042000000082,
+                  27.369916999999987,
+                  27.414582999999993
+                ],
+                "elapsedMs": [
+                  17.09770900000001,
+                  16.65166600000009,
+                  16.527999999999906,
+                  16.50708300000008,
+                  16.534042,
+                  16.716290999999956,
+                  16.53841699999998
+                ],
+                "medianMsBefore": 27.468042000000082,
+                "medianMs": 16.53841699999998
+              },
+              {
+                "runtime": "interpreted",
+                "name": "many",
+                "elapsedMsBefore": [
+                  49.71812499999987,
+                  49.737499999999955,
+                  49.85245800000007,
+                  49.15491699999984,
+                  51.15645900000004,
+                  50.20133299999998,
+                  49.19583299999999
+                ],
+                "elapsedMs": [
+                  28.28833399999985,
+                  27.84441700000002,
+                  27.775082999999995,
+                  27.605583999999908,
+                  28.247916000000032,
+                  27.80754100000013,
+                  27.5747080000001
+                ],
+                "medianMsBefore": 49.737499999999955,
+                "medianMs": 27.80754100000013
+              }
+            ]
+          },
+          "tradeoff": "Reuse each invocation’s freshly resolved index, omit unused result signature queries, and read shared argument-high base and scalar result type once. No persistent signature, engine or checkpoint cache."
+        }
+      ],
+      "loadBenchmark": {
+        "node": "v24.11.1",
+        "binaryen": "wasm-opt version 133",
+        "engineSourceSha256": "e0abd9c097d6ddbf7a4341fc724663580f6a1fbbc69c63f26766867d2428d603",
+        "binarySha256": "1b9b87d5842fe9334489981215970824afc96152b3be8361a3db73fded44c0e2",
+        "phase": "load",
+        "repeats": 5,
+        "samples": 5,
+        "cases": [
+          {
+            "runtime": "bootstrap",
+            "name": "integers",
+            "format": "text",
+            "sourceBytes": 19004,
+            "medianMs": 0.14823339999999946,
+            "elapsedMs": [
+              0.20745840000000015,
+              0.5739165999999998,
+              0.14823339999999946,
+              0.1458584000000002,
+              0.1456834000000015
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floats",
+            "format": "text",
+            "sourceBytes": 22588,
+            "medianMs": 0.17279159999999932,
+            "elapsedMs": [
+              0.18845819999999947,
+              0.18984159999999975,
+              0.17279159999999932,
+              0.1357500000000016,
+              0.13285840000000065
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectors",
+            "format": "text",
+            "sourceBytes": 18492,
+            "medianMs": 0.13527499999999862,
+            "elapsedMs": [
+              0.1578000000000003,
+              0.3121250000000003,
+              0.13527499999999862,
+              0.12244159999999908,
+              0.11704180000000122
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "functions",
+            "format": "text",
+            "sourceBytes": 40755,
+            "medianMs": 0.2429000000000002,
+            "elapsedMs": [
+              0.24385839999999917,
+              0.2429000000000002,
+              0.2569665999999984,
+              0.23730819999999825,
+              0.23632499999999937
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "integersWide",
+            "format": "text",
+            "sourceBytes": 18746,
+            "medianMs": 0.09124180000000023,
+            "elapsedMs": [
+              0.09466659999999934,
+              0.10910840000000235,
+              0.09124180000000023,
+              0.09071659999999895,
+              0.08978340000000173
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "decimalScales",
+            "format": "text",
+            "sourceBytes": 13882,
+            "medianMs": 0.5263999999999982,
+            "elapsedMs": [
+              0.5550583999999986,
+              0.5263999999999982,
+              0.5202750000000009,
+              0.5366332,
+              0.5233834000000002
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "decimalDigits",
+            "format": "text",
+            "sourceBytes": 17722,
+            "medianMs": 0.23178319999999814,
+            "elapsedMs": [
+              0.24771660000000112,
+              0.2319250000000011,
+              0.23178319999999814,
+              0.23048320000000047,
+              0.23034999999999856
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floatsHex",
+            "format": "text",
+            "sourceBytes": 10810,
+            "medianMs": 0.3920249999999982,
+            "elapsedMs": [
+              0.39791679999999874,
+              0.3920249999999982,
+              0.3899665999999996,
+              0.39106680000000155,
+              0.3935500000000019
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "hexDigits",
+            "format": "text",
+            "sourceBytes": 18490,
+            "medianMs": 0.2515584000000047,
+            "elapsedMs": [
+              0.2559083999999984,
+              0.25276659999999823,
+              0.2515584000000047,
+              0.2506750000000011,
+              0.2513915999999995
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "dataBytes",
+            "format": "text",
+            "sourceBytes": 12382,
+            "medianMs": 0.06895840000000249,
+            "elapsedMs": [
+              0.1232499999999959,
+              0.09905839999999558,
+              0.06895840000000249,
+              0.06199179999999842,
+              0.06258340000000544
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "whitespace",
+            "format": "text",
+            "sourceBytes": 37434,
+            "medianMs": 0.08174999999999955,
+            "elapsedMs": [
+              0.08240000000000122,
+              0.08387500000000045,
+              0.08174999999999955,
+              0.0811081999999999,
+              0.08170000000000073
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "lineComments",
+            "format": "text",
+            "sourceBytes": 35898,
+            "medianMs": 0.11579999999999586,
+            "elapsedMs": [
+              0.11677500000000123,
+              0.11585000000000037,
+              0.1147168000000022,
+              0.11579999999999586,
+              0.11427499999999782
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "blockComments",
+            "format": "text",
+            "sourceBytes": 44602,
+            "medianMs": 0.1504165999999998,
+            "elapsedMs": [
+              0.1600915999999984,
+              0.1504165999999998,
+              0.15008339999999976,
+              0.14732500000000073,
+              0.15604999999999905
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "namesPrefix",
+            "format": "text",
+            "sourceBytes": 13407,
+            "medianMs": 0.10112500000000182,
+            "elapsedMs": [
+              0.11208320000000072,
+              0.10099159999999756,
+              0.10112500000000182,
+              0.09944180000000528,
+              0.10119179999999801
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "namesLengths",
+            "format": "text",
+            "sourceBytes": 19599,
+            "medianMs": 0.0853084000000024,
+            "elapsedMs": [
+              0.09212500000000431,
+              0.09038340000000175,
+              0.0848165999999992,
+              0.0853084000000024,
+              0.08524160000000051
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "integersBinary",
+            "format": "binary",
+            "sourceBytes": 3110,
+            "medianMs": 0.18470820000000004,
+            "elapsedMs": [
+              0.24604160000000092,
+              0.18770000000000095,
+              0.18470820000000004,
+              0.18025839999999677,
+              0.17259160000000406
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floatsBinary",
+            "format": "binary",
+            "sourceBytes": 10285,
+            "medianMs": 0.45859999999999557,
+            "elapsedMs": [
+              0.4781000000000006,
+              0.47058340000000387,
+              0.4536918000000014,
+              0.45859999999999557,
+              0.45506660000000354
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorsBinary",
+            "format": "binary",
+            "sourceBytes": 10278,
+            "medianMs": 0.18290000000000078,
+            "elapsedMs": [
+              0.18965000000000032,
+              0.1850499999999954,
+              0.18290000000000078,
+              0.18085820000000014,
+              0.17239159999999742
+            ]
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "functionsBinary",
+            "format": "binary",
+            "sourceBytes": 6565,
+            "medianMs": 0.29970839999999727,
+            "elapsedMs": [
+              0.3044831999999985,
+              0.29970839999999727,
+              0.2993334000000004,
+              0.2990250000000003,
+              0.3006333999999981
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "integers",
+            "format": "text",
+            "sourceBytes": 19004,
+            "medianMs": 12.964125000000001,
+            "elapsedMs": [
+              13.165866600000005,
+              12.917108400000007,
+              12.897558400000003,
+              12.964125000000001,
+              12.986616600000001
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floats",
+            "format": "text",
+            "sourceBytes": 22588,
+            "medianMs": 14.781766800000014,
+            "elapsedMs": [
+              14.853558399999997,
+              14.781766800000014,
+              14.770775000000004,
+              14.784008400000015,
+              14.766399999999999
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectors",
+            "format": "text",
+            "sourceBytes": 18492,
+            "medianMs": 11.239575000000013,
+            "elapsedMs": [
+              11.239575000000013,
+              11.220683400000008,
+              11.226191599999993,
+              11.298799999999982,
+              11.328616600000032
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "functions",
+            "format": "text",
+            "sourceBytes": 40755,
+            "medianMs": 26.457766599999967,
+            "elapsedMs": [
+              26.75143320000002,
+              26.437991599999986,
+              26.484825,
+              26.457766599999967,
+              26.394216599999982
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "integersWide",
+            "format": "text",
+            "sourceBytes": 18746,
+            "medianMs": 9.64383340000004,
+            "elapsedMs": [
+              9.450641800000039,
+              9.719774999999936,
+              9.744275000000016,
+              9.64383340000004,
+              9.192175000000043
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "decimalScales",
+            "format": "text",
+            "sourceBytes": 13882,
+            "medianMs": 90.27794999999988,
+            "elapsedMs": [
+              90.22990819999995,
+              90.18831659999996,
+              90.33971659999997,
+              90.35241659999993,
+              90.27794999999988
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "decimalDigits",
+            "format": "text",
+            "sourceBytes": 17722,
+            "medianMs": 35.85524999999998,
+            "elapsedMs": [
+              36.02970000000005,
+              36.00950840000005,
+              35.811574999999905,
+              35.85524999999998,
+              35.78600839999999
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floatsHex",
+            "format": "text",
+            "sourceBytes": 10810,
+            "medianMs": 70.8188916000001,
+            "elapsedMs": [
+              70.83769159999993,
+              70.8188916000001,
+              70.71609160000007,
+              70.70445,
+              71.22170820000011
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "hexDigits",
+            "format": "text",
+            "sourceBytes": 18490,
+            "medianMs": 39.757433200000015,
+            "elapsedMs": [
+              42.539533400000074,
+              39.74944179999984,
+              39.75378339999988,
+              39.757433200000015,
+              40.35864180000026
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "dataBytes",
+            "format": "text",
+            "sourceBytes": 12382,
+            "medianMs": 5.397766799999954,
+            "elapsedMs": [
+              5.404708200000096,
+              5.381949999999779,
+              5.397766799999954,
+              5.384316799999942,
+              5.398208199999862
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "whitespace",
+            "format": "text",
+            "sourceBytes": 37434,
+            "medianMs": 6.591983400000027,
+            "elapsedMs": [
+              6.591983400000027,
+              6.563433200000145,
+              6.595466600000146,
+              6.665866800000003,
+              6.566341599999942
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "lineComments",
+            "format": "text",
+            "sourceBytes": 35898,
+            "medianMs": 4.140074999999706,
+            "elapsedMs": [
+              4.160066600000209,
+              4.140074999999706,
+              4.1313834000000496,
+              4.1329333999998195,
+              4.143525000000227
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "blockComments",
+            "format": "text",
+            "sourceBytes": 44602,
+            "medianMs": 6.446574999999939,
+            "elapsedMs": [
+              6.45960840000007,
+              6.445541800000138,
+              6.442974999999933,
+              6.446574999999939,
+              6.454758399999991
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "namesPrefix",
+            "format": "text",
+            "sourceBytes": 13407,
+            "medianMs": 12.057700000000114,
+            "elapsedMs": [
+              12.057700000000114,
+              12.153083200000037,
+              12.049924999999712,
+              12.050166600000011,
+              12.057991599999877
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "namesLengths",
+            "format": "text",
+            "sourceBytes": 19599,
+            "medianMs": 6.886741600000096,
+            "elapsedMs": [
+              6.900441800000044,
+              6.886741600000096,
+              6.8912749999999505,
+              6.883433399999921,
+              6.88560839999991
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "integersBinary",
+            "format": "binary",
+            "sourceBytes": 3110,
+            "medianMs": 19.621558200000074,
+            "elapsedMs": [
+              19.737841599999957,
+              19.74234180000021,
+              19.621558200000074,
+              19.612741599999936,
+              19.590908399999897
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floatsBinary",
+            "format": "binary",
+            "sourceBytes": 10285,
+            "medianMs": 68.48427499999998,
+            "elapsedMs": [
+              68.57795819999993,
+              68.42754999999997,
+              68.5346582000002,
+              68.41751660000008,
+              68.48427499999998
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorsBinary",
+            "format": "binary",
+            "sourceBytes": 10278,
+            "medianMs": 21.512241599999832,
+            "elapsedMs": [
+              21.50605820000019,
+              21.622024999999848,
+              21.512241599999832,
+              21.514983399999984,
+              21.48964159999996
+            ]
+          },
+          {
+            "runtime": "interpreted",
+            "name": "functionsBinary",
+            "format": "binary",
+            "sourceBytes": 6565,
+            "medianMs": 39.2093499999999,
+            "elapsedMs": [
+              39.161175,
+              39.2093499999999,
+              39.09645000000019,
+              39.211675000000106,
+              39.22920000000013
+            ]
+          }
+        ]
+      },
+      "constructionBenchmark": {
+        "node": "v24.11.1",
+        "binaryen": "wasm-opt version 133",
+        "engineSourceSha256": "e0abd9c097d6ddbf7a4341fc724663580f6a1fbbc69c63f26766867d2428d603",
+        "binarySha256": "1b9b87d5842fe9334489981215970824afc96152b3be8361a3db73fded44c0e2",
+        "phase": "construction",
+        "repeats": 5,
+        "samples": 5,
+        "cases": [
+          {
+            "name": "bootstrap",
+            "firstMs": 0.7582920000000044,
+            "medianMs": 1.0111497999999983,
+            "elapsedMs": [
+              1.0678334000000007,
+              1.073341600000002,
+              0.8924416000000008,
+              1.0111497999999983,
+              0.7929083999999961
+            ]
+          },
+          {
+            "name": "interpreted",
+            "firstMs": 14.172832999999997,
+            "medianMs": 10.131266600000004,
+            "elapsedMs": [
+              10.461699999999997,
+              10.131266600000004,
+              10.135141399999998,
+              10.033441800000002,
+              10.023216599999978
+            ]
+          }
+        ]
+      },
+      "timingNote": "Stages measured sequentially. Host comparison alternates warmed old/new frontends on identical final engines with seven samples and 1,000 public calls per sample; its old frontend differs only in absolute default asset URLs. Timing loops exclude construction and verification. No compilation/tests/audits overlap timed benchmarks. Full suite and standalone audits run sequentially; stress inputs and frozen coverage unchanged. No CI performance thresholds."
     }
   ],
   "experiments": [

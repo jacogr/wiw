@@ -2227,3 +2227,64 @@ new memory regressions, in 218,520.759 ms (3m38.52s). Both standalone audits pas
 run), while this complete test-suite run is slower than the preceding 3m32.10s.
 Performance history records both timings independently from the targeted gains;
 coverage, limits and million-call stress inputs remain unchanged.
+
+### Scalar validation, memory dispatch and host invocation
+
+Four candidates were evaluated sequentially. Three are retained; the route-table
+experiment was reverted after its measurements. Every build uses Binaryen 133
+with `-O4 --converge` and the pinned spec inputs remain unchanged.
+
+Scalar validation reads the existing packed effect entry once for ordinary
+numeric constants, unary/binary operations and conversions. Those fixed
+signatures bypass generic family classification and the operand loop, while
+still calling the existing validation pop/push helpers. Stack floors,
+unreachable polymorphism, known type mismatches and capacity limits therefore
+retain their checks. New bootstrap/hosted regressions exercise every selected
+numeric signature, precise error offsets, block-floor underflow, overflow and
+recovery. Sequential five-sample load measurements improve hosted integer,
+float and many-function text loading by 18–20% at this stage; fresh construction
+improves by 5.5%.
+
+Scalar loads/stores now consume their low-half operands directly and publish a
+load into the consumed address slot, clearing its high half. They select the
+memory on every operation and use the unchanged resource/address helpers for
+raw float bits, sign extension, memory64 offsets, overflow and traps. Generic
+bulk and SIMD paths retain their handlers. Sequential paired invocation samples
+use the same 27 workloads, 5,000 iterations and five samples: hosted `memory`
+improves from 84.25 to 54.65 ms (35.1%), ordinary calls from 363.53 to 265.79 ms
+(26.9%), and vector memory from 170.26 to 150.40 ms (11.7%). The parent also
+interprets the child's scalar memory operations, so several other workloads
+benefit despite their guest instruction mix remaining unchanged.
+
+The route experiment gave common scalar/control opcodes a direct byte lookup
+and kept extended routes packed into nibbles. Both tables fit the existing
+reserved space, but this lookup slowed scalar workloads about 1–3% and
+SIMD workloads about 5%. Its raw paired reports remain in performance history;
+production retains the original packed route table.
+
+Public host invocation resolves the current export once and passes its index
+through the existing indexed ABI. It skips unused result-signature queries,
+reads the argument high-half base once per invocation, and decodes a scalar
+result using one type query. Signature and export-function APIs still fetch
+complete metadata. No persistent signature cache is added. New regressions
+cover current signatures after reload, stale forwarded functions, failed loads,
+wrong arguments, imports, raw signaling NaNs, mixed vector/multivalue results
+and fuel recovery in both runtimes; existing forwarding and nested self-hosting
+checks remain in the full suite.
+
+An alternating comparison uses the old/new frontends with the same final
+engine, seven samples and 1,000 short public calls per sample. Construction and
+verification are outside timing. Hosted scalar, float, vector and mixed
+multivalue calls improve by 40.4%, 39.5%, 39.8% and 44.1%, respectively. The
+combined changes improve hosted integer/float/many-function text loads by
+28–29% against the start of this session; fresh construction falls from 11.09
+to 10.13 ms (8.6%). Reports retain source/binary/frontend hashes and raw samples.
+No compilation, tests or audits overlap timed benchmarks, and no CI timing
+thresholds are introduced.
+
+All 216 tests pass in 174,915.772 ms (2m54.92s), including complete pinned
+coverage and nested self-hosting, about 20% less time than the previous complete
+run. Both standalone audits pass 65,199 commands across 258 files with zero
+failures/skips. The isolated hosted audit takes 168,126.927 ms (2m48.13s), 19.2%
+less time than the preceding 207,954.888 ms run. These whole-suite measurements
+are recorded separately from targeted benchmark gains.
