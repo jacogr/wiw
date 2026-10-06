@@ -223,9 +223,14 @@
 						(if
 							(i32.and
 								(local.get $named)
-								(i32.and
+								;; Compare bytes only after the complete span/prefix guard succeeds.
+								(if (result i32)
 									(i32.eq (local.get $n) (i32.load offset=24 (local.get $frame)))
-									(call $equal (local.get $p) (i32.load offset=20 (local.get $frame)) (local.get $n))
+									(then
+										(call $equal (local.get $p) (i32.load offset=20 (local.get $frame)) (local.get $n))
+									)
+									;; An incompatible span cannot match this name or prefix.
+									(else (i32.const 0))
 								)
 							)
 							(then
@@ -267,9 +272,14 @@
 				;; A repeated label must exactly match this control's declared identifier.
 				(if
 					(i32.eqz
-						(i32.and
+						;; Compare bytes only after the complete span/prefix guard succeeds.
+						(if (result i32)
 							(i32.eq (global.get $len) (i32.load offset=24 (local.get $frame)))
-							(call $equal (global.get $tok) (i32.load offset=20 (local.get $frame)) (global.get $len))
+							(then
+								(call $equal (global.get $tok) (i32.load offset=20 (local.get $frame)) (global.get $len))
+							)
+							;; An incompatible span cannot match this name or prefix.
+							(else (i32.const 0))
 						)
 					)
 					(then

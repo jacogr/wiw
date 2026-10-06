@@ -4,13 +4,15 @@
 		(param $n i32)
 		(result i32)
 
-		(i32.and
-			(i32.eq (global.get $kind) (i32.const 3))
-			(i32.and
-				(i32.eq (global.get $len) (local.get $n))
-				(call $equal (global.get $tok) (local.get $p) (local.get $n))
+		;; Reject wrong token kinds or lengths before reading either byte span.
+		(if
+			(i32.or
+				(i32.ne (global.get $kind) (i32.const 3))
+				(i32.ne (global.get $len) (local.get $n))
 			)
+			(then (return (i32.const 0)))
 		)
+		(call $equal (global.get $tok) (local.get $p) (local.get $n))
 	)
 
 	;; Recognize a source-backed identifier by its leading dollar sign.
@@ -151,9 +153,14 @@
 				(local.set $record (call $function (local.get $i)))
 				;; Match both the source span length and identifier bytes.
 				(if
-					(i32.and
+					;; Compare bytes only after the complete span/prefix guard succeeds.
+					(if (result i32)
 						(i32.eq (i32.load offset=4 (local.get $record)) (local.get $n))
-						(call $equal (i32.load (local.get $record)) (local.get $p) (local.get $n))
+						(then
+							(call $equal (i32.load (local.get $record)) (local.get $p) (local.get $n))
+						)
+						;; An incompatible span cannot match this name or prefix.
+						(else (i32.const 0))
 					)
 					(then
 						(return (local.get $i))
@@ -184,9 +191,14 @@
 				(local.set $record (call $local-name (local.get $i)))
 				;; Unnamed declarations have zero-length spans and cannot match a dollar-prefixed name.
 				(if
-					(i32.and
+					;; Compare bytes only after the complete span/prefix guard succeeds.
+					(if (result i32)
 						(i32.eq (i32.load offset=4 (local.get $record)) (local.get $n))
-						(call $equal (i32.load (local.get $record)) (local.get $p) (local.get $n))
+						(then
+							(call $equal (i32.load (local.get $record)) (local.get $p) (local.get $n))
+						)
+						;; An incompatible span cannot match this name or prefix.
+						(else (i32.const 0))
 					)
 					(then
 						(return (local.get $i))
@@ -242,9 +254,14 @@
 				)
 				;; Duplicate export names are invalid across all resource kinds and target indices.
 				(if
-					(i32.and
+					;; Compare bytes only after the complete span/prefix guard succeeds.
+					(if (result i32)
 						(i32.eq (i32.load offset=4 (local.get $record)) (local.get $n))
-						(call $equal (i32.load (local.get $record)) (local.get $p) (local.get $n))
+						(then
+							(call $equal (i32.load (local.get $record)) (local.get $p) (local.get $n))
+						)
+						;; An incompatible span cannot match this name or prefix.
+						(else (i32.const 0))
 					)
 					(then
 						(global.set $tok (local.get $offset))

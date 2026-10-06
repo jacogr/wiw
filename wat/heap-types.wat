@@ -139,13 +139,18 @@
 				(local.set $record (call $field-record (local.get $i)))
 				;; Field names match only when their full source-backed byte strings agree.
 				(if
-					(i32.and
+					;; Compare bytes only after the complete span/prefix guard succeeds.
+					(if (result i32)
 						(i32.eq (local.get $length) (i32.load offset=12 (local.get $record)))
-						(call $equal
-							(local.get $name)
-							(i32.load offset=8 (local.get $record))
-							(local.get $length)
+						(then
+							(call $equal
+								(local.get $name)
+								(i32.load offset=8 (local.get $record))
+								(local.get $length)
+							)
 						)
+						;; An incompatible span cannot match this name or prefix.
+						(else (i32.const 0))
 					)
 					(then
 						(call $fail (i32.const M4_ERR_INVALID_REFERENCE))

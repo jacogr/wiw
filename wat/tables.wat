@@ -69,9 +69,14 @@
 				(local.set $record (call $guest-table-record (local.get $i)))
 				;; Anonymous tables cannot match a nonempty identifier.
 				(if
-					(i32.and
+					;; Compare bytes only after the complete span/prefix guard succeeds.
+					(if (result i32)
 						(i32.eq (local.get $length) (i32.load offset=4 (local.get $record)))
-						(call $equal (local.get $name) (i32.load (local.get $record)) (local.get $length))
+						(then
+							(call $equal (local.get $name) (i32.load (local.get $record)) (local.get $length))
+						)
+						;; An incompatible span cannot match this name or prefix.
+						(else (i32.const 0))
 					)
 					(then
 						(return (local.get $i))
@@ -161,13 +166,18 @@
 				(local.set $record (call $element-record (local.get $i)))
 				;; Match the full identifier length and source-backed bytes.
 				(if
-					(i32.and
+					;; Compare bytes only after the complete span/prefix guard succeeds.
+					(if (result i32)
 						(i32.eq (local.get $length) (i32.load offset=36 (local.get $record)))
-						(call $equal
-							(local.get $value)
-							(i32.load offset=32 (local.get $record))
-							(local.get $length)
+						(then
+							(call $equal
+								(local.get $value)
+								(i32.load offset=32 (local.get $record))
+								(local.get $length)
+							)
 						)
+						;; An incompatible span cannot match this name or prefix.
+						(else (i32.const 0))
 					)
 					(then
 						(return (local.get $i))
@@ -523,13 +533,18 @@
 				(local.set $record (call $element-record (local.get $i)))
 				;; An unnamed descriptor never matches a nonempty identifier.
 				(if
-					(i32.and
+					;; Compare bytes only after the complete span/prefix guard succeeds.
+					(if (result i32)
 						(i32.eq (local.get $length) (i32.load offset=36 (local.get $record)))
-						(call $equal
-							(local.get $value)
-							(i32.load offset=32 (local.get $record))
-							(local.get $length)
+						(then
+							(call $equal
+								(local.get $value)
+								(i32.load offset=32 (local.get $record))
+								(local.get $length)
+							)
 						)
+						;; An incompatible span cannot match this name or prefix.
+						(else (i32.const 0))
 					)
 					(then
 						(return (i32.const 1))

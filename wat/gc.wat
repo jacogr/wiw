@@ -335,16 +335,21 @@
 						(br_if $found (i32.eq (local.get $index) (local.get $count)))
 						(local.set $field (call $field-record (i32.add (local.get $base) (local.get $index))))
 						(br_if $found
-							(i32.and
+							;; Compare bytes only after the complete span/prefix guard succeeds.
+							(if (result i32)
 								(i32.eq
 									(i32.load offset=8 (local.get $immediate))
 									(i32.load offset=12 (local.get $field))
 								)
-								(call $equal
-									(i32.load offset=4 (local.get $immediate))
-									(i32.load offset=8 (local.get $field))
-									(i32.load offset=12 (local.get $field))
+								(then
+									(call $equal
+										(i32.load offset=4 (local.get $immediate))
+										(i32.load offset=8 (local.get $field))
+										(i32.load offset=12 (local.get $field))
+									)
 								)
+								;; An incompatible span cannot match this name or prefix.
+								(else (i32.const 0))
 							)
 						)
 						(local.set $index (i32.add (local.get $index) (i32.const 1)))

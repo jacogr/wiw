@@ -193,9 +193,14 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 200 tests in 239,462.350 ms
-(3m59.46s). The isolated hosted spec audit passes all 65,199 commands in
-236,273.614 ms (236.27s), with zero failures or skips.
+The latest complete `make check` run passes all 204 tests in 217,580.988 ms
+(3m37.58s). The isolated hosted spec audit passes all 65,199 commands in
+215,671.169 ms (3m35.67s), with zero failures or skips.
+Guarded keyword/name matching and bounded word equality improve the hosted
+shared-prefix and mixed-length name loaders by 70% and 85%, respectively.
+Fresh hosted construction improves by 18%; ordinary loader samples remain
+roughly flat or slightly slower. The standalone hosted audit takes 8.7% less
+time than the preceding run.
 The annotation-string correctness fix retains nested content after payload
 strings and prevents ignored annotation bytes from entering data segments. No
 performance improvement is claimed for this fix. Local trivia scanning and guarded token
@@ -208,7 +213,8 @@ retains the paired measurements and tradeoffs.
 using equivalent text and hand-encoded binary integer, float, SIMD and many-function
 modules in both runtimes, plus text workloads with large decimal scales, long significands and hexadecimal ratios,
 without compiling guest modules. Trivia-heavy cases also isolate whitespace runs,
-line comments and nested block comments. It records
+line comments and nested block comments. Name-heavy cases resolve calls among
+96 declarations with shared prefixes or mixed-length identifiers. It records
 per-load sample timings, medians, input formats and source/binary hashes in `build/bench-load.json`.
 `BENCH_LOAD_REPEATS=10 BENCH_SAMPLES=7 make bench-load` adjusts the bounded workload.
 Exact float rounding reuses shifted trial denominators, and significands batch

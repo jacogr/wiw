@@ -19,22 +19,22 @@
 		(param $p i32)
 		(param $n i32)
 
-		;; Require an atom with both the expected length and matching keyword bytes.
+		;; Non-atoms and wrong lengths cannot match this grammar keyword.
 		(if
-			(i32.and
-				(i32.eq (global.get $kind) (i32.const 3))
-				(i32.and
-					(i32.eq (global.get $len) (local.get $n))
-					(call $equal (global.get $tok) (local.get $p) (local.get $n))
-				)
+			(i32.or
+				(i32.ne (global.get $kind) (i32.const 3))
+				(i32.ne (global.get $len) (local.get $n))
 			)
 			(then
-				(call $next)
-			)
-			;; The token does not match the supported keyword at this grammar position.
-			(else
 				(call $fail (i32.const M4_ERR_UNSUPPORTED))
+				(return)
 			)
+		)
+		;; Only a complete matching keyword advances the parser.
+		(if (call $equal (global.get $tok) (local.get $p) (local.get $n))
+			(then (call $next))
+			;; A byte mismatch leaves the unexpected token in place for its diagnostic.
+			(else (call $fail (i32.const M4_ERR_UNSUPPORTED)))
 		)
 	)
 
@@ -631,9 +631,14 @@
 				)
 				;; Both empty and nonempty export names must match their full byte span.
 				(if
-					(i32.and
+					;; Compare bytes only after the complete span/prefix guard succeeds.
+					(if (result i32)
 						(i32.eq (local.get $n) (i32.load offset=4 (local.get $record)))
-						(call $equal (local.get $p) (i32.load (local.get $record)) (local.get $n))
+						(then
+							(call $equal (local.get $p) (i32.load (local.get $record)) (local.get $n))
+						)
+						;; An incompatible span cannot match this name or prefix.
+						(else (i32.const 0))
 					)
 					(then
 						;; Resource exports cannot be invoked as functions.

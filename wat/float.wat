@@ -611,9 +611,14 @@
 		)
 		;; Exact inf spellings bypass finite ratio conversion.
 		(if
-			(i32.and
+			;; Compare bytes only after the complete span/prefix guard succeeds.
+			(if (result i32)
 				(i32.eq (i32.sub (local.get $end) (local.get $p)) (i32.const 3))
-				(call $equal (local.get $p) (i32.const 3866) (i32.const 3))
+				(then
+					(call $equal (local.get $p) (i32.const 3866) (i32.const 3))
+				)
+				;; An incompatible span cannot match this name or prefix.
+				(else (i32.const 0))
 			)
 			(then
 				(call $next)
@@ -622,9 +627,14 @@
 		)
 		;; A nan prefix can carry an explicit nonzero hexadecimal payload of the destination width.
 		(if
-			(i32.and
+			;; Compare bytes only after the complete span/prefix guard succeeds.
+			(if (result i32)
 				(i32.ge_u (i32.sub (local.get $end) (local.get $p)) (i32.const 3))
-				(call $equal (local.get $p) (i32.const 3869) (i32.const 3))
+				(then
+					(call $equal (local.get $p) (i32.const 3869) (i32.const 3))
+				)
+				;; An incompatible span cannot match this name or prefix.
+				(else (i32.const 0))
 			)
 			(then
 				(local.set $p (i32.add (local.get $p) (i32.const 3)))

@@ -160,3 +160,12 @@ m4_dnl Token-prefix bytes used after the scanner has proved the cursor is in ran
 m4_define(<!M4_BYTE_DOLLAR!>,<!36!>)m4_dnl
 m4_define(<!M4_BYTE_RPAREN!>,<!41!>)m4_dnl
 m4_define(<!M4_BYTE_QUOTE!>,<!34!>)m4_dnl
+
+m4_dnl Two-byte comparison tails never read beyond the requested span.
+m4_define(<!M4_HALFWORD_BYTES!>,<!2!>)m4_dnl
+
+m4_dnl Four-byte comparison words use bounded i32 loads.
+m4_define(<!M4_WORD_BYTES!>,<!4!>)m4_dnl
+
+m4_dnl Eight-byte comparison words use bounded i64 loads.
+m4_define(<!M4_DOUBLEWORD_BYTES!>,<!8!>)m4_dnl

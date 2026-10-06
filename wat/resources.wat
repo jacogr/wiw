@@ -103,9 +103,14 @@
 				(local.set $record (call $global-record (local.get $i)))
 				;; Length and bytes must both match a named declaration.
 				(if
-					(i32.and
+					;; Compare bytes only after the complete span/prefix guard succeeds.
+					(if (result i32)
 						(i32.eq (local.get $n) (i32.load offset=4 (local.get $record)))
-						(call $equal (local.get $p) (i32.load (local.get $record)) (local.get $n))
+						(then
+							(call $equal (local.get $p) (i32.load (local.get $record)) (local.get $n))
+						)
+						;; An incompatible span cannot match this name or prefix.
+						(else (i32.const 0))
 					)
 					(then
 						(return (local.get $i))
@@ -700,9 +705,14 @@
 				)
 				;; Select only an exact byte-for-byte name match.
 				(if
-					(i32.and
+					;; Compare bytes only after the complete span/prefix guard succeeds.
+					(if (result i32)
 						(i32.eq (local.get $n) (i32.load offset=4 (local.get $record)))
-						(call $equal (local.get $p) (i32.load (local.get $record)) (local.get $n))
+						(then
+							(call $equal (local.get $p) (i32.load (local.get $record)) (local.get $n))
+						)
+						;; An incompatible span cannot match this name or prefix.
+						(else (i32.const 0))
 					)
 					(then
 						;; A matching name must refer to the resource kind requested by this host operation.

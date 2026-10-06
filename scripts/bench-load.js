@@ -55,6 +55,17 @@ for(const [name,trivia] of [
 ]) cases[name]=`(module (func (export "run") (result i32)
   ${`i32.const 1 ${trivia} drop ${trivia}`.repeat(256)} i32.const 0))`;
 
+// Long shared prefixes and mixed lengths exercise exact matching and rejected candidate guards.
+const longName=index=>`$shared_function_prefix_${String(index).padStart(4,'0')}`;
+cases.namesPrefix=`(module
+  ${Array.from({length:96},(_,index)=>`(func ${longName(index)} (result i32) i32.const 0)`).join('\n')}
+  (func (export "run") (result i32)
+    ${Array.from({length:192},(_,index)=>`call ${longName(index%96)} drop`).join(' ')} i32.const 0))`;
+cases.namesLengths=`(module
+  ${Array.from({length:96},(_,index)=>`(func $${'x'.repeat(index+1)} (result i32) i32.const 0)`).join('\n')}
+  (func (export "run") (result i32)
+    ${Array.from({length:192},(_,index)=>`call $${'x'.repeat(index%96+1)} drop`).join(' ')} i32.const 0))`;
+
 // Hand-encode binary equivalents so the benchmark never compiles guest modules.
 const uleb=value=>{
   const bytes=[];

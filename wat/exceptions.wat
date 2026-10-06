@@ -187,9 +187,14 @@
 				(local.set $record (call $tag-record (local.get $i)))
 				;; Equal lengths and bytes identify a tag regardless of other resource names.
 				(if
-					(i32.and
+					;; Compare bytes only after the complete span/prefix guard succeeds.
+					(if (result i32)
 						(i32.eq (local.get $length) (i32.load offset=4 (local.get $record)))
-						(call $equal (local.get $name) (i32.load (local.get $record)) (local.get $length))
+						(then
+							(call $equal (local.get $name) (i32.load (local.get $record)) (local.get $length))
+						)
+						;; An incompatible span cannot match this name or prefix.
+						(else (i32.const 0))
 					)
 					(then
 						(return (local.get $i))

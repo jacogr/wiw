@@ -30,9 +30,14 @@
 				(local.set $s (call $signature (local.get $i)))
 				;; Only an exact name span identifies a declaration.
 				(if
-					(i32.and
+					;; Compare bytes only after the complete span/prefix guard succeeds.
+					(if (result i32)
 						(i32.eq (local.get $n) (i32.load offset=4 (local.get $s)))
-						(call $equal (local.get $p) (i32.load (local.get $s)) (local.get $n))
+						(then
+							(call $equal (local.get $p) (i32.load (local.get $s)) (local.get $n))
+						)
+						;; An incompatible span cannot match this name or prefix.
+						(else (i32.const 0))
 					)
 					(then
 						(return (local.get $i))

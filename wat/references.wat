@@ -896,18 +896,23 @@
 				)
 				;; Names compare by text; numeric indices compare by value.
 				(if
-					(i32.and
+					;; Length mismatches cannot reuse either a named or numeric descriptor.
+					(if (result i32)
 						(i32.eq (local.get $length) (i32.load offset=4 (local.get $record)))
-						;; Named type uses compare their identifier bytes; numeric uses compare indices.
-						(if (result i32) (local.get $length)
-							(then
-								(call $equal (local.get $value) (i32.load (local.get $record)) (local.get $length))
-							)
-							;; Numeric type uses do not read source strings.
-							(else
-								(i32.eq (local.get $value) (i32.load (local.get $record)))
+						(then
+							;; Named type uses compare their identifier bytes; numeric uses compare indices.
+							(if (result i32) (local.get $length)
+								(then
+									(call $equal (local.get $value) (i32.load (local.get $record)) (local.get $length))
+								)
+								;; Numeric type uses do not read source strings.
+								(else
+									(i32.eq (local.get $value) (i32.load (local.get $record)))
+								)
 							)
 						)
+						;; Different identifier lengths retain separate descriptors.
+						(else (i32.const 0))
 					)
 					(then
 						(return

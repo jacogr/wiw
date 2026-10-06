@@ -116,33 +116,50 @@
 		(global.get $offset)
 	)
 
-	;; Compare n bytes at addresses a and b; return 1 for equality, otherwise 0.
+	;; Compare exactly n bytes, including unaligned spans and empty ranges, without reading their tails.
 	(func $equal
 		(param $a i32)
 		(param $b i32)
 		(param $n i32)
 		(result i32)
-		(local $i i32)
 
-		;; A byte mismatch exits to the unequal result below.
-		(block $no
-			;; Compare each byte until a mismatch or the end of the requested range.
-			(loop $loop
-				;; Reaching n bytes means the entire range matched, including an empty range.
-				(if (i32.eq (local.get $i) (local.get $n))
-					(then
-						(return (i32.const 1))
-					)
+		;; Any complete-word mismatch returns the unequal result below.
+		(block $different
+			;; Leave the word loop once fewer than eight bytes remain.
+			(block $tail
+				;; Each unaligned load is bounded by the remaining span length.
+				(loop $words
+					(br_if $tail (i32.lt_u (local.get $n) (i32.const M4_DOUBLEWORD_BYTES)))
+					(br_if $different (i64.ne (i64.load (local.get $a)) (i64.load (local.get $b))))
+					(local.set $a (i32.add (local.get $a) (i32.const M4_DOUBLEWORD_BYTES)))
+					(local.set $b (i32.add (local.get $b) (i32.const M4_DOUBLEWORD_BYTES)))
+					(local.set $n (i32.sub (local.get $n) (i32.const M4_DOUBLEWORD_BYTES)))
+					(br $words)
 				)
-				(br_if $no
-					(i32.ne
-						(i32.load8_u (i32.add (local.get $a) (local.get $i)))
-						(i32.load8_u (i32.add (local.get $b) (local.get $i)))
-					)
-				)
-				(local.set $i (i32.add (local.get $i) (i32.const 1)))
-				(br $loop)
 			)
+			;; A four-byte remainder uses one complete word before the smaller tail.
+			(if (i32.ge_u (local.get $n) (i32.const M4_WORD_BYTES))
+				(then
+					(br_if $different (i32.ne (i32.load (local.get $a)) (i32.load (local.get $b))))
+					(local.set $a (i32.add (local.get $a) (i32.const M4_WORD_BYTES)))
+					(local.set $b (i32.add (local.get $b) (i32.const M4_WORD_BYTES)))
+					(local.set $n (i32.sub (local.get $n) (i32.const M4_WORD_BYTES)))
+				)
+			)
+			;; Two remaining bytes form one bounded halfword.
+			(if (i32.ge_u (local.get $n) (i32.const M4_HALFWORD_BYTES))
+				(then
+					(br_if $different (i32.ne (i32.load16_u (local.get $a)) (i32.load16_u (local.get $b))))
+					(local.set $a (i32.add (local.get $a) (i32.const M4_HALFWORD_BYTES)))
+					(local.set $b (i32.add (local.get $b) (i32.const M4_HALFWORD_BYTES)))
+					(local.set $n (i32.sub (local.get $n) (i32.const M4_HALFWORD_BYTES)))
+				)
+			)
+			;; A final byte compares directly; zero bytes require no memory access.
+			(if (local.get $n)
+				(then (return (i32.eq (i32.load8_u (local.get $a)) (i32.load8_u (local.get $b)))))
+			)
+			(return (i32.const 1))
 		)
 		(i32.const 0)
 	)

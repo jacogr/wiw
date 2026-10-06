@@ -1904,3 +1904,61 @@ across 258 files with zero failures/skips in 236,273.614 ms
 (236.27s). The bootstrap audit verifies the same frozen coverage.
 This is a correctness change with no performance improvement claimed; timings,
 source/binary hashes and the resolved issue are recorded in performance history.
+
+### Guarded keyword/name matching and bounded word equality
+
+Keyword checks now reject non-atoms and incompatible lengths before comparing
+bytes. Attribute checks require a complete prefix rather than an exact token
+length. Declaration lookups, duplicate-name checks, labels, fields, resources
+and reference-type matching also guard their equality calls. Wasm's i32.and is
+eager, so the former boolean expressions still entered equality on incompatible
+spans. The new branches avoid both those calls and reads outside short tokens.
+The inf/nan literal checks retain their exact/minimum-length rules.
+
+Shared byte equality compares complete unaligned eight-byte words, then a
+four-byte word, a halfword and the final byte as needed. Every load is bounded
+by the remaining requested span; empty ranges perform no memory access. UTF-8
+and quoted names remain byte-exact, without interning or normalization. Lookup
+order, namespaces, duplicate detection, prefix rules and error offsets remain
+unchanged. The private equality signature is unchanged; no lookup index, cache,
+persistent state or public ABI is added.
+
+A temporary engine fixture compares lengths through every short word/tail
+boundary plus 63/64/65 and 255 bytes, varying alignment and placing one span at
+memory's endpoint. Every byte position is independently changed to verify
+mismatches. Empty ranges include unreadable addresses; keyword and attribute
+guards also reject unreadable comparison pointers on incompatible token state.
+Public tests exercise long shared-prefix UTF-8 names across types, functions,
+locals, labels and exports, including duplicates, missing references and recovery.
+Both bootstrap and hosted runtimes run these tests.
+
+Sequential isolated loader samples (three repeats, five samples) show:
+
+| Hosted workload | Before | After | Time reduction | Instruction reduction |
+| --- | ---: | ---: | ---: | ---: |
+| namesPrefix | 53.95 ms | 16.40 ms | 69.6% | 68.11% |
+| namesLengths | 67.24 ms | 9.82 ms | 85.4% | 82.77% |
+| functions | 37.19 ms | 36.78 ms | 1.1% | 1.48% |
+| vectors | 12.98 ms | 12.75 ms | 1.8% | 2.37% |
+| integers | 17.81 ms | 18.08 ms | -1.5% | 0.01% |
+| decimalScales | 122.56 ms | 124.95 ms | -2.0% | 0.03% |
+| dataBytes | 6.84 ms | 7.04 ms | -2.9% | 0.07% |
+
+The namesPrefix workload resolves 192 calls among 96 declarations with long
+shared prefixes; namesLengths uses 96 different lengths with repeated-prefix
+identifiers. Both versions load and execute the same guests. Name-heavy phases
+improve substantially, while ordinary loader phases remain roughly flat or
+slightly slower. Instruction counts cover complete hosted loads, excluding
+construction/invocation, and contain no child profiling markers. All nineteen
+paired cases retain identical inputs.
+
+Fresh hosted construction measures 14.59 ms before and 11.96 ms after, about
+18% faster; bootstrap construction stays around 1.05 ms. This round changes
+matching only; tail-call frame reuse remains separate future work.
+
+All 204 tests pass, including nested self-hosting and the full pinned spec, in
+217,580.988 ms (3m37.58s). The standalone hosted audit passes all 65,199 commands
+across 258 files with zero failures/skips in 215,671.169 ms (3m35.67s), 8.7%
+less time than the preceding run. The bootstrap audit verifies the same frozen
+coverage. Source/binary hashes and the paired measurements are recorded in
+performance history; million-call stress inputs remain unchanged.

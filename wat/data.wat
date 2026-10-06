@@ -362,13 +362,18 @@
 				(local.set $record (call $data-record (local.get $i)))
 				;; The first exact match selects a declared segment.
 				(if
-					(i32.and
+					;; Compare bytes only after the complete span/prefix guard succeeds.
+					(if (result i32)
 						(i32.eq (local.get $length) (i32.load offset=36 (local.get $record)))
-						(call $equal
-							(local.get $value)
-							(i32.load offset=32 (local.get $record))
-							(local.get $length)
+						(then
+							(call $equal
+								(local.get $value)
+								(i32.load offset=32 (local.get $record))
+								(local.get $length)
+							)
 						)
+						;; An incompatible span cannot match this name or prefix.
+						(else (i32.const 0))
 					)
 					(then
 						(return (local.get $i))
@@ -416,13 +421,18 @@
 						(local.set $record (call $data-record (local.get $i)))
 						;; Duplicate names are declaration errors regardless of segment mode.
 						(if
-							(i32.and
+							;; Compare bytes only after the complete span/prefix guard succeeds.
+							(if (result i32)
 								(i32.eq (local.get $length) (i32.load offset=36 (local.get $record)))
-								(call $equal
-									(local.get $name)
-									(i32.load offset=32 (local.get $record))
-									(local.get $length)
+								(then
+									(call $equal
+										(local.get $name)
+										(i32.load offset=32 (local.get $record))
+										(local.get $length)
+									)
 								)
+								;; An incompatible span cannot match this name or prefix.
+								(else (i32.const 0))
 							)
 							(then
 								(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
