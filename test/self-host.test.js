@@ -257,6 +257,13 @@ for (const binary of ['wiw-opt.wasm']) {
         local.get 0 local.get 1 i64.lt_u local.tee 2 local.get 2 i32.eq))`);
     assert.equal(deepest.invoke('count',17n),0n);
     assert.equal(deepest.invoke('compare',-1n,1n),1);
+    // Direct constant assignments preserve signed integer words and raw floating payloads through two hosted levels.
+    deepest.load(`(module
+      (func (export "set") (result i32) (local i32) i32.const -2147483648 local.set 0 local.get 0)
+      (func (export "floatSet") (result i64) (local f64)
+        f64.const nan:0x8000000002345 local.set 0 local.get 0 i64.reinterpret_f64))`);
+    assert.equal(deepest.invoke('set'),-2147483648);
+    assert.equal(deepest.invoke('floatSet'),0x7ff8000000002345n);
     deepest.loadBinary(Uint8Array.from([
       0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,
       7,10,1,6,97,110,115,119,101,114,0,0,

@@ -553,6 +553,23 @@
 											)
 										)
 									)
+									;; Scalar constants can initialize a local without a temporary operand round trip.
+									(block $constant-miss
+										;; Never read a successor outside the current function.
+										(br_if $constant-miss (i32.eq (local.get $next) (local.get $finish)))
+										;; Only a local.set finishes without retaining an operand result.
+										(br_if $constant-miss (i32.ne (i32.load (local.get $next)) (i32.const M4_OP_LOCAL_SET)))
+										;; Partial fuel and a full stack retain the original constant instruction boundary.
+										(br_if $constant-miss (i32.or (i64.eqz (local.get $fuel))
+											(i32.ge_u (global.get $sp) (i32.const M4_CAP_OPERANDS))))
+										(local.set $meta (i32.mul (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $next)) (i32.const M4_SLOT_BYTES)))
+										(i64.store offset=M4_CALL_LOCALS_OFFSET (i32.add (local.get $frame) (local.get $meta)) (local.get $value))
+										(i64.store (i32.add (local.get $frame-high) (local.get $meta)) (i64.const 0))
+										(global.set $tok (i32.load offset=M4_INSTRUCTION_SOURCE_OFFSET (local.get $next)))
+										(local.set $fuel (i64.sub (local.get $fuel) (i64.const 1)))
+										(local.set $next (i32.add (local.get $next) (i32.const M4_INSTRUCTION_BYTES)))
+										(br $dispatch)
+									)
 								)
 							)
 						)

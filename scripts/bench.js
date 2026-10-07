@@ -274,6 +274,20 @@ for(const type of ['i32','i64']) {
     local.get $n ${type}.const 0 ${type}.ne if unreachable end i64.const 0))`;
 }
 
+// Scalar constant assignments retain integer words and floating encodings in local slots.
+for(const [type,literal,cast,expected,result] of [
+  ['i32','-2147483647','','-2147483647','i32'],
+  ['i64','-81985529216486896','','-81985529216486896','i64'],
+  ['f32','-0.0','i32.reinterpret_f32','-2147483648','i32'],
+  ['f64','nan:0x8000000002345','i64.reinterpret_f64','9221120237041099589','i64']
+]) {
+  cases[`constantSet${type}`]=`(module (func (export "run") (param i64) (result i64) (local $a ${type})
+    (loop $again ${type}.const ${literal} local.set $a local.get $a ${cast}
+      ${result}.const ${expected} ${result}.ne if unreachable end
+      local.get 0 i64.const 1 i64.sub local.set 0
+      local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
+}
+
 const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
 const report = {node: process.version, binaryen: execFileSync('wasm-opt', ['--version'], {encoding:'utf8'}).trim(),
   engineSourceSha256: createHash('sha256').update(await readFile(new URL('../build/wiw-opt.wat', import.meta.url))).digest('hex'),

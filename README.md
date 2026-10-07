@@ -219,11 +219,11 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` / `check-wat` run passes all 205 tests in 125,477.971 ms
-(2m05.48s). `check-wasm` passes the same 205 registered tests in
-10,738.820 ms (0m10.74s). Each executes all 65,199 spec commands:
-WAT takes 119,246.789 ms (1m59.25s), and WASM takes
-5,617.222 ms (0m05.62s), with zero failures or skips.
+The latest complete `make check` / `check-wat` run passes all 207 tests in 136,365.556 ms
+(2m16.37s). `check-wasm` passes the same 207 registered tests in
+11,484.518 ms (0m11.48s). Each executes all 65,199 spec commands:
+WAT takes 129,415.366 ms (2m09.42s), and WASM takes
+5,747.784 ms (0m05.75s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -343,9 +343,9 @@ Both audit commands now print exclusive construction, loading, execution and
 other timings, with per-file and cumulative values in their JSON reports.
 Construction includes the fresh self-hosted interpreter copy; loading includes
 initialization/start functions. Failed attempts are counted, and forwarded
-callbacks stay in their enclosing phase. The latest hosted run spends 44.33s
-constructing, 29.18s loading, 43.77s executing and 1.96s on other harness work:
-construction and loading account for 62% of its total. These are API wall times,
+callbacks stay in their enclosing phase. The latest hosted run spends 45.97s
+constructing, 30.81s loading, 50.57s executing and 2.07s on other harness work:
+construction and loading account for 59% of its total. These are API wall times,
 not pure guest instruction CPU times, and profiling is not a speedup claim.
 
 The detailed fresh-construction follow-up retains safe atom-word prefixes,
@@ -446,3 +446,9 @@ hosted groups improve 9–11%, and an aliased decrement loop about 12%. Native
 arithmetic is flat; comparisons improve 3–9% and the loop about 10%. Construction
 is roughly flat. WASM/WAT grow 10/77 bytes; control tradeoffs and longer native
 confirmation remain in the performance record.
+
+Scalar constants followed by local.set now write their raw bits directly into
+local slots. Checked stores improve 3–18% native and 6–11% hosted; construction
+is roughly flat. Constant tees retain ordinary dispatch and cost about 2–3%.
+Long native controls are within 1% except the tee loop, which costs 3.4%. WASM/WAT grow 83/591 bytes. Raw integer/float encodings, fuel and capacity
+boundaries, callbacks and two hosted levels are covered by regression tests.

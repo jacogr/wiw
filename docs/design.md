@@ -3421,3 +3421,39 @@ hosted and 0m10.74s native. Each passes all 65,199 wg-3.0 commands
 across 258 files; spec times are 1m59.25s WAT and
 0m05.62s WASM. Samples, hashes and reports remain in performance
 history. Whole-suite times are separate complete runs, not a matched speedup.
+
+
+### Direct scalar constant assignment to locals
+
+After decoding i32/i64/f32/f64 constants, runtime checks for a same-function
+local.set. A matching pair writes the low raw word directly to the local and
+clears its high half, without operand traffic. Tee remains on ordinary dispatch. Exact-width integer canonicalization and
+floating encodings remain those of the original constant decoder. Constants'
+immediate/extra words retain their existing meaning; no marker is introduced.
+
+One remaining fuel unit and room for the constant's original temporary operand
+are required. Otherwise ordinary dispatch retains the original instruction's
+capacity failure or the successor's exhausted-fuel source offset. A function-end
+guard precedes successor reads. Name/type validation remains unchanged.
+
+New text/binary native-oracle fixtures compare both the local value and tee's
+retained result through integer results. They cover signed integer boundaries,
+nonzero i64 high words, float signed zero, infinities and positive/negative quiet
+and signaling NaN payloads. Regressions check named locals, invalid mixed types,
+every fuel boundary, 4095/4096-slot caller capacity, vector operands across calls,
+callback failures and recovery, and constants at function end. Two hosted levels
+check signed i32 and float NaN assignments. Four public benchmark cases
+check every scalar type with local.set.
+
+Immutable preceding binary-tee artifacts and selected release use the same frontend. Initial and confirmation runs each use 15 alternating construction rounds of ten fresh factories, checks outside timing. Execution uses three independent instances per variant/runtime/case, three 1000-iteration warmups and five alternating 2000-iteration samples; median of instance medians. Eight checked assignments per iteration cover i32/i64/f32/f64 set and tee; tee workloads are deliberate misses in the selected implementation. Checks use raw integer reinterpretation for float signed zero and NaN payloads. Modules reload outside samples. Native controls receive a separate three-instance confirmation with three 10000-iteration warmups and fifteen alternating 100000-iteration samples. No tests/audits overlap timed benchmarks. Full WAT then WASM targets run sequentially; whole-suite comparisons are historical.
+
+After decoding a scalar constant, recognize an adjacent same-function local.set. Write its raw low word directly into the local and clear the high half, without temporary operand publication. Tee remains on ordinary dispatch. Full operand stacks and partial fuel use ordinary dispatch. No marker, record format, type validation, source offsets or guest fuel changes. Confirmation local.set workloads improve 3-18% native and 6-11% hosted; deliberate constant/tee misses cost about 2-3% in both modes. Construction is roughly flat (initial -1.7%, confirmation -0.9%). Hosted scalar/vector controls are flat; tee/float controls cost 1.3/1.2%. Longer native confirmation shows scalar/float/vector controls within 1%, and the tee loop 3.4% slower. WASM grows 83 bytes and optimized WAT 591 bytes. No guest compilation, instruction rewriting or persistent state.
+
+The combined set/tee candidate passed both 207-test matrices but regressed long
+native controls by 4–9%; it was narrowed to set-only before final validation.
+
+Both complete targets pass all 207 tests with zero failures/skips: 2m16.37s
+hosted and 0m11.48s native. Each passes all 65,199 wg-3.0 commands
+across 258 files; spec times are 2m09.42s WAT and
+0m05.75s WASM. Samples, hashes and reports remain in performance
+history. Whole-suite times are separate complete runs, not a matched speedup.
