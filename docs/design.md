@@ -2748,3 +2748,91 @@ its shared build report. That run passes the same inventory in 146,574.180 ms
 and 2.31s other. The self-host manifest records this latest report. Performance
 history distinguishes it from the standalone pair above, whose exact phase
 totals and per-file command outcomes were captured before the report replacement.
+
+### Interpret the optimized engine's WAT
+
+The default hosted copy now loads `build/wiw-opt.wat`, emitted from the same
+`build/wiw-opt.wasm` that Node instantiates as the native bootstrap. Binaryen
+optimizes the interpreter at build time using the existing `-O4 --converge`.
+A subsequent `--print-minified` pass prints the already optimized binary's
+WAT without another optimization pass. The discarded binary output goes to
+`/dev/null`, while the text output becomes the generated WAT artifact. This
+avoids the large indentation overhead in Binaryen's ordinary text printer.
+Guest modules remain WAT/binary interpreted by the inner WAT engine.
+
+The expanded authoring source remains `build/wiw.wat`, including comments and
+readable function names, and private helper probes continue to use it. The
+factory's `options.source` override remains available. All normal factories,
+benchmarks, self-host fixtures and spec runners select the optimized WAT.
+`make all` builds both final artifacts; check/audit/benchmark targets depend
+on it, including after a clean checkout. DEBUG switches the native binary to
+`-O0`, and its WAT is emitted from that same binary. A DEBUG-mode construction
+and guest smoke test passes, followed by a release rebuild before validation.
+
+The construction phase probe instruments the readable parent source but loads
+the selected optimized child source. It records both source hashes, leaves the
+production artifacts unchanged, and retains its existing phase boundaries.
+No compiled native module reuse, prepared interpreter, snapshot or persistent
+interpreter state is introduced.
+
+Binaryen's ordinary formatted WAT is 3,134,311 bytes, compared with 1,697,593
+bytes for the expanded source. Alternating public construction is 24% slower
+with this ordinary formatted representation. Compact output has exactly the
+same optimized instructions with reduced formatting, totaling 854,491 bytes.
+A three-way alternating pair (15 samples, 11 fresh instances each, independent
+state and guest checks outside timing) measures 9.29 ms original source,
+11.48 ms ordinary optimized text and 7.64 ms compact optimized text. Compact
+construction is 18% faster. The source also round-trips through wat2wasm.
+
+Final seven-sample hosted execution comparisons improve scalar memory by 6%, vector
+memory and large vector branch results by 4%, float arithmetic by 3%, and
+other tested calls/conversions/loops by roughly 0–2%; the matching scalar loop
+is flat. Selected hosted loader controls are mostly flat, so no general loader
+speedup is claimed. The native binary is identical between these pairs: only
+the WAT loaded as the inner engine differs. Matched complete audits and final release-only tests below verify the complete
+workload.
+
+A rapid DEBUG-to-release smoke test exposed a pre-existing build configuration
+bug: on a make version with coarse timestamp comparisons, `build/flags` could
+change within the same tick as the generated artifacts, leaving the debug binary
+in place while its flags file reported release. Configuration comparison now
+happens when Make reads the file. A changed signature adds the phony FORCE
+prerequisite to every derived stage: expanded WAT, intermediate Wasm, optimized
+Wasm and emitted optimized WAT. Unchanged flags still leave these artifacts alone.
+
+A dedicated regression drives the actual Makefile with lightweight tool doubles,
+sets generated artifacts and their flag file to equal future timestamps, switches
+release → debug → release, and checks every stage's mode and optimization level.
+A same-mode build must execute no tool calls. The regression fails against the
+old rules and passes with this change. Real rapid mode switches also rebuild
+correctly; the final binary and text match the initial verified release artifacts.
+Results from the accidental debug artifact were excluded from release performance
+claims and release-only conformance was rerun after the fix.
+
+The final alternating release construction pair measures 9.27 ms original source
+versus 7.53 ms optimized WAT, a 19% improvement. Both variants instantiate the
+exact same optimized native binary; only the interpreted source differs.
+
+Matched complete release audits use identical native binary bytes and differ
+only in the preloaded interpreted source. The original source takes
+152,183.125 ms (2m32.18s); compact optimized WAT
+takes 137,000.250 ms (2m17.00s), a 10% reduction.
+Both pass all 65,199 commands across 258 frozen files with zero failures/skips.
+
+| Phase | Original WAT | Optimized WAT |
+| --- | ---: | ---: |
+| Construction | 70.70s | 58.38s |
+| Loading | 25.16s | 23.50s |
+| Execution | 53.99s | 53.04s |
+| Other | 2.33s | 2.08s |
+
+Construction falls by 17%; loading and execution also improve. The final
+release-only suite passes all 244 tests in 140,787.401 ms (2m20.79s),
+including the new mode-switch regression. Its complete hosted audit also passes
+in 133,175.671 ms (2m13.18s); the native audit passes
+the same complete inventory. The self-host manifest records the latest full-suite
+report, while performance history retains the matched standalone pair separately.
+The phase probe now measures 3.66 ms parsing, 1.00 ms validation and 0.37 ms call
+resolution in its temporary native parent. These are diagnostic medians, not
+paired speedup claims. Final source, binary, frontend and harness hashes match
+the verified release artifacts; no false-debug timings are claimed as release.

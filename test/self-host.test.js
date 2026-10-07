@@ -77,7 +77,7 @@ function interpreted(parent) {
 for (const binary of ['wiw-opt.wasm']) {
   test(`${binary}: interpreter executes fixtures through its own WAT`, async () => {
     const outer = await createBootstrapInterpreter(new URL(`../build/${binary}`, import.meta.url));
-    const source = await readFile(new URL('../build/wiw.wat', import.meta.url), 'utf8');
+    const source = await readFile(new URL('../build/wiw-opt.wat', import.meta.url), 'utf8');
     outer.load(source); outer.setFuel(1000000000);
     const inner = interpreted(outer);
     for (const [file, cases] of [

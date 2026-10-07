@@ -220,7 +220,7 @@ test('interpreted audit retains isolated failures, named registrations and cumul
   assert.equal(progress.passed, 6); assert.equal(progress.failed, 1); assert.equal(progress.files, 1);
   assert.deepEqual(progress.counts, report.files[0]);
   assert.equal(report.runtime, 'interpreted'); assert.equal(report.interpreterDepth, 1);
-  assert.equal(report.engineSourceSha256, createHash('sha256').update(await readFile(new URL('../build/wiw.wat', import.meta.url))).digest('hex'));
+  assert.equal(report.engineSourceSha256, createHash('sha256').update(await readFile(new URL('../build/wiw-opt.wat', import.meta.url))).digest('hex'));
   assert.equal(report.timings[0].file, 'fixture.wast');
   assert.ok(report.timings[0].elapsedMs >= 0 && report.elapsedMs >= report.timings[0].elapsedMs);
 });

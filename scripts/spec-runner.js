@@ -266,7 +266,7 @@ const trapMessages = {
 export async function runSuite(binary, root = new URL('../test/spec/', import.meta.url), options = {}) {
   const started = performance.now();
   const interpreted = options.interpreted ?? true;
-  const engineSource = interpreted ? await readFile(new URL('../build/wiw.wat', import.meta.url), 'utf8') : undefined;
+  const engineSource = interpreted ? await readFile(new URL('../build/wiw-opt.wat', import.meta.url), 'utf8') : undefined;
   const createEngine = () => interpreted ? createInterpreter(binary, {source: engineSource}) : createBootstrapInterpreter(binary);
   const provenance = JSON.parse(await readFile(new URL('upstream.json', root), 'utf8'));
   const fixtures = await specSource(provenance, root);

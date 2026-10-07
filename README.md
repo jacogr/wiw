@@ -18,12 +18,13 @@ node wiw.js test/float.wat double 1.25
 These examples print `42`, `120`, and `2.5`. Use
 `node wiw.js --bootstrap test/constant.wat answer` for the bootstrap diagnostic
 runtime. Runtime selection is independent of `DEBUG`.
-`make` produces expanded WAT and
-unoptimized/optimized bootstrap binaries in `build/`. Guest text and binary
+`make` produces readable expanded `build/wiw.wat`, the intermediate bootstrap
+binary, and optimized `build/wiw-opt.wasm`. It also emits compact `build/wiw-opt.wat`
+from that optimized binary for the interpreted copy. Guest text and binary
 modules are parsed, validated and executed by the WAT engine. wat2wasm builds
 the bootstrap and serves as a differential test oracle. The optimized bootstrap
 uses `wasm-opt -O4 --converge`; all tests and audits run only `wiw-opt.wasm`.
-`make DEBUG=1 check` selects `-O0` for that same artifact instead. The m4 defines
+`make DEBUG=1 check` selects `-O0` for that same binary and its derived WAT instead. The m4 defines
 are `RELEASE` by default and `DEBUG` with `DEBUG=1`. Switching modes rebuilds
 automatically; `make check` switches back to release without requiring `make clean`.
 
@@ -172,10 +173,12 @@ halves, so vector execution also works when wiw interprets itself.
 `createInterpreter()` creates the default self-hosted runtime.
 `createInterpretedInterpreter()` remains an explicit equivalent, while
 `createBootstrapInterpreter()` selects the bootstrap diagnostic runtime.
-It loads expanded `build/wiw.wat` into a bootstrap interpreter, then executes the
+The hosted runtime loads optimized `build/wiw-opt.wat` into a bootstrap interpreter, then executes the
 copy's exported ABI through that parent. Text/binary guest loading, validation,
 execution and trap handling run inside the interpreted WAT copy; the shared
 Node frontend continues to handle synchronous callbacks and resource bindings.
+The handwritten WAT and readable m4 expansion remain available for development
+and private probes. `options.source` still allows an explicit interpreter source.
 
 
 `make bench` measures ordinary recursive calls, direct, indirect and typed-reference tail calls,
@@ -195,9 +198,9 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 243 tests in 152,767.956 ms
-(2m32.77s). The hosted audit within that run passes all 65,199 commands in
-146,574.180 ms (2m26.57s), with zero failures or skips.
+The latest complete `make check` run passes all 244 tests in 140,787.401 ms
+(2m20.79s). The hosted audit within that run passes all 65,199 commands in
+133,175.671 ms (2m13.18s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -317,8 +320,8 @@ Both audit commands now print exclusive construction, loading, execution and
 other timings, with per-file and cumulative values in their JSON reports.
 Construction includes the fresh self-hosted interpreter copy; loading includes
 initialization/start functions. Failed attempts are counted, and forwarded
-callbacks stay in their enclosing phase. The latest hosted run spends 68.57s
-constructing, 23.25s loading, 52.45s executing and 2.31s on other harness work:
+callbacks stay in their enclosing phase. The latest hosted run spends 60.34s
+constructing, 23.96s loading, 46.41s executing and 2.47s on other harness work:
 construction and loading account for 63% of its total. These are API wall times,
 not pure guest instruction CPU times, and profiling is not a speedup claim.
 
@@ -332,8 +335,17 @@ results; their measurements remain in performance history.
 
 `make bench-create-phases` reports preparation, parsing, type/signature resolution,
 linking, validation and resource setup using temporary native-parent callbacks.
-It leaves the readable hosted source and release binary unchanged and records
+It leaves the selected hosted source and release binary unchanged and records
 raw samples and hashes in `build/bench-create-phases.json`. Callbacks can affect
 optimization, so use this to locate hotspots and `make bench-create` for complete
 factory timings. `BENCH_CREATE_PHASE_SAMPLES` controls its measured sample count
 (default 50, after ten warmup constructions).
+
+The hosted engine now interprets compact WAT emitted from the optimized native
+binary. Paired fresh construction improves 19%; matching complete audits fall
+from 2m32.18s to 2m17.00s (10%). Ordinary Binaryen text adds substantial indentation
+and regresses construction, so the build uses its compact printer. Authored WAT
+and the expanded development/probe source retain their readable formatting.
+A build regression also checks rapid release/debug/release switches: changed
+flags force every derived artifact even when timestamps would otherwise hide
+the change, while unchanged flags still avoid rebuilding.

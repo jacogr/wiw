@@ -113,7 +113,7 @@ cases.vectorsBinary=binaryModule(127,[[...repeat([...vectorBytes(1,2),...vectorB
 cases.functionsBinary=binaryModule(127,[...Array.from({length:64},()=>[...repeat([65,1,65,2,115,26],16),65,0]),[16,63]]);
 
 const binary = new URL('../build/wiw-opt.wasm',import.meta.url);
-const source = await readFile(new URL('../build/wiw.wat',import.meta.url),'utf8');
+const source = await readFile(new URL('../build/wiw-opt.wat',import.meta.url),'utf8');
 const report = {
   node:process.version,
   binaryen:execFileSync('wasm-opt',['--version'],{encoding:'utf8'}).trim(),

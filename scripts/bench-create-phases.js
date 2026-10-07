@@ -5,11 +5,12 @@ import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-// Diagnostic phase timings use a temporary native parent and the unchanged child source.
+// Diagnostic phase timings use a temporary native parent and the unchanged hosted source.
 // The public construction benchmark remains the measure of complete factory cost.
 const samples=Number(process.env.BENCH_CREATE_PHASE_SAMPLES ?? 50);
 assert.ok(Number.isSafeInteger(samples) && samples>0 && samples<=200);
-const source=await readFile(new URL('../build/wiw.wat',import.meta.url),'utf8');
+const parentSource=await readFile(new URL('../build/wiw.wat',import.meta.url),'utf8');
+const source=await readFile(new URL('../build/wiw-opt.wat',import.meta.url),'utf8');
 const bytes=new TextEncoder().encode(source);
 const binary=await readFile(new URL('../build/wiw-opt.wasm',import.meta.url));
 const names=['prepare','parse','data','heapTypes','signaturesResources','calls','exports','validate','resources'];
@@ -20,7 +21,7 @@ function insert(text,anchor,replacement) {
   assert.equal(text.split(anchor).length,2,`construction phase anchor must be unique: ${anchor}`);
   return text.replace(anchor,replacement);
 }
-let probe=insert(source,'(module',`(module
+let probe=insert(parentSource,'(module',`(module
   ;; Temporary profiling callbacks do not appear in the release interpreter.
   (import "construction" "phase" (func $construction-phase (param i32)))`);
 const loadHeader='(func $load (export "load")\n\t\t(param $p i32)\n\t\t(param $n i32)\n\t\t(result i32)';
@@ -77,10 +78,11 @@ try {
   const median=values=>[...values].sort((a,b)=>a-b)[Math.floor(values.length/2)];
   const medians=Object.fromEntries(Object.keys(timings[0]).map(name=>[name,median(timings.map(sample=>sample[name]))]));
   const report={
-    method:'Temporary optimized native parent markers loading unchanged readable engine source; source/binary bytes are preloaded. Callbacks can affect optimization. Use bench-create for complete factory comparisons.',
+    method:'Temporary optimized native parent markers loading unchanged hosted engine source; source/binary bytes are preloaded. Callbacks can affect optimization. Use bench-create for complete factory comparisons.',
     node:process.version,
     binaryen:execFileSync('wasm-opt',['--version'],{encoding:'utf8'}).trim(),
     engineSourceSha256:createHash('sha256').update(source).digest('hex'),
+    parentSourceSha256:createHash('sha256').update(parentSource).digest('hex'),
     binarySha256:createHash('sha256').update(binary).digest('hex'),
     samples,medians,timings
   };

@@ -29,13 +29,13 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
   return createInterpretedInterpreter(binary, options);
 }
 
-/** Run a WAT copy of wiw inside a bootstrap interpreter using the same host ABI. */
+/** Run a WAT copy of wiw (optimized by default) inside a bootstrap using the same host ABI. */
 export async function createInterpretedInterpreter(binary = new URL('./build/wiw-opt.wasm', import.meta.url), options = {}) {
   const parent = await createBootstrapInterpreter(binary);
   const backend = engineBackends.get(parent);
   // Parent ABI calls are implementation work, not guest-to-guest forwarding.
   backend.countsForwardingDepth = false;
-  parent.load(options.source ?? await readFile(new URL('./build/wiw.wat', import.meta.url), 'utf8'));
+  parent.load(options.source ?? await readFile(new URL('./build/wiw-opt.wat', import.meta.url), 'utf8'));
   backend.exports.set_fuel64(BigInt(options.parentFuel ?? ((1n << 64n) - 1n)));
   // The parent holds child arenas as well as the child's full guest-memory capacity.
   backend.exports.enable_interpreter_backing();

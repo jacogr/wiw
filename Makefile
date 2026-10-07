@@ -18,10 +18,17 @@ FLAGS_M4 = -P -DRELEASE
 FLAGS_OPT = $(FLAGS_OPT_BASE) -O4 --converge
 endif
 
+# Force every derived artifact when configuration changes, even within one timestamp tick.
+# Older make versions can miss a freshly rewritten flags file if only its mtime is used.
+FLAGS_EXPECTED = DEBUG=$(DEBUG) FLAGS_M4=$(FLAGS_M4) FLAGS_OPT=$(FLAGS_OPT)
+ifneq ($(shell cat build/flags 2>/dev/null),$(FLAGS_EXPECTED))
+FLAGS_REBUILD = FORCE
+endif
+
 .DELETE_ON_ERROR:
 
 .PHONY: all check check-spec audit-spec audit-selfhost bench bench-load bench-create bench-create-phases clean FORCE
-all: build/wiw-opt.wasm
+all: build/wiw-opt.wasm build/wiw-opt.wat
 
 build:
 	mkdir -p $@
@@ -40,37 +47,42 @@ wat/m4/opcodes.m4: scripts/opcodes.tsv scripts/opcodes.awk
 	awk -v emit_m4=1 -f scripts/opcodes.awk scripts/opcodes.tsv > $@.tmp
 	@if cmp -s $@.tmp $@; then rm $@.tmp; else mv $@.tmp $@; fi
 
-build/wiw.wat: $(WAT_SRC) Makefile build/opcodes.wat wat/m4/opcodes.m4 build/flags | build
+build/wiw.wat: $(WAT_SRC) Makefile build/opcodes.wat wat/m4/opcodes.m4 build/flags $(FLAGS_REBUILD) | build
 	$(M4) $(FLAGS_M4) -Iwat -Ibuild wat/main.wat > $@
 
-build/wiw.wasm: build/wiw.wat
+build/wiw.wasm: build/wiw.wat $(FLAGS_REBUILD)
 	$(WAT2WASM) $< -o $@
 
-build/wiw-opt.wasm: build/wiw.wasm build/flags
+build/wiw-opt.wasm: build/wiw.wasm build/flags $(FLAGS_REBUILD)
 	$(WASM_OPT) $(FLAGS_OPT) $< -o $@
 
-check: build/wiw-opt.wasm
+# Print the already optimized binary as compact WAT for the interpreted engine copy.
+# Authoring/probe source remains the readable m4 expansion in build/wiw.wat.
+build/wiw-opt.wat: build/wiw-opt.wasm Makefile $(FLAGS_REBUILD)
+	$(WASM_OPT) $(FLAGS_OPT_BASE) --print-minified $< -o /dev/null > $@
+
+check: all
 	$(NODE) $(FLAGS_NODE) --test test/*.test.js
 
-check-spec: build/wiw-opt.wasm
+check-spec: all
 	$(NODE) $(FLAGS_NODE) --test test/spec*.test.js
 
-audit-spec: build/wiw-opt.wasm
+audit-spec: all
 	$(NODE) $(FLAGS_NODE) scripts/spec-audit.js
 
-audit-selfhost: build/wiw-opt.wasm
+audit-selfhost: all
 	$(NODE) $(FLAGS_NODE) scripts/spec-selfhost.js
 
-bench: build/wiw-opt.wasm
+bench: all
 	$(NODE) $(FLAGS_NODE) scripts/bench.js
 
-bench-load: build/wiw-opt.wasm
+bench-load: all
 	$(NODE) $(FLAGS_NODE) scripts/bench-load.js
 
-bench-create: build/wiw-opt.wasm
+bench-create: all
 	$(NODE) $(FLAGS_NODE) scripts/bench-create.js
 
-bench-create-phases: build/wiw-opt.wasm
+bench-create-phases: all
 	$(NODE) $(FLAGS_NODE) scripts/bench-create-phases.js
 
 clean:

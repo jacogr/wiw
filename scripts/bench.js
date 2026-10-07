@@ -191,7 +191,7 @@ cases.noFusionLoop = `(module (func (export "run") (param i64) (result i64)
 
 const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
 const report = {node: process.version, binaryen: execFileSync('wasm-opt', ['--version'], {encoding:'utf8'}).trim(),
-  engineSourceSha256: createHash('sha256').update(await readFile(new URL('../build/wiw.wat', import.meta.url))).digest('hex'),
+  engineSourceSha256: createHash('sha256').update(await readFile(new URL('../build/wiw-opt.wat', import.meta.url))).digest('hex'),
   binarySha256: createHash('sha256').update(await readFile(binary)).digest('hex'), iterations, samples, cases: []};
 for (const [runtime, create] of [['bootstrap', createBootstrapInterpreter], ['interpreted', createInterpreter]]) {
   for (const [name, source] of Object.entries(cases)) {

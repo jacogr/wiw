@@ -10,7 +10,7 @@ const samples=Number(process.env.BENCH_SAMPLES ?? 5);
 assert.ok(Number.isSafeInteger(repeats) && repeats>0 && repeats<=100);
 assert.ok(Number.isSafeInteger(samples) && samples>0 && samples<=20);
 const binary=new URL('../build/wiw-opt.wasm',import.meta.url);
-const source=await readFile(new URL('../build/wiw.wat',import.meta.url),'utf8');
+const source=await readFile(new URL('../build/wiw-opt.wat',import.meta.url),'utf8');
 const guest='(module (global (export "g") (mut i32) (i32.const 41)) (func (export "run") (result i32) global.get 0 i32.const 1 i32.add))';
 const report={node:process.version,binaryen:execFileSync('wasm-opt',['--version'],{encoding:'utf8'}).trim(),
   engineSourceSha256:createHash('sha256').update(source).digest('hex'),
