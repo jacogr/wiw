@@ -3044,3 +3044,44 @@ skips. Spec times are 2m05.44s hosted and
 0m05.72s native. Suite baselines are historical, so no paired
 full-suite speedup is claimed. Pass inspection and a bounded phase diagnostic
 also succeed with SIMD enabled. Parser work remains untouched and pending.
+
+
+### Parser experiments after native SIMD (all reverted)
+
+Six bounded trials measured loading through both the native and hosted engines,
+plus fresh hosted construction. They keep the existing byte grammar, decoder
+and validation fallback. None provides a repeatable gain worth retaining:
+
+| Trial | Hosted construction change | Decision |
+| --- | ---: | --- |
+| Balanced mnemonic length checks within each four-byte prefix | +2.34% | Loads mostly flat; artifacts grow |
+| Flat top-level zero-immediate instruction emission | +1.52% | Some integer/function loads improve 2–3%, but construction loses |
+| Sixteen-byte SIMD atom boundary scan | +1.10% | Several hosted loads regress 2–7% |
+| One-byte atom lexer shortcut | +0.34% | No convincing loading win |
+| Common nine-byte mnemonic length first | −0.66% initially; +0.72% on confirmation | Initial gain does not repeat |
+| Common length first plus early unsigned single-digit integer decoding | +2.58% | Some loads improve 1–3%, but construction loses |
+
+The common-length confirmation uses 25 alternating rounds of ten fresh hosted
+factories, with medians of 6.316/6.361 ms before/after. Most hosted load cases
+stay within 1%; native results vary and unchanged binary-loading controls also
+move, so small differences are not treated as stable wins. Other construction
+trials use nine rounds of ten factories. Loading alternates before/after order,
+warms each independent variant/runtime/case engine three times, and checks
+execution results outside timing. The first five trials use seven samples of
+three repeated loads; the combined digit trial and confirmation use eleven
+samples of five repeated loads. No test or audit overlaps these measurements.
+
+Performance history retains all six corrected trials and the longer confirmation.
+An early flat-path benchmark accidentally retained stale generated balanced
+mnemonic code after restoring its source timestamp; that combined exploratory
+run is excluded from evidence. The isolated flat-path record follows an explicit
+generator rebuild. Exhaustive mnemonic probes pass in both runtimes for the
+common-length candidate, including every suffix byte and physical-memory tails.
+Rejected prototypes are not claimed to pass the full specification.
+
+All runtime/parser/generator changes are reverted. Rebuilding reproduces the
+fully tested SIMD baseline byte-for-byte: 131,826-byte WASM and 847,323-byte
+optimized WAT, with their recorded SHA-256 hashes unchanged. Full suites are
+not repeated for identical artifacts; the retained baseline remains 193 tests
+and 65,199 spec commands per target, zero failures or skips. No new runtime
+branch, configuration, snapshot or guest compilation is introduced.
