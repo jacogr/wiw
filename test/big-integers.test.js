@@ -1,10 +1,11 @@
+import {runtimeNames} from './runtime.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {readFile,writeFile,mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createBootstrapInterpreter} from '../wiw.js';
+import {createBootstrapInterpreter} from './runtime.js';
 
 const binary=new URL('../build/wiw-opt.wasm',import.meta.url);
 const source=await readFile(new URL('../build/wiw.wat',import.meta.url),'utf8');
@@ -16,7 +17,7 @@ for(const name of ['small','trim','mul','shift','half','compare','sub','bits']) 
 const capacity=1023,bytes=4096,a=4112,b=8240,c=12368;
 const wordMask=(1n<<32n)-1n;
 
-for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: exact integer cursors preserve carries, borrows and buffer bounds`,async()=>{
+for(const runtime of runtimeNames) test(`${runtime}: exact integer cursors preserve carries, borrows and buffer bounds`,async()=>{
   const dir=await mkdtemp(join(tmpdir(),'wiw-big-'));
   try {
     let write,read,call;

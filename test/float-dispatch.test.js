@@ -1,8 +1,8 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createBootstrapInterpreter, createInterpreter} from '../wiw.js';
 
-for (const [runtime, create] of [['bootstrap', createBootstrapInterpreter], ['interpreted', createInterpreter]]) {
+for (const [runtime, create] of runtimeFactories) {
   test(`${runtime}: scalar float dispatch retains precise traps, raw bits and fuel recovery`, async () => {
     const engine = await create();
     const source = `(module

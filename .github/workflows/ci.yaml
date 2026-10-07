@@ -51,4 +51,7 @@ jobs:
 
       - name: Run self-hosted tests and full spec on the optimized bootstrap
         run: |
-          make check
+          make check-wat
+
+      - name: Run tests and full spec on the native optimized bootstrap
+        run: make check-wasm

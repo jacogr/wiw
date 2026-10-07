@@ -1,10 +1,11 @@
+import {runtimeNames} from './runtime.js';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
-import {createBootstrapInterpreter} from '../wiw.js';
+import {createBootstrapInterpreter} from './runtime.js';
 
 const binary=new URL('../build/wiw-opt.wasm',import.meta.url);
-for(const runtime of ['bootstrap','interpreted']) {
+for(const runtime of runtimeNames) {
   test(`${runtime}: implicit signature interning retains earliest indices, exact collisions and recursive identity`,async()=>{
     let call,write;
     if(runtime==='bootstrap') {

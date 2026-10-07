@@ -4,7 +4,7 @@ import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createInterpreter } from '../wiw.js';
+import { createInterpreter } from './runtime.js';
 const basic = '(module (func (export "run") (result i32) i32.const 42))';
 for (const binary of ['wiw-opt.wasm']) {
   const url = new URL(`../build/${binary}`, import.meta.url);

@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createInterpreter } from '../wiw.js';
+import { createInterpreter } from './runtime.js';
 
 const guest = (body, header = '(result i32)') => `(module (func (export "run") ${header} ${body}))`;
 async function native(source, dir) {

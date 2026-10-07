@@ -1,6 +1,6 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
 
 const binary=new URL('../build/wiw-opt.wasm',import.meta.url);
 const vectorMask=(1n<<128n)-1n;
@@ -22,7 +22,7 @@ for (const width of [8,16,32,64]) {
 }
 const source=`(module ${functions.join('\n')})`;
 
-for (const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+for (const [runtime,create] of runtimeFactories) {
   test(`${runtime}: every fixed-width lane preserves signed boundaries, neighboring bits and exact guest fuel`,async () => {
     const engine=await create(binary);
     for (const padding of ['', '(; reload with a different instruction arena origin ;)']) {

@@ -1,10 +1,11 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createBootstrapInterpreter, createInterpreter } from '../wiw.js';
+import { createInterpreter } from './runtime.js';
 import { floatBits, floatValue } from '../scripts/scalar-values.js';
 const names = [null, 'i32', 'i64', 'f32', 'f64'];
 const sourceFor = (body, type) => `(module (func (export "run") (result ${type}) ${body}))`;
@@ -89,7 +90,7 @@ for (const binary of ['wiw-opt.wasm']) {
       '2.4703282292062327e-324', '2.4703282292062328e-324',
       '7.006492321624085e-46', '7.006492321624086e-46',
       '0x1.fffffffffffffp1023', '0x1p-1074', '0', '-0', '0.1'];
-    for (const create of [createBootstrapInterpreter, createInterpreter]) {
+    for (const create of runtimeFactories.map(([,create])=>create)) {
       const engine = await create(url);
       for (const type of ['f64', 'f32']) {
         const width = type === 'f32' ? 32 : 64, integer = type === 'f32' ? 'i32' : 'i64';
@@ -121,7 +122,7 @@ for (const binary of ['wiw-opt.wasm']) {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
       literals.push(`${n & 1 ? '-' : ''}${seed}e-${n % 11}`);
     }
-    for (const create of [createBootstrapInterpreter, createInterpreter]) {
+    for (const create of runtimeFactories.map(([,create])=>create)) {
       const engine = await create(url);
       for (const type of ['f32', 'f64']) {
         const integer = type === 'f32' ? 'i32' : 'i64';
@@ -155,7 +156,7 @@ for (const binary of ['wiw-opt.wasm']) {
     for (const length of [8, 9, 10, 17, 18, 19, 100, 1000]) {
       literals.push(`1${'0'.repeat(length)}e-${length}`, `-${'9'.repeat(length)}e-${length}`);
     }
-    for (const create of [createBootstrapInterpreter, createInterpreter]) {
+    for (const create of runtimeFactories.map(([,create])=>create)) {
       const engine = await create(url);
       for (const type of ['f32', 'f64']) {
         const width = type === 'f32' ? 32 : 64, integer = type === 'f32' ? 'i32' : 'i64';
@@ -194,7 +195,7 @@ for (const binary of ['wiw-opt.wasm']) {
         literals.push(decimal, decimal.replace(/(?<=\d)(?=\d)/g, '_'));
       }
     }
-    for (const create of [createBootstrapInterpreter, createInterpreter]) {
+    for (const create of runtimeFactories.map(([,create])=>create)) {
       const engine = await create(url);
       for (const type of ['f32', 'f64']) {
         const width = type === 'f32' ? 32 : 64, integer = type === 'f32' ? 'i32' : 'i64';
@@ -231,7 +232,7 @@ for (const binary of ['wiw-opt.wasm']) {
         literals.push(literal, `0x${digits.slice(0, point).split('').join('_')}.${digits.slice(point).split('').join('_')}p-${4 * point}`);
       }
     }
-    for (const create of [createBootstrapInterpreter, createInterpreter]) {
+    for (const create of runtimeFactories.map(([,create])=>create)) {
       const engine = await create(url);
       for (const type of ['f32', 'f64']) {
         const width = type === 'f32' ? 32 : 64, integer = type === 'f32' ? 'i32' : 'i64';

@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {mkdtemp, readFile, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createInterpreter} from '../wiw.js';
+import {createInterpreter} from './runtime.js';
 
 const extensions = [['i32', 8], ['i32', 16], ['i64', 8], ['i64', 16], ['i64', 32]];
 const conversions = ['i32', 'i64'].flatMap(out => ['f32', 'f64'].flatMap(input => ['s', 'u'].map(sign => [out, input, sign])));

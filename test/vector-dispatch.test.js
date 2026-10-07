@@ -1,6 +1,6 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
 
 const binary=new URL('../build/wiw-opt.wasm',import.meta.url);
 const mask=(1n<<128n)-1n;
@@ -21,7 +21,7 @@ const expected=bits => {
   return bits^mask;
 };
 
-for (const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+for (const [runtime,create] of runtimeFactories) {
   test(`${runtime}: alternating vector families and relaxed aliases preserve raw halves and recover after lane bounds traps`,async () => {
     const engine=await create(binary);
     for (const padding of [0,512]) {

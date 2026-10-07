@@ -2930,3 +2930,26 @@ byte-identical to the original O4 comparison artifacts. Final verification
 passes all 246 tests in 2m16.59s; its hosted audit passes all 65,199
 commands in 2m07.90s, and the native audit also passes all
 65,199 commands. Both audits have zero failures or skips.
+
+
+The test matrix now has explicit `check-wat` and `check-wasm` targets. `make check`
+depends on `check-wat`; CI executes WAT then WASM in separate steps. Both build
+and test the same selected optimized binary. `test/runtime.js` selects shared
+factory/case registrations using the target's `WIW_TEST_RUNTIME=wat|wasm`; raw
+Node test runs default to WAT, and invalid runtime values fail immediately.
+Production `createInterpreter()` and `runSuite()` defaults do not change.
+Shared parameterized pairs now run once per target, preserving both runtime
+variants across CI without doubling each target. Dedicated self-hosting, public
+API default and mixed-owner tests deliberately retain their explicit runtime
+requirements. A parent-fuel behavior test detects incorrect factory selection.
+The full frozen spec runs at the selected level and verifies its runtime/depth
+metadata. WAT and WASM reports have distinct selfhost/native paths.
+
+Final sequential validation invokes `make check` (verifying the default alias)
+and `make check-wasm`. Each passes 191 tests, with zero failures/skips.
+WAT takes 2m07.14s, including its 2m01.54s
+complete spec; WASM takes 0m10.44s, including its
+0m05.90s complete spec. Both execute all 65,199
+commands across 258 frozen files. Counts decrease from the previous single-run
+246 because 56 duplicated runtime registrations are split across targets, and
+one selected-runtime behavior check is added. Frozen spec coverage is unchanged.

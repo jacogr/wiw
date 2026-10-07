@@ -1,3 +1,4 @@
+import {interpreted as selectedInterpreted} from './runtime.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
@@ -19,7 +20,7 @@ async function run(source, mutate = () => {}, options = {}) {
     await writeFile(join(dir, 'fixture.wast'), source);
     await writeFile(join(dir, 'upstream.json'), JSON.stringify(provenance));
     await writeFile(join(dir, 'capabilities.json'), JSON.stringify(capabilities));
-    return await runSuite(binary, pathToFileURL(dir + '/'), options);
+    return await runSuite(binary, pathToFileURL(dir + '/'), {interpreted:selectedInterpreted,...options});
   } finally { await rm(dir, {recursive: true, force: true}); }
 }
 
@@ -137,7 +138,7 @@ test('audit reports supported failures separately, without passing or skipping t
     await writeFile(join(dir, 'fixture.wast'), source);
     await writeFile(join(dir, 'upstream.json'), JSON.stringify({revision: 'fixture', files: [{file: 'fixture.wast', sha256: createHash('sha256').update(source).digest('hex')}]}));
     await writeFile(join(dir, 'capabilities.json'), JSON.stringify({fuelPerInvocation: 100000}));
-    const report = await runSuite(binary, pathToFileURL(dir + '/'), {audit: true});
+    const report = await runSuite(binary, pathToFileURL(dir + '/'), {audit: true,interpreted:selectedInterpreted});
     assert.equal(report.passed, 1); assert.equal(report.failed, 1); assert.equal(report.skipped, 0);
     assert.equal(report.failures[0].command, 'assert_return');
   } finally {await rm(dir, {recursive: true, force: true});}
@@ -273,7 +274,7 @@ test('profiled selections account for empty setup and cumulative file phases',as
     await writeFile(join(directory,'upstream.json'),JSON.stringify(provenance));
     await writeFile(join(directory,'capabilities.json'),JSON.stringify({capacityModules:{},fuelPerInvocation:100000}));
     const snapshots=[];
-    const complete=await runSuite(binary,pathToFileURL(directory+'/'),{audit:true,profile:true,onFile:(_counts,partial)=>snapshots.push(structuredClone(partial))});
+    const complete=await runSuite(binary,pathToFileURL(directory+'/'),{audit:true,interpreted:selectedInterpreted,profile:true,onFile:(_counts,partial)=>snapshots.push(structuredClone(partial))});
     assert.equal(complete.passed,4);assert.equal(complete.failed,0);assert.equal(complete.skipped,0);
     assert.deepEqual(snapshots.map(item=>item.phases.construction.count),[2,4]);
     assert.deepEqual(snapshots.map(item=>item.phases.loading.count),[2,4]);

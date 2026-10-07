@@ -1,8 +1,8 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createBootstrapInterpreter, createInterpreter} from '../wiw.js';
 
-for (const [runtime, create] of [['bootstrap', createBootstrapInterpreter], ['interpreted', createInterpreter]]) {
+for (const [runtime, create] of runtimeFactories) {
   test(`${runtime}: public invocation resolves current exports across reloads and failures`, async () => {
     const engine = await create();
     engine.load(`(module

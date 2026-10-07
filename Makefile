@@ -27,7 +27,7 @@ endif
 
 .DELETE_ON_ERROR:
 
-.PHONY: all check check-spec audit-spec audit-selfhost bench bench-load bench-create bench-create-phases inspect-opt clean FORCE
+.PHONY: all check check-wat check-wasm check-spec audit-spec audit-selfhost bench bench-load bench-create bench-create-phases inspect-opt clean FORCE
 all: build/wiw-opt.wasm build/wiw-opt.wat
 
 build:
@@ -70,8 +70,13 @@ inspect-opt: build/wiw.wasm build/flags
 	BINARYEN_PASS_DEBUG=1 $(WASM_OPT) $(FLAGS_OPT) build/wiw.wasm -o /dev/null > build/opt-passes.log 2>&1
 	@awk '/running pass:/ { sub(/^.*running pass: /, ""); sub(/\.\.\..*/, ""); print }' build/opt-passes.log
 
-check: all
-	$(NODE) $(FLAGS_NODE) --test test/*.test.js
+check: check-wat
+
+check-wat: all
+	WIW_TEST_RUNTIME=wat $(NODE) $(FLAGS_NODE) --test test/*.test.js
+
+check-wasm: all
+	WIW_TEST_RUNTIME=wasm $(NODE) $(FLAGS_NODE) --test test/*.test.js
 
 check-spec: all
 	$(NODE) $(FLAGS_NODE) --test test/spec*.test.js

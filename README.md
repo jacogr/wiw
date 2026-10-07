@@ -28,6 +28,17 @@ uses `wasm-opt -O4 --converge --strip-debug --strip-producers`; all tests and au
 are `RELEASE` by default and `DEBUG` with `DEBUG=1`. Switching modes rebuilds
 automatically; `make check` switches back to release without requiring `make clean`.
 
+`make check` defaults to `make check-wat`. `check-wat` runs shared regressions
+and the entire pinned spec through the interpreted WAT copy; `check-wasm` runs
+them directly through the native optimized bootstrap. Both targets build the
+same selected release/debug artifacts. CI runs `check-wat` followed by
+`check-wasm` in separate steps. Shared cases run once per target instead of
+duplicating both runtimes inside one run; dedicated self-hosting, public-default
+and cross-runtime ownership tests remain explicit. Runtime selection lives in
+`test/runtime.js` and does not change the production API. Spec reports are
+separate: `build/spec-selfhost-wiw-opt.wasm.json` and
+`build/spec-native-wiw-opt.wasm.json`.
+
 The engine implements scalar operations for i32, i64, f32 and f64, direct
 and structurally typed indirect calls, flat/folded control, stack-polymorphic
 validation, globals, active/passive data and active/passive/declarative element segments, multiple 32-bit or 64-bit memories and typed reference
@@ -204,9 +215,11 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 246 tests in 136,590.537 ms
-(2m16.59s). The hosted audit within that run passes all 65,199 commands in
-127,898.384 ms (2m07.90s), with zero failures or skips.
+The latest complete `make check` / `check-wat` run passes all 191 tests in 127,135.534 ms
+(2m07.14s). `check-wasm` passes the same 191 registered tests in
+10,437.981 ms (0m10.44s). Each executes all 65,199 spec commands:
+WAT takes 121,538.148 ms (2m01.54s), and WASM takes
+5,898.879 ms (0m05.90s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -326,9 +339,9 @@ Both audit commands now print exclusive construction, loading, execution and
 other timings, with per-file and cumulative values in their JSON reports.
 Construction includes the fresh self-hosted interpreter copy; loading includes
 initialization/start functions. Failed attempts are counted, and forwarded
-callbacks stay in their enclosing phase. The latest hosted run spends 48.29s
-constructing, 31.23s loading, 46.41s executing and 1.97s on other harness work:
-construction and loading account for 62% of its total. These are API wall times,
+callbacks stay in their enclosing phase. The latest hosted run spends 45.93s
+constructing, 28.80s loading, 44.90s executing and 1.91s on other harness work:
+construction and loading account for 61% of its total. These are API wall times,
 not pure guest instruction CPU times, and profiling is not a speedup claim.
 
 The detailed fresh-construction follow-up retains safe atom-word prefixes,

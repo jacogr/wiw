@@ -1,10 +1,10 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
 
 const binary=new URL('../build/wiw-opt.wasm',import.meta.url);
 const cases=[['i32',8],['i32',16],['i64',8],['i64',16],['i64',32]];
-for (const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+for (const [runtime,create] of runtimeFactories) {
   test(`${runtime}: sign extensions preserve canonical bits, exact fuel and full operand capacity`,async () => {
     const engine=await create(binary);
     const source=`(module ${cases.map(([type,width]) => `

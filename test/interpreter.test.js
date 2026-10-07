@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createInterpreter } from '../wiw.js';
+import { createInterpreter } from './runtime.js';
 
 const moduleFor = (literal, folded = true, name = 'answer') =>
   `(module (func (export "${name}") (result i32) ${folded ? `(i32.const ${literal})` : `i32.const ${literal}`}))`;

@@ -1,10 +1,10 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {execFileSync} from 'node:child_process';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
 
 const binary=new URL('../build/wiw-opt.wasm',import.meta.url);
 const annotations=[
@@ -15,7 +15,7 @@ const annotations=[
   '(@note "before" ;; ignored )\n (nested) "after")',
   '(@"quoted name" "payload" (nested))'
 ];
-for(const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+for(const [runtime,create] of runtimeFactories) {
   test(`${runtime}: annotation strings preserve following syntax and never join data segments`,async()=>{
     const directory=await mkdtemp(join(tmpdir(),'wiw-annotations-'));
     try {

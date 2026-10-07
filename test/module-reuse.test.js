@@ -1,10 +1,10 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
 
 // Sharing compiled bootstrap code must never share interpreter or guest state.
-for (const [name,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+for (const [name,create] of runtimeFactories) {
   test(`${name}: compiled module creates isolated concurrent instances`,async()=>{
     const module=await WebAssembly.compile(await readFile(new URL('../build/wiw-opt.wasm',import.meta.url)));
     const [left,right]=await Promise.all([create(module),create(module)]);

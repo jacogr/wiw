@@ -1,10 +1,11 @@
+import {runtimeFactories,runtimeNames} from './runtime.js';
 import assert from 'node:assert/strict';
 import {after,before,test} from 'node:test';
 import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
+import {createBootstrapInterpreter} from './runtime.js';
 
 let directory,source,binary;
 before(async () => {
@@ -35,7 +36,7 @@ before(async () => {
 });
 after(async () => {if(directory) await rm(directory,{recursive:true,force:true});});
 
-for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: lexer preserves spans, delimiters and failures at memory end`,async()=>{
+for(const runtime of runtimeNames) test(`${runtime}: lexer preserves spans, delimiters and failures at memory end`,async()=>{
   let call,write;
   if(runtime==='bootstrap') {
     const {instance}=await WebAssembly.instantiate(await readFile(binary));
@@ -261,7 +262,7 @@ for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: lexer preser
   assert.equal(call('scan_tok'),pointer);assert.equal(call('scan_len'),9);
 });
 
-for(const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+for(const [runtime,create] of runtimeFactories) {
   test(`${runtime}: trivia transitions preserve quoted identifier decoding and failed-load recovery`,async()=>{
     const engine=await create(new URL('../build/wiw-opt.wasm',import.meta.url));
     const guest=`(module (@note (; comment ;) (nested))

@@ -1,10 +1,10 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
 
 const binary = new URL('../build/wiw-opt.wasm',import.meta.url);
 const zero = {type:'v128',bits:0n};
-for (const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+for (const [runtime,create] of runtimeFactories) {
   test(`${runtime}: frame entry copies maximum vector parameters and clears both ends of the local arena`,async () => {
     const engine = await create(binary);
     const params = `(param ${'v128 '.repeat(128)})`;

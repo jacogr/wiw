@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {mkdtemp, readFile, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createInterpreter} from '../wiw.js';
+import {createInterpreter} from './runtime.js';
 
 const source = `(module (table $t (export "table") 2 8 funcref)
   (func $f (export "f") (result i32) i32.const 42)

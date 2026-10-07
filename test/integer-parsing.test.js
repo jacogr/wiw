@@ -1,10 +1,11 @@
+import {runtimeNames} from './runtime.js';
 import assert from 'node:assert/strict';
 import {after,before,test} from 'node:test';
 import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {createBootstrapInterpreter} from '../wiw.js';
+import {createBootstrapInterpreter} from './runtime.js';
 
 let directory,source,binary;
 before(async()=>{
@@ -35,7 +36,7 @@ before(async()=>{
 });
 after(async()=>{if(directory) await rm(directory,{recursive:true,force:true});});
 
-for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: integer digit paths preserve exact ranges and syntax at memory end`,async()=>{
+for(const runtime of runtimeNames) test(`${runtime}: integer digit paths preserve exact ranges and syntax at memory end`,async()=>{
   let call,write;
   if(runtime==='bootstrap') {
     const {instance}=await WebAssembly.instantiate(await readFile(binary));

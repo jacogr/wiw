@@ -1,14 +1,14 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
 
 const operations=['add','sub','mul','and','or','xor','shl','shr_s','shr_u','rotl','rotr',
   'eq','ne','lt_s','lt_u','gt_s','gt_u','le_s','le_u','ge_s','ge_u'];
-for(const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+for(const [runtime,create] of runtimeFactories) {
   test(`${runtime}: adjacent integer sequences match native wrapping, shifts and comparisons`,async()=>{
     const directory=await mkdtemp(join(tmpdir(),'wiw-fusion-'));
     try {

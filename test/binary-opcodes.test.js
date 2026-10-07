@@ -1,10 +1,11 @@
+import {runtimeNames} from './runtime.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {readFile,writeFile,mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createBootstrapInterpreter} from '../wiw.js';
+import {createBootstrapInterpreter} from './runtime.js';
 
 const binary=new URL('../build/wiw-opt.wasm',import.meta.url);
 const table=await readFile(new URL('../scripts/opcodes.tsv',import.meta.url),'utf8');
@@ -45,7 +46,7 @@ async function adapter(runtime,directory) {
     read:(at,n)=>parent.readMemory(at,n),write:(at,bytes)=>parent.writeMemory(at,bytes)};
 }
 
-for(const runtime of ['bootstrap','interpreted']) {
+for(const runtime of runtimeNames) {
   test(`${runtime}: every wire mnemonic, alias and hole preserves exact text and bounded stores`,async()=>{
     const directory=await mkdtemp(join(tmpdir(),'wiw-wire-'));
     try {

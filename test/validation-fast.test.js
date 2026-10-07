@@ -1,7 +1,7 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {readFile} from 'node:fs/promises';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
 
 const binary=new URL('../build/wiw-opt.wasm',import.meta.url);
 const types=['','i32','i64','f32','f64'];
@@ -11,7 +11,7 @@ const ids=new Map(allRows.map(([id,name])=>[name,Number(id)]));
 const ranges=[['i32.const','i32.popcnt'],['i64.const','i64.extend_i32_u'],
   ['f32.const','f64.ge'],['i32.trunc_f32_s','i64.trunc_sat_f64_u']];
 const rows=allRows.filter(([id])=>ranges.some(([low,high])=>Number(id)>=ids.get(low)&&Number(id)<=ids.get(high)));
-for(const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+for(const [runtime,create] of runtimeFactories) {
   test(`${runtime}: compact scalar validation preserves every numeric signature and unreachable typing`,async()=>{
     const e=await create(binary);
     for(const [,op,count,,operation,input,output] of rows) {

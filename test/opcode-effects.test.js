@@ -1,10 +1,11 @@
+import {runtimeNames} from './runtime.js';
 import assert from 'node:assert/strict';
 import {after,before,test} from 'node:test';
 import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {createBootstrapInterpreter} from '../wiw.js';
+import {createBootstrapInterpreter} from './runtime.js';
 
 let directory,source,binary,opcodes;
 before(async () => {
@@ -32,7 +33,7 @@ before(async () => {
 });
 after(async () => {if (directory) await rm(directory,{recursive:true,force:true});});
 
-for (const runtime of ['bootstrap','interpreted']) {
+for (const runtime of runtimeNames) {
   test(`${runtime}: extended opcode effects preserve every signature, mixed operand order and memory address width`,async () => {
     let invoke;
     if (runtime==='bootstrap') {

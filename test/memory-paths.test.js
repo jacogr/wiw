@@ -1,9 +1,9 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
 
 const binary=new URL('../build/wiw-opt.wasm',import.meta.url);
-for(const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+for(const [runtime,create] of runtimeFactories) {
   test(`${runtime}: growth retains packed and empty memories, zeroes new pages and charges no-op fuel`,async()=>{
     const engine=await create(binary);
     engine.load(`(module

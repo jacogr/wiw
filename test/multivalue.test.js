@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {mkdtemp, readFile, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createInterpreter} from '../wiw.js';
+import {createInterpreter} from './runtime.js';
 const source = `(module
   (type $pair (func (param i32) (result i32 i64)))
   (type $same (func (param i32) (result i32 i64)))

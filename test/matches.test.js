@@ -1,10 +1,11 @@
+import {runtimeFactories,runtimeNames} from './runtime.js';
 import assert from 'node:assert/strict';
 import {after,before,test} from 'node:test';
 import {execFileSync} from 'node:child_process';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
+import {createBootstrapInterpreter} from './runtime.js';
 
 let directory,source,probe;
 before(async()=>{
@@ -30,7 +31,7 @@ before(async()=>{
 });
 after(async()=>{if(directory) await rm(directory,{recursive:true,force:true});});
 
-for(const runtime of ['bootstrap','interpreted']) {
+for(const runtime of runtimeNames) {
   test(`${runtime}: byte equality handles every word/tail boundary, unaligned mismatch and memory endpoint`,async()=>{
     let call,write;
     if(runtime==='bootstrap') {
@@ -67,7 +68,7 @@ for(const runtime of ['bootstrap','interpreted']) {
   });
 }
 
-for(const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+for(const [runtime,create] of runtimeFactories) {
   test(`${runtime}: shared-prefix and UTF-8 names remain byte-exact across declarations, exports and labels`,async()=>{
     const engine=await create(new URL('../build/wiw-opt.wasm',import.meta.url));
     const prefix='λ'+'abcdefgh'.repeat(4),a=prefix+'0',b=prefix+'1';

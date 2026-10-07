@@ -16,17 +16,19 @@ unnecessary. Tests need no network after initialization. The runner checks HEAD
 against the recorded revision and verifies file/license hashes. Missing or
 mismatched checkouts fail with an actionable diagnostic.
 
-The complete 3.0 core suite passes through the default interpreted WAT copy
-on the optimized bootstrap (`-O4 --converge --strip-debug --strip-producers`):
+The complete 3.0 core suite passes through both the interpreted WAT copy and
+the native optimized bootstrap (`-O4 --converge --strip-debug --strip-producers`):
 
 | Scope | Files | Passed | Skipped | Failed |
 | --- | ---: | ---: | ---: | ---: |
-| CI and full interpreted target audit | 258 | 65,199 | 0 | 0 |
+| `check-wat` / interpreted audit | 258 | 65,199 | 0 | 0 |
+| `check-wasm` / native audit | 258 | 65,199 | 0 | 0 |
 
 Counts include module loads, registrations and assertions. `upstream.json`
 records every target file. `capabilities.json` includes the entire inventory in
 `verifiedFiles` and freezes its per-file counts. `make check-spec` fails on any
-failure or skip. Regression tests cover text/binary loading, multivalue controls,
+failure or skip. `make check` defaults to `check-wat`; CI runs `check-wat` and
+`check-wasm` sequentially, each with the same frozen inventory. Regression tests cover text/binary loading, multivalue controls,
 reference identity, independently indexed tables, bulk memory, SIMD, recursive GC types, packed fields, extended constants and exceptions.
 Every SIMD wire opcode is also checked against a native-Wasm test oracle.
 Self-hosting executes guests through two interpreted layers, including vector

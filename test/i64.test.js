@@ -4,7 +4,7 @@ import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createInterpreter } from '../wiw.js';
+import { createInterpreter } from './runtime.js';
 const guest = (body, result = 'i64') => `(module (func (export "run") (result ${result}) ${body}))`;
 const wide = [0n, 1n, -1n, -(1n << 63n), (1n << 63n) - 1n, 0x123456789abcdef0n];
 for (const binary of ['wiw-opt.wasm']) {

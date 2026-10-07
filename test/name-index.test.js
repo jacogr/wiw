@@ -1,6 +1,6 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
 
 // These identifiers collide in the largest candidate table and wrap from its final bucket.
 const names=[];
@@ -20,7 +20,7 @@ const source=`(module
     local.get ${declarations[0]} ${declarations.slice(1).map(name=>`local.get ${name} i32.add`).join(' ')})
   ${functions} ${types})`;
 
-for(const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+for(const [runtime,create] of runtimeFactories) {
   test(`${runtime}: colliding names wrap safely and remain distinct in function, type and local namespaces`,async()=>{
     const engine=await create();
     engine.load(source);

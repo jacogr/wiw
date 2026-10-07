@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
-import {WiwException} from '../wiw.js';
-import {createInterpreter} from '../wiw.js';
+import {WiwException} from './runtime.js';
+import {createInterpreter} from './runtime.js';
 
 const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
 

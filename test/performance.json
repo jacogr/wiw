@@ -69299,6 +69299,142 @@
         "elapsedMs": 136590.537125
       },
       "tradeoffs": "Restore O4 as the default for execution speed and overall balance; preserve all candidate size/timing data in the preceding comparison. Release stripping, supported feature flags for printing, and CI pass-order inspection remain. Rebuilt artifacts are byte-identical to the original O4 comparison input."
+    },
+    {
+      "label": "Run the complete test matrix through separate WAT and WASM targets",
+      "retained": true,
+      "node": "v24.11.1",
+      "binaryen": "wasm-opt version 133",
+      "tag": "wg-3.0",
+      "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
+      "runtime": "interpreted",
+      "interpreterDepth": 1,
+      "engineSourceSha256": "f2d104a1eae64b4fbfc9244bb4bbd5d47a957903452b2649c7cdbabd682ce59f",
+      "binarySha256": "ee7dd296258089f6cdf5cff559d697608ad541679f8de3a118e3d1f21f2c07ba",
+      "testRuntimeSelectorSha256": "85b0729dc4d6673d75a4f155e1803f7d76b2a188066cacdd24745782f260a94c",
+      "testSpecSha256": "c05169974bb1ddee14679ed55e100759d1abda7f143992d5e6f56260b79b4633",
+      "harnessSha256": "35a60c50e29c63c833f3e829b7442c3d5b17ebd476e4a544d3faeb0416ab1223",
+      "fullSpec": {
+        "elapsedMs": 121538.147917,
+        "passed": 65199,
+        "failed": 0,
+        "skipped": 0,
+        "phases": {
+          "construction": {
+            "elapsedMs": 45932.41014600057,
+            "count": 7393
+          },
+          "loading": {
+            "elapsedMs": 28795.40957600012,
+            "count": 7393
+          },
+          "execution": {
+            "elapsedMs": 44901.01263699953,
+            "count": 57984
+          },
+          "other": {
+            "elapsedMs": 1909.3155579997838
+          }
+        },
+        "fileCount": 258
+      },
+      "bootstrapAudit": {
+        "elapsedMs": 5898.878666,
+        "passed": 65199,
+        "failed": 0,
+        "skipped": 0,
+        "phases": {
+          "construction": {
+            "elapsedMs": 1177.1366109999917,
+            "count": 7393
+          },
+          "loading": {
+            "elapsedMs": 1800.0885029999988,
+            "count": 7393
+          },
+          "execution": {
+            "elapsedMs": 899.6835710000182,
+            "count": 57984
+          },
+          "other": {
+            "elapsedMs": 2021.9699809999906
+          }
+        },
+        "fileCount": 258
+      },
+      "completeTestSuite": {
+        "elapsedMs": 127135.53425
+      },
+      "validation": {
+        "testsPerTarget": 191,
+        "failedPerTarget": 0,
+        "skippedPerTarget": 0,
+        "targets": [
+          "check-wat",
+          "check-wasm"
+        ],
+        "defaultAliasVerified": "make check invokes check-wat",
+        "sharedCasesSelectRequestedRuntime": true
+      },
+      "testMatrix": {
+        "wat": {
+          "elapsedMs": 127135.53425,
+          "tests": 191,
+          "spec": {
+            "elapsedMs": 121538.147917,
+            "passed": 65199,
+            "failed": 0,
+            "skipped": 0,
+            "phases": {
+              "construction": {
+                "elapsedMs": 45932.41014600057,
+                "count": 7393
+              },
+              "loading": {
+                "elapsedMs": 28795.40957600012,
+                "count": 7393
+              },
+              "execution": {
+                "elapsedMs": 44901.01263699953,
+                "count": 57984
+              },
+              "other": {
+                "elapsedMs": 1909.3155579997838
+              }
+            },
+            "fileCount": 258
+          }
+        },
+        "wasm": {
+          "elapsedMs": 10437.981167,
+          "tests": 191,
+          "spec": {
+            "elapsedMs": 5898.878666,
+            "passed": 65199,
+            "failed": 0,
+            "skipped": 0,
+            "phases": {
+              "construction": {
+                "elapsedMs": 1177.1366109999917,
+                "count": 7393
+              },
+              "loading": {
+                "elapsedMs": 1800.0885029999988,
+                "count": 7393
+              },
+              "execution": {
+                "elapsedMs": 899.6835710000182,
+                "count": 57984
+              },
+              "other": {
+                "elapsedMs": 2021.9699809999906
+              }
+            },
+            "fileCount": 258
+          }
+        }
+      },
+      "method": "Run make check then make check-wasm sequentially on the same unchanged release artifacts. Shared cases select only their target runtime; previously parameterized pairs are split across CI targets, so each run has fewer registered tests. Dedicated self-host/default-API and mixed-owner tests stay explicit. One new parent-fuel behavior test verifies the selected factory executes at the requested runtime depth. Reports use distinct paths. Production API and runner defaults remain unchanged."
     }
   ],
   "experiments": [

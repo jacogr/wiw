@@ -1,6 +1,6 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
 
 const binary=new URL('../build/wiw-opt.wasm',import.meta.url);
 const vector=0xfedcba98765432100123456789abcdefn;
@@ -11,7 +11,7 @@ const values=[
   ['externref','local.get 1',{type:'externref',value:object}],
   ['i64','i64.const 0x8123456789abcdef',{type:'i64',bits:0x8123456789abcdefn}]
 ];
-for(const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+for(const [runtime,create] of runtimeFactories) {
   test(`${runtime}: branch movement preserves live callers, raw halves and overlapping maximum results`,async()=>{
     const engine=await create(binary);
     for(const count of [0,1,2,128]) {

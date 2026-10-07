@@ -1,10 +1,10 @@
+import {runtimeFactories} from './runtime.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
 
 const binary = new URL('../build/wiw-opt.wasm',import.meta.url);
 const vector = {type:'v128',bits:0xfedcba98765432100123456789abcdefn};
-for (const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
+for (const [runtime,create] of runtimeFactories) {
   test(`${runtime}: active local high bases survive nested calls, tail replacement and import resumption`,async () => {
     const engine = await create(binary);
     const reference = {identity:'local-base'};

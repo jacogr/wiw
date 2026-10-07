@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createInterpreter } from '../wiw.js';
+import { createInterpreter } from './runtime.js';
 
 const guest = body => `(module (func (export "run") (result i32) ${body}))`;
 const record = (op, a, b, folded) => {
