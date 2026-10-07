@@ -475,11 +475,12 @@
 								(local.set $fuel (i64.sub (local.get $fuel) (i64.const 2)))
 								(global.set $tok (i32.load offset=M4_FUSION_BINARY_SOURCE_OFFSET (local.get $record)))
 								(local.set $next (i32.add (local.get $record) (i32.const M4_FUSION_BYTES)))
-								;; A following local.set can finish the update when its own fuel is still available.
+								;; A following set/tee can write the scalar result when its own fuel is still available.
 								(if (i32.and (i64.ne (local.get $fuel) (i64.const 0)) (i32.ne (local.get $next) (local.get $finish)))
 									(then
+										(local.set $op (i32.load (local.get $next)))
 										;; Keep every other instruction, including control/call boundaries, in ordinary dispatch.
-										(if (i32.eq (i32.load (local.get $next)) (i32.const M4_OP_LOCAL_SET))
+										(if (i32.le_u (i32.sub (local.get $op) (i32.const M4_OP_LOCAL_SET)) (i32.const 1))
 											(then
 												(local.set $meta (i32.mul (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $next)) (i32.const M4_SLOT_BYTES)))
 												(i64.store offset=M4_CALL_LOCALS_OFFSET (i32.add (local.get $frame) (local.get $meta)) (local.get $value))
@@ -487,12 +488,15 @@
 												(global.set $tok (i32.load offset=M4_INSTRUCTION_SOURCE_OFFSET (local.get $next)))
 												(local.set $fuel (i64.sub (local.get $fuel) (i64.const 1)))
 												(local.set $next (i32.add (local.get $next) (i32.const M4_INSTRUCTION_BYTES)))
-												(br $dispatch)
+												;; Set finishes with no operand; tee publishes the result through the shared path.
+												(if (i32.eq (local.get $op) (i32.const M4_OP_LOCAL_SET))
+													(then (br $dispatch))
+												)
 											)
 										)
 									)
 								)
-								;; Three fused instructions publish the same scalar result above the unchanged caller stack.
+								;; Publish the scalar result, including a consumed tee, above the unchanged caller stack.
 								(local.set $meta (i32.mul (global.get $sp) (i32.const M4_SLOT_BYTES)))
 								(i64.store (i32.add (global.get $stack-base) (local.get $meta)) (local.get $value))
 								(i64.store (i32.add (global.get $stack-high-base) (local.get $meta)) (i64.const 0))

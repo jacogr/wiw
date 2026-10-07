@@ -3389,3 +3389,35 @@ hosted and 0m12.04s native. Each passes all 65,199 wg-3.0 commands
 across 258 files; spec times are 2m09.60s WAT and
 0m06.26s WASM. Samples, hashes and reports remain in performance
 history. This completes the third requested optimization round.
+
+
+### Integer binary fusion through local.tee
+
+The existing non-trapping integer binary fusion path consumes a following
+local.tee as well as local.set when that instruction has remaining fuel.
+Both scalar operands are read before any local write. Set still finishes with
+no operand; tee writes the same local and uses the existing shared publication
+path for its scalar result. Integer comparisons preserve their i32 result
+width and both stored/published high halves remain zero. Instruction records,
+validation markers, source offsets and frame/stack layouts are unchanged.
+The existing two-temporary-slot capacity guard and partial-fuel fallback retain
+every original intermediate boundary. No guest code is compiled or rewritten.
+
+The existing differential fixture now checks both set and tee tails for all
+42 i32/i64 binary families, with constant/local operands and boundary values,
+through text and binary loading against native Wasm. New regressions cover
+left/right aliasing, named operands, narrow i64 comparisons, every fuel offset,
+callback failures/recovery, trapping division fallback, caller vector operands,
+intermediate capacity failures and a tee at the function end. Two hosted levels
+exercise aliased loop updates and i64 comparison tees. Two public benchmark
+cases check the i32/i64 decrement-and-test patterns.
+
+Immutable preceding local-move artifacts and selected release use the same frontend. Initial and confirmation runs each use 15 alternating construction rounds of ten fresh factories, checks outside timing. Execution uses three independent instances per variant/runtime/case, three 1000-iteration warmups and five alternating 2000-iteration samples; median of instance medians. Eight checked binary/tee groups per iteration include constant/local RHS, i32/i64 arithmetic and comparisons. Result checks remain timed. A separate aliased decrement-and-test loop checks the common control pattern. Modules reload outside samples. Native controls receive an additional three-instance confirmation with three 10000-iteration warmups and fifteen alternating 100000-iteration samples. No tests/audits overlap timed benchmarks. Full WAT then WASM targets run sequentially. Full-suite comparisons are historical.
+
+Extend the existing optional binary local.set tail to consume local.tee while publishing the same scalar result. Both raw operands are read before writing an aliased destination; narrow comparisons retain i32 results and the high half is cleared. Existing two-slot capacity guard and per-instruction fuel/source records remain unchanged. Initial/confirmation hosted checked groups improve 9-11% and the aliased loop about 12%. Native arithmetic is effectively flat; native comparison groups improve 3-9% in confirmation and loop improves 10%. Construction is roughly flat (initial -1.8%, confirmation -0.2%). Hosted set/float/move controls change +2.4/+0.6/+1.1% in confirmation. Longer native confirmation shows the loop 14.2% faster, with set/float/move controls 4.0/2.3/1.6% slower. The short float control fluctuation of +10% does not persist at longer duration. WASM grows 10 bytes and optimized WAT 77 bytes. No new marker, opcode, layout, validation path, cached state or guest compilation.
+
+Both complete targets pass all 205 tests with zero failures/skips: 2m05.48s
+hosted and 0m10.74s native. Each passes all 65,199 wg-3.0 commands
+across 258 files; spec times are 1m59.25s WAT and
+0m05.62s WASM. Samples, hashes and reports remain in performance
+history. Whole-suite times are separate complete runs, not a matched speedup.

@@ -249,6 +249,14 @@ for (const binary of ['wiw-opt.wasm']) {
     const moved=0xfedcba98765432100123456789abcdefn;
     assert.equal(deepest.invoke('move',moved),moved);
     assert.equal(deepest.invoke('reference'),42);
+    // Arithmetic tees preserve aliased operands and narrow comparison results through two hosted levels.
+    deepest.load(`(module
+      (func (export "count") (param i64) (result i64)
+        (loop $again local.get 0 i64.const 1 i64.sub local.tee 0 i64.const 0 i64.ne br_if $again) local.get 0)
+      (func (export "compare") (param i64 i64) (result i32) (local i32)
+        local.get 0 local.get 1 i64.lt_u local.tee 2 local.get 2 i32.eq))`);
+    assert.equal(deepest.invoke('count',17n),0n);
+    assert.equal(deepest.invoke('compare',-1n,1n),1);
     deepest.loadBinary(Uint8Array.from([
       0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,
       7,10,1,6,97,110,115,119,101,114,0,0,

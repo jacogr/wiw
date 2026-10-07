@@ -265,6 +265,15 @@ for(const [name,type,constant,check] of [
       local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
 }
 
+// Arithmetic tees update their local while directly feeding the loop condition.
+for(const type of ['i32','i64']) {
+  cases[`binaryTee${type}`]=`(module (func (export "run") (param i64) (result i64) (local $n ${type})
+    local.get 0 ${type==='i32'?'i32.wrap_i64':''} local.set $n
+    (loop $again local.get $n ${type}.const 1 ${type}.sub local.tee $n
+      ${type}.const 0 ${type}.ne br_if $again)
+    local.get $n ${type}.const 0 ${type}.ne if unreachable end i64.const 0))`;
+}
+
 const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
 const report = {node: process.version, binaryen: execFileSync('wasm-opt', ['--version'], {encoding:'utf8'}).trim(),
   engineSourceSha256: createHash('sha256').update(await readFile(new URL('../build/wiw-opt.wat', import.meta.url))).digest('hex'),

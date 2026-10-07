@@ -13,11 +13,11 @@ for(const [runtime,create] of runtimeFactories) {
     const directory=await mkdtemp(join(tmpdir(),'wiw-fusion-'));
     try {
       const cases=[];
-      for(const operand of ['constant','local']) for(const type of ['i32','i64']) for(const operation of operations) for(const literal of ['1','-1',type==='i32'?'0x80000001':'0xfedcba9876543210']) {
+      for(const tail of ['set','tee']) for(const operand of ['constant','local']) for(const type of ['i32','i64']) for(const operation of operations) for(const literal of ['1','-1',type==='i32'?'0x80000001':'0xfedcba9876543210']) {
         const result=operations.indexOf(operation)>=11?'i32':type;
         const name=`f${cases.length}`;
         cases.push({type,result,name,operand,right:type==='i32'?Number(BigInt(literal)):BigInt(literal),body:`(func (export "${name}") (param ${type}) ${operand==='local'?`(param $rhs ${type})`:''} (result ${result}) (local ${result})
-          local.get 0 ${operand==='local'?'local.get $rhs':`${type}.const ${literal}`} ${type}.${operation} local.set ${operand==='local'?2:1} local.get ${operand==='local'?2:1})`});
+          local.get 0 ${operand==='local'?'local.get $rhs':`${type}.const ${literal}`} ${type}.${operation} local.${tail} ${operand==='local'?2:1} ${tail==='set'?`local.get ${operand==='local'?2:1}`:''})`});
       }
       const source=`(module ${cases.map(item=>item.body).join('\n')})`;
       const wat=join(directory,'guest.wat'),wasm=join(directory,'guest.wasm');
@@ -132,5 +132,53 @@ for(const [runtime,create] of runtimeFactories) {
     assert.equal(engine.invoke('run',-1n),0n);
     engine.load('(module (func (export "run") (param v128) (result i32) local.get 0 local.get 0 i8x16.eq i8x16.all_true))');
     assert.equal(engine.invoke('run',1n<<127n),1);
+  });
+}
+
+
+for(const [runtime,create] of runtimeFactories) {
+  test(`${runtime}: binary tee fusion retains exact fuel, aliases, comparisons and callback recovery`,async()=>{
+    const engine=await create();
+    for(const [type,operation,result] of [['i32','add','i32'],['i64','add','i64'],['i64','eq','i32']])
+      for(const operand of ['constant','local']) for(const dest of result===type?[0,1,2]:[2]) {
+        const instructions=['local.get 0',operand==='local'?'local.get $rhs':`${type}.const 2`,`${type}.${operation}`,`local.tee ${dest}`,`local.get ${dest}`,`${result}.eq`];
+        const source=`(module (func (export "run") (param ${type}) (param $rhs ${type}) (result i32) (local ${result}) ${instructions.join(' ')}))`;
+        const args=type==='i64'?[40n,2n]:[40,2];engine.load(source);
+        let offset=0;
+        for(let fuel=0;fuel<instructions.length;fuel++) {
+          offset=source.indexOf(instructions[fuel],offset);engine.setFuel(fuel);
+          assert.throws(()=>engine.invoke('run',...args),new RegExp(`exhausted fuel at byte ${offset}$`));
+          engine.setFuel(instructions.length);assert.equal(engine.invoke('run',...args),1);offset+=instructions[fuel].length;
+        }
+      }
+    engine.setFuel(100000);
+    let fail=false;
+    engine.load(`(module (import "env" "step" (func $step (param i32) (result i32)))
+      (func (export "run") (param i32) (result i32)
+        local.get 0 i32.const 2 i32.add local.tee 0 call $step local.get 0 i32.add))`,
+      {env:{step:value=>{if(fail)throw new Error('step failed');return value+1;}}});
+    assert.equal(engine.invoke('run',40),85);fail=true;assert.throws(()=>engine.invoke('run',40),/host import/);
+    fail=false;assert.equal(engine.invoke('run',40),85);
+    engine.load('(module (func (export "run") (param i32) (result i32) local.get 0 i32.const 0 i32.div_s local.tee 0))');
+    assert.throws(()=>engine.invoke('run',40),/divide by zero/);
+  });
+
+  test(`${runtime}: binary tee fusion preserves intermediate capacity and caller vector operands`,async()=>{
+    const engine=await create();engine.setFuel(100000);
+    for(const padding of [4094,4095]) {
+      const source=`(module (func $calculate (param i32) (result i32)
+          local.get 0 i32.const 2 i32.add local.tee 0)
+        (func (export "run") (result i32)
+          ${'i32.const 1 '.repeat(padding)} i32.const 40 call $calculate ${'i32.add '.repeat(padding)}))`;
+      engine.load(source);
+      if(padding===4094) assert.equal(engine.invoke('run'),4136);
+      else assert.throws(()=>engine.invoke('run'),new RegExp(`resource limit at byte ${source.indexOf('i32.const 2')}$`));
+    }
+    engine.load(`(module (func $calculate (param i32) (result i32) local.get 0 i32.const 2 i32.add local.tee 0)
+      (func (export "run") (param v128) (result v128)
+        local.get 0 i32.const 40 call $calculate i32.const 42 i32.ne if unreachable end))`);
+    const vector=0xfedcba98765432100123456789abcdefn;assert.equal(engine.invoke('run',vector),vector);
+    engine.load('(module (func (export "run") (param i64) (result i64) (local v128) v128.const i64x2 -1 -1 local.set 1 local.get 0 i64.const 2 i64.add local.tee 0))');
+    assert.equal(engine.invoke('run',40n),42n);
   });
 }
