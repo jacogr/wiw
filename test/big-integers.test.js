@@ -23,7 +23,7 @@ for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: exact intege
     if(runtime==='bootstrap') {
       await writeFile(join(dir,'engine.wat'),instrumented);
       execFileSync('wat2wasm',[join(dir,'engine.wat'),'-o',join(dir,'engine.wasm')]);
-      execFileSync('wasm-opt',['--enable-bulk-memory','--enable-sign-ext','--enable-nontrapping-float-to-int','-O4','--converge',join(dir,'engine.wasm'),'-o',join(dir,'engine.wasm')]);
+      execFileSync('wasm-opt',['--enable-bulk-memory','--enable-sign-ext','--enable-nontrapping-float-to-int','-O4','--converge','--strip-debug','--strip-producers',join(dir,'engine.wasm'),'-o',join(dir,'engine.wasm')]);
       const e=(await WebAssembly.instantiate(await readFile(join(dir,'engine.wasm')))).instance.exports;
       write=(p,data)=>new Uint8Array(e.memory.buffer,p,data.length).set(data);
       read=(p,n)=>new Uint8Array(e.memory.buffer,p,n).slice();

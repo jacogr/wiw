@@ -46,6 +46,9 @@ jobs:
           command -v wasm-opt
           wasm-opt --version
 
+      - name: Inspect Binaryen optimization pass order
+        run: make inspect-opt
+
       - name: Run self-hosted tests and full spec on the optimized bootstrap
         run: |
           make check

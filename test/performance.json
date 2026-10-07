@@ -65605,6 +65605,3700 @@
         "elapsedMs": 138017.353
       },
       "tradeoffs": "Explicit caller-owned WebAssembly.Module only. No global path cache or interpreter snapshot. Fresh native instance, hosted WAT parse/load, guest state and frontend adapters per factory call. Avoids repeated file IO and byte-based instantiation; Node can already cache compiled byte input, so the measured saving is not attributed solely to compilation. The paired audit saves 10.64s of construction, offset by 5.86s slower loading; execution is flat. Overall gain is about 4%, and phase changes may include scheduling/GC effects."
+    },
+    {
+      "label": "Compare Binaryen speed and size presets with explicit metadata stripping",
+      "retained": true,
+      "node": "v24.11.1",
+      "binaryen": "wasm-opt version 133",
+      "tag": "wg-3.0",
+      "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
+      "runtime": "interpreted",
+      "interpreterDepth": 1,
+      "selectedPreset": "-Oz",
+      "flags": "-Oz --converge --strip-debug --strip-producers",
+      "engineSourceSha256": "cc9f25daafc69c8192cf277db0021ccf03e83b8f4ef3200476371a2698622dba",
+      "binarySha256": "efb65af98708f1d3f583acc6bc18594b68929e719219a8720cd6d583a46ec22b",
+      "frontendSha256": "174f96ef880f306238aa3e9ff277b369658f02dca9b495fbc01e8196cc6bc8e9",
+      "harnessSha256": "35a60c50e29c63c833f3e829b7442c3d5b17ebd476e4a544d3faeb0416ab1223",
+      "sizes": {
+        "baseline": {
+          "wasm": {
+            "bytes": 132793,
+            "gzip9Bytes": 41906
+          },
+          "wat": {
+            "bytes": 854491,
+            "gzip9Bytes": 66605
+          }
+        },
+        "o4-strip": {
+          "wasm": {
+            "bytes": 132793,
+            "gzip9Bytes": 41906
+          },
+          "wat": {
+            "bytes": 854491,
+            "gzip9Bytes": 66605
+          }
+        },
+        "os": {
+          "wasm": {
+            "bytes": 125519,
+            "gzip9Bytes": 40623
+          },
+          "wat": {
+            "bytes": 786784,
+            "gzip9Bytes": 63723
+          }
+        },
+        "oz": {
+          "wasm": {
+            "bytes": 125504,
+            "gzip9Bytes": 40587
+          },
+          "wat": {
+            "bytes": 786660,
+            "gzip9Bytes": 63681
+          }
+        }
+      },
+      "constructionAndExecution": {
+        "node": "v24.11.1",
+        "samples": 5,
+        "iterations": 5000,
+        "variants": [
+          {
+            "name": "baseline",
+            "binaryBytes": 132793,
+            "watBytes": 854491,
+            "binarySha256": "ee7dd296258089f6cdf5cff559d697608ad541679f8de3a118e3d1f21f2c07ba",
+            "sourceSha256": "f2d104a1eae64b4fbfc9244bb4bbd5d47a957903452b2649c7cdbabd682ce59f"
+          },
+          {
+            "name": "o4-strip",
+            "binaryBytes": 132793,
+            "watBytes": 854491,
+            "binarySha256": "ee7dd296258089f6cdf5cff559d697608ad541679f8de3a118e3d1f21f2c07ba",
+            "sourceSha256": "f2d104a1eae64b4fbfc9244bb4bbd5d47a957903452b2649c7cdbabd682ce59f"
+          },
+          {
+            "name": "os",
+            "binaryBytes": 125519,
+            "watBytes": 786784,
+            "binarySha256": "780d54aa714fe4098a87478f7eb79dfc478a8d29f7695e6e406650525fda486e",
+            "sourceSha256": "749b957ee06bad2266beeef8704ff45f3192bfcfffe88eaadd43b3628a83c771"
+          },
+          {
+            "name": "oz",
+            "binaryBytes": 125504,
+            "watBytes": 786660,
+            "binarySha256": "efb65af98708f1d3f583acc6bc18594b68929e719219a8720cd6d583a46ec22b",
+            "sourceSha256": "cc9f25daafc69c8192cf277db0021ccf03e83b8f4ef3200476371a2698622dba"
+          }
+        ],
+        "construction": [
+          {
+            "variant": "baseline",
+            "elapsedMs": [
+              6.710566800000004,
+              6.363545850000003,
+              6.390677100000016,
+              6.238508349999938,
+              6.241393800000106,
+              6.336583099999916,
+              6.215704250000044,
+              6.337027049999961,
+              6.260041650000039
+            ],
+            "medianMs": 6.336583099999916
+          },
+          {
+            "variant": "o4-strip",
+            "elapsedMs": [
+              6.403816550000005,
+              6.425385499999959,
+              6.646689549999985,
+              6.305697899999927,
+              6.385425050000004,
+              6.560681299999987,
+              6.213787449999972,
+              6.235495899999933,
+              6.396768700000029
+            ],
+            "medianMs": 6.396768700000029
+          },
+          {
+            "variant": "os",
+            "elapsedMs": [
+              6.457956300000001,
+              6.463629100000003,
+              6.164412349999952,
+              6.1613063000000015,
+              5.915331200000059,
+              5.87234159999989,
+              6.008687500000088,
+              5.91027054999995,
+              5.90468120000005
+            ],
+            "medianMs": 6.008687500000088
+          },
+          {
+            "variant": "oz",
+            "elapsedMs": [
+              6.4138980000000005,
+              6.171258200000011,
+              6.276595900000052,
+              6.119520900000021,
+              6.066845899999999,
+              5.977937550000069,
+              6.122549949999984,
+              5.963035500000023,
+              5.9165395999999415
+            ],
+            "medianMs": 6.119520900000021
+          }
+        ],
+        "execution": [
+          {
+            "runtime": "bootstrap",
+            "name": "direct",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.12987500000053842,
+              0.11400000000048749,
+              0.11116700000002311,
+              0.11137499999949796,
+              0.11145899999974063
+            ],
+            "medianMs": 0.11145899999974063
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "direct",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.11724999999933061,
+              0.1145409999999174,
+              0.11229100000036851,
+              0.11220799999955489,
+              0.11391599999933533
+            ],
+            "medianMs": 0.11391599999933533
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "direct",
+            "variant": "os",
+            "elapsedMs": [
+              0.2367500000000291,
+              0.22825000000011642,
+              0.22850000000016735,
+              0.22779199999968114,
+              0.25741699999980483
+            ],
+            "medianMs": 0.22850000000016735
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "direct",
+            "variant": "oz",
+            "elapsedMs": [
+              0.11016699999981938,
+              0.11254199999984849,
+              0.108791999999994,
+              0.10841600000003382,
+              0.13770800000020245
+            ],
+            "medianMs": 0.11016699999981938
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "indirect",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.21424999999999272,
+              0.2078750000000582,
+              0.20675000000028376,
+              0.22229200000037963,
+              0.21862500000042928
+            ],
+            "medianMs": 0.21424999999999272
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "indirect",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.22391700000025594,
+              0.23154199999953562,
+              0.2214590000003227,
+              0.19554100000004837,
+              0.18945799999983137
+            ],
+            "medianMs": 0.2214590000003227
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "indirect",
+            "variant": "os",
+            "elapsedMs": [
+              0.27333399999952235,
+              0.24791699999968841,
+              0.2627919999995356,
+              0.2580419999994774,
+              0.2577919999994265
+            ],
+            "medianMs": 0.2580419999994774
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "indirect",
+            "variant": "oz",
+            "elapsedMs": [
+              0.2541250000003856,
+              0.24333299999943847,
+              0.27150000000074215,
+              0.254917000000205,
+              0.25125000000025466
+            ],
+            "medianMs": 0.2541250000003856
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "indirectTypes",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.31954099999984464,
+              0.31537500000013097,
+              0.3181669999994483,
+              0.31883300000026793,
+              0.3207090000005337
+            ],
+            "medianMs": 0.31883300000026793
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "indirectTypes",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.19120900000052643,
+              0.1843749999998181,
+              0.18279199999960838,
+              0.19962499999928696,
+              0.18175000000064756
+            ],
+            "medianMs": 0.1843749999998181
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "indirectTypes",
+            "variant": "os",
+            "elapsedMs": [
+              0.2677080000003116,
+              0.24991600000066683,
+              0.25170800000068994,
+              0.25345800000013696,
+              0.20245799999975134
+            ],
+            "medianMs": 0.25170800000068994
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "indirectTypes",
+            "variant": "oz",
+            "elapsedMs": [
+              0.2519579999998314,
+              0.24858300000050804,
+              0.2627089999996315,
+              0.2430000000003929,
+              0.19329099999958999
+            ],
+            "medianMs": 0.24858300000050804
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "reference",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.13541699999950652,
+              0.1291670000000522,
+              0.12712499999997817,
+              0.1300840000003518,
+              0.1296250000004875
+            ],
+            "medianMs": 0.1296250000004875
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "reference",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.13187500000003638,
+              0.14379199999984849,
+              0.12683299999935116,
+              0.12708300000031159,
+              0.12670900000011898
+            ],
+            "medianMs": 0.12708300000031159
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "reference",
+            "variant": "os",
+            "elapsedMs": [
+              0.1422920000004524,
+              0.1753340000004755,
+              0.1350830000001224,
+              0.13716699999986304,
+              0.13304100000004837
+            ],
+            "medianMs": 0.13716699999986304
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "reference",
+            "variant": "oz",
+            "elapsedMs": [
+              0.12666599999920436,
+              0.12987499999962893,
+              0.1303329999991547,
+              0.1336250000003929,
+              0.1251670000001468
+            ],
+            "medianMs": 0.12987499999962893
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "globalReference",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.14649999999983265,
+              0.13562499999989086,
+              0.13237500000013824,
+              0.13170800000079907,
+              0.13162499999998545
+            ],
+            "medianMs": 0.13237500000013824
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "globalReference",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.14454099999966274,
+              0.14279199999964476,
+              0.1320000000005166,
+              0.13270900000043184,
+              0.13154200000008132
+            ],
+            "medianMs": 0.13270900000043184
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "globalReference",
+            "variant": "os",
+            "elapsedMs": [
+              0.27045799999996234,
+              0.9182499999997162,
+              0.2579169999999067,
+              0.25991699999940465,
+              0.2553330000000642
+            ],
+            "medianMs": 0.25991699999940465
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "globalReference",
+            "variant": "oz",
+            "elapsedMs": [
+              0.13716699999986304,
+              0.13683299999956944,
+              0.13408300000082818,
+              0.12908299999980954,
+              0.12874999999985448
+            ],
+            "medianMs": 0.13408300000082818
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "ordinary",
+            "variant": "baseline",
+            "elapsedMs": [
+              1.4684159999997064,
+              1.471042000000125,
+              1.4357920000002196,
+              1.4872089999998934,
+              1.4520830000001297
+            ],
+            "medianMs": 1.4684159999997064
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "ordinary",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              1.4912500000000364,
+              1.4775830000007772,
+              1.482125000000451,
+              1.575749999999971,
+              1.4340000000001965
+            ],
+            "medianMs": 1.482125000000451
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "ordinary",
+            "variant": "os",
+            "elapsedMs": [
+              1.4747500000003129,
+              1.4741670000003069,
+              1.4833749999997963,
+              1.5407500000001164,
+              1.4692919999997684
+            ],
+            "medianMs": 1.4747500000003129
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "ordinary",
+            "variant": "oz",
+            "elapsedMs": [
+              1.4564999999993233,
+              1.4552499999999782,
+              1.4539590000003955,
+              1.4677090000004682,
+              3.505207999999584
+            ],
+            "medianMs": 1.4564999999993233
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "parameters",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.6067910000001575,
+              0.5912499999994907,
+              0.600709000000279,
+              0.587083000000348,
+              0.5770830000001297
+            ],
+            "medianMs": 0.5912499999994907
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "parameters",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.5051670000002559,
+              0.4769159999996191,
+              0.518833000000086,
+              0.4795829999993657,
+              0.4754579999998896
+            ],
+            "medianMs": 0.4795829999993657
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "parameters",
+            "variant": "os",
+            "elapsedMs": [
+              0.49529100000017934,
+              0.483499999999367,
+              0.5092080000003989,
+              0.4822920000005979,
+              0.5287089999992531
+            ],
+            "medianMs": 0.49529100000017934
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "parameters",
+            "variant": "oz",
+            "elapsedMs": [
+              0.4804999999996653,
+              0.4747910000005504,
+              0.49241600000004837,
+              0.47837499999968713,
+              0.5126249999993888
+            ],
+            "medianMs": 0.4804999999996653
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "memory",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.23695800000041345,
+              0.2304999999996653,
+              0.22775000000001455,
+              0.22762499999953434,
+              0.22620800000004238
+            ],
+            "medianMs": 0.22775000000001455
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "memory",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.23420899999928224,
+              0.2350830000004862,
+              0.22820899999987887,
+              0.22791700000016135,
+              0.2275419999996302
+            ],
+            "medianMs": 0.22820899999987887
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "memory",
+            "variant": "os",
+            "elapsedMs": [
+              0.2358750000003056,
+              0.2657920000001468,
+              0.2354169999998703,
+              0.230916000000434,
+              0.23225000000002183
+            ],
+            "medianMs": 0.2354169999998703
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "memory",
+            "variant": "oz",
+            "elapsedMs": [
+              0.22579100000075414,
+              0.23429200000009587,
+              0.22625000000061846,
+              0.22316700000010314,
+              0.24379200000021228
+            ],
+            "medianMs": 0.22625000000061846
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "conditions",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.2940840000001117,
+              0.25974999999925785,
+              0.23845799999980954,
+              0.23458299999947485,
+              0.235541000000012
+            ],
+            "medianMs": 0.23845799999980954
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "conditions",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.44816699999955745,
+              0.42195799999990413,
+              0.42629200000010314,
+              0.42058300000007875,
+              0.4220839999998134
+            ],
+            "medianMs": 0.4220839999998134
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "conditions",
+            "variant": "os",
+            "elapsedMs": [
+              1.0221670000000813,
+              0.233208999999988,
+              0.24954100000013568,
+              0.23283400000036636,
+              0.23758300000008603
+            ],
+            "medianMs": 0.23758300000008603
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "conditions",
+            "variant": "oz",
+            "elapsedMs": [
+              0.363999999999578,
+              0.23374999999941792,
+              0.2266669999999067,
+              0.224250000000211,
+              0.22658400000000256
+            ],
+            "medianMs": 0.2266669999999067
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "loop",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.6613330000000133,
+              0.0806670000001759,
+              0.08008300000074087,
+              0.08275000000048749,
+              0.08241700000053243
+            ],
+            "medianMs": 0.08241700000053243
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "loop",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.09608299999945302,
+              0.0834580000000642,
+              0.08237499999995634,
+              0.08295900000030088,
+              0.08229100000062317
+            ],
+            "medianMs": 0.08295900000030088
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "loop",
+            "variant": "os",
+            "elapsedMs": [
+              0.09008300000004965,
+              0.08299999999962893,
+              0.08324999999967986,
+              0.08249999999952706,
+              0.08216600000014296
+            ],
+            "medianMs": 0.08299999999962893
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "loop",
+            "variant": "oz",
+            "elapsedMs": [
+              0.10962500000005093,
+              0.09799999999995634,
+              0.10174999999981083,
+              0.10229100000015023,
+              0.09845899999982066
+            ],
+            "medianMs": 0.10174999999981083
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "mutualDirect",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.12250000000040018,
+              0.11483299999963492,
+              0.1121659999998883,
+              0.10924999999951979,
+              0.10895799999980227
+            ],
+            "medianMs": 0.1121659999998883
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "mutualDirect",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.12566700000024866,
+              0.11016699999981938,
+              0.10979200000019773,
+              0.11000000000058208,
+              0.11174999999911961
+            ],
+            "medianMs": 0.11016699999981938
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "mutualDirect",
+            "variant": "os",
+            "elapsedMs": [
+              0.1259170000002996,
+              0.11683300000004238,
+              0.11487499999930151,
+              0.11658299999999144,
+              0.11383300000034069
+            ],
+            "medianMs": 0.11658299999999144
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "mutualDirect",
+            "variant": "oz",
+            "elapsedMs": [
+              0.11275000000023283,
+              0.11195799999950395,
+              0.11070899999958783,
+              0.11050000000068394,
+              0.11083400000006804
+            ],
+            "medianMs": 0.11083400000006804
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "mutualReference",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.13887499999964348,
+              0.1354590000000826,
+              0.14550000000053842,
+              0.13562499999989086,
+              0.13224999999965803
+            ],
+            "medianMs": 0.13562499999989086
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "mutualReference",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.13237500000013824,
+              0.1358330000002752,
+              0.1327500000006694,
+              0.13520900000003166,
+              0.1318329999994603
+            ],
+            "medianMs": 0.1327500000006694
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "mutualReference",
+            "variant": "os",
+            "elapsedMs": [
+              0.14858299999923474,
+              0.14041700000052515,
+              0.14091600000028848,
+              0.13579099999969912,
+              0.13187500000003638
+            ],
+            "medianMs": 0.14041700000052515
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "mutualReference",
+            "variant": "oz",
+            "elapsedMs": [
+              0.15399999999954161,
+              0.13966600000003382,
+              0.13458400000035908,
+              0.1321669999997539,
+              0.1287080000001879
+            ],
+            "medianMs": 0.13458400000035908
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "bulkCopy",
+            "variant": "baseline",
+            "elapsedMs": [
+              1.2992920000006052,
+              0.7390000000004875,
+              0.7339579999998023,
+              0.7310829999996713,
+              0.7721670000000813
+            ],
+            "medianMs": 0.7390000000004875
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "bulkCopy",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.7745420000001104,
+              0.7513750000007349,
+              0.7620839999999589,
+              0.753750000000764,
+              0.7901249999995343
+            ],
+            "medianMs": 0.7620839999999589
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "bulkCopy",
+            "variant": "os",
+            "elapsedMs": [
+              0.7895000000007713,
+              0.8085000000000946,
+              0.789958000000297,
+              0.7848750000002838,
+              0.7602090000000317
+            ],
+            "medianMs": 0.7895000000007713
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "bulkCopy",
+            "variant": "oz",
+            "elapsedMs": [
+              0.7472920000000158,
+              0.7562920000000304,
+              0.764166999999361,
+              0.7821659999999611,
+              0.7219590000004246
+            ],
+            "medianMs": 0.7562920000000304
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "bulkFill",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.46824999999989814,
+              0.44204199999967386,
+              0.41241700000045967,
+              0.43400000000019645,
+              0.41133300000001327
+            ],
+            "medianMs": 0.43400000000019645
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "bulkFill",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.9994999999998981,
+              0.4993339999991804,
+              0.4159170000002632,
+              0.41199999999935244,
+              0.4112920000006852
+            ],
+            "medianMs": 0.4159170000002632
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "bulkFill",
+            "variant": "os",
+            "elapsedMs": [
+              0.42754100000001927,
+              0.47012500000073487,
+              0.4263750000000073,
+              0.4165419999999358,
+              0.42150000000037835
+            ],
+            "medianMs": 0.4263750000000073
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "bulkFill",
+            "variant": "oz",
+            "elapsedMs": [
+              0.40962499999932334,
+              0.41383399999995163,
+              0.4093750000001819,
+              0.40216700000019046,
+              0.4329999999999927
+            ],
+            "medianMs": 0.40962499999932334
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "growZero",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.30808300000080635,
+              0.31287500000053114,
+              0.3031670000000304,
+              0.3329590000003009,
+              0.2931669999998121
+            ],
+            "medianMs": 0.30808300000080635
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "growZero",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.3413749999999709,
+              0.3147079999998823,
+              0.3029999999998836,
+              0.3095000000002983,
+              0.2983750000003056
+            ],
+            "medianMs": 0.3095000000002983
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "growZero",
+            "variant": "os",
+            "elapsedMs": [
+              0.32741600000008475,
+              0.3065839999999298,
+              0.3120419999995647,
+              0.3090830000001006,
+              0.3105420000001686
+            ],
+            "medianMs": 0.3105420000001686
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "growZero",
+            "variant": "oz",
+            "elapsedMs": [
+              0.3415000000004511,
+              0.3357909999995172,
+              0.3364590000001044,
+              0.33641700000043784,
+              0.34104200000001583
+            ],
+            "medianMs": 0.3364590000001044
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "growFailure",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.3089169999993828,
+              0.29812500000025466,
+              0.2879590000002281,
+              0.28654199999982666,
+              0.29129200000079436
+            ],
+            "medianMs": 0.29129200000079436
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "growFailure",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.31745799999953306,
+              0.30866599999990285,
+              0.286750000000211,
+              0.2927090000002863,
+              0.29162499999983993
+            ],
+            "medianMs": 0.2927090000002863
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "growFailure",
+            "variant": "os",
+            "elapsedMs": [
+              0.8708749999996144,
+              0.31670799999938026,
+              0.30916700000034325,
+              0.30529099999967,
+              0.33133300000008603
+            ],
+            "medianMs": 0.31670799999938026
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "growFailure",
+            "variant": "oz",
+            "elapsedMs": [
+              0.30270800000016607,
+              0.2978750000002037,
+              0.29162499999983993,
+              0.2897499999999127,
+              0.30437500000061846
+            ],
+            "medianMs": 0.2978750000002037
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorByteArithmetic",
+            "variant": "baseline",
+            "elapsedMs": [
+              1.004291000000194,
+              0.971082999999453,
+              0.9743330000001151,
+              0.9770829999997659,
+              0.9613750000007713
+            ],
+            "medianMs": 0.9743330000001151
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorByteArithmetic",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              1.6598329999997077,
+              0.9733329999999114,
+              0.9626670000006925,
+              1.01299999999992,
+              1.0144579999996495
+            ],
+            "medianMs": 1.01299999999992
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorByteArithmetic",
+            "variant": "os",
+            "elapsedMs": [
+              1.0090000000000146,
+              1.000583000000006,
+              0.9927499999994325,
+              1.0386250000001382,
+              1.0116660000003321
+            ],
+            "medianMs": 1.0090000000000146
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorByteArithmetic",
+            "variant": "oz",
+            "elapsedMs": [
+              0.9185410000000047,
+              0.9127080000007481,
+              0.9564169999994192,
+              0.9469580000004498,
+              0.914625000000342
+            ],
+            "medianMs": 0.9185410000000047
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorShortArithmetic",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.9792500000003201,
+              0.9238329999998314,
+              0.9663749999999709,
+              0.9145419999995283,
+              0.9160830000000715
+            ],
+            "medianMs": 0.9238329999998314
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorShortArithmetic",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              1.6920000000000073,
+              0.9338749999997162,
+              0.9983750000001237,
+              0.929124999999658,
+              0.9320000000006985
+            ],
+            "medianMs": 0.9338749999997162
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorShortArithmetic",
+            "variant": "os",
+            "elapsedMs": [
+              0.9772080000002461,
+              0.9631249999993088,
+              0.9506249999994907,
+              0.9427919999998267,
+              0.9520410000004631
+            ],
+            "medianMs": 0.9520410000004631
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorShortArithmetic",
+            "variant": "oz",
+            "elapsedMs": [
+              0.9268750000001091,
+              0.9371670000000449,
+              0.8716670000003433,
+              0.8628749999998035,
+              0.9168340000005628
+            ],
+            "medianMs": 0.9168340000005628
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorFloatArithmetic",
+            "variant": "baseline",
+            "elapsedMs": [
+              1.0084170000000086,
+              0.9466250000004948,
+              0.9375,
+              0.9626659999994445,
+              0.9443330000003698
+            ],
+            "medianMs": 0.9466250000004948
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorFloatArithmetic",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.967583999999988,
+              0.9717080000000351,
+              0.9362920000003214,
+              0.9546669999999722,
+              0.9349580000007336
+            ],
+            "medianMs": 0.9546669999999722
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorFloatArithmetic",
+            "variant": "os",
+            "elapsedMs": [
+              0.9851660000003903,
+              0.9583330000004935,
+              1.0207080000000133,
+              1.033792000000176,
+              0.9653330000001006
+            ],
+            "medianMs": 0.9851660000003903
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorFloatArithmetic",
+            "variant": "oz",
+            "elapsedMs": [
+              0.9073749999997744,
+              0.9005420000003141,
+              0.9825829999999769,
+              0.9467089999998279,
+              0.9222500000005311
+            ],
+            "medianMs": 0.9222500000005311
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorArithmetic",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.9418749999995271,
+              0.9214169999995647,
+              0.9039590000002136,
+              0.9413329999997586,
+              0.9526669999995647
+            ],
+            "medianMs": 0.9413329999997586
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorArithmetic",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.9839579999998023,
+              1.1473749999995562,
+              0.9229159999995318,
+              0.9346669999995356,
+              0.9269999999996799
+            ],
+            "medianMs": 0.9346669999995356
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorArithmetic",
+            "variant": "os",
+            "elapsedMs": [
+              0.9740410000003976,
+              0.9608330000000933,
+              0.9882499999994252,
+              0.9378340000002936,
+              0.9302080000006754
+            ],
+            "medianMs": 0.9608330000000933
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorArithmetic",
+            "variant": "oz",
+            "elapsedMs": [
+              0.8685409999998228,
+              0.8679169999995793,
+              0.8805419999998776,
+              0.8547909999997501,
+              0.8585830000001806
+            ],
+            "medianMs": 0.8679169999995793
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorMixed",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.8220000000001164,
+              0.8294169999999212,
+              0.8132500000001528,
+              0.8175410000003467,
+              0.8159999999998035
+            ],
+            "medianMs": 0.8175410000003467
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorMixed",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              1.3606669999999212,
+              0.8123329999998532,
+              0.8357919999998558,
+              0.8208329999997659,
+              0.8128749999996217
+            ],
+            "medianMs": 0.8208329999997659
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorMixed",
+            "variant": "os",
+            "elapsedMs": [
+              0.8608750000003056,
+              0.8366660000001502,
+              0.8493749999997817,
+              0.9075000000002547,
+              0.8338330000005953
+            ],
+            "medianMs": 0.8493749999997817
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorMixed",
+            "variant": "oz",
+            "elapsedMs": [
+              0.775166999999783,
+              0.7707090000003518,
+              0.7689170000003287,
+              0.8136249999997744,
+              0.7698749999999563
+            ],
+            "medianMs": 0.7707090000003518
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorSelect",
+            "variant": "baseline",
+            "elapsedMs": [
+              1.0469999999995707,
+              1.035541000000194,
+              1.1079579999995985,
+              0.9720830000005662,
+              0.9679169999999431
+            ],
+            "medianMs": 1.035541000000194
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorSelect",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              1.031833000000006,
+              1.0039590000005774,
+              1.0278750000006767,
+              1.0621250000003783,
+              0.9804579999999987
+            ],
+            "medianMs": 1.0278750000006767
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorSelect",
+            "variant": "os",
+            "elapsedMs": [
+              1.0186249999997017,
+              1.0130410000001575,
+              1.0306250000003274,
+              1.0253750000001673,
+              1.0922499999996944
+            ],
+            "medianMs": 1.0253750000001673
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorSelect",
+            "variant": "oz",
+            "elapsedMs": [
+              0.9361250000001746,
+              0.9205000000001746,
+              1.0371669999994992,
+              2.3877080000002024,
+              0.9678329999997004
+            ],
+            "medianMs": 0.9678329999997004
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floatArithmetic",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.37850000000071304,
+              0.36595800000031886,
+              0.3604169999998703,
+              0.3563750000002983,
+              0.35350000000016735
+            ],
+            "medianMs": 0.3604169999998703
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floatArithmetic",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.3619589999998425,
+              0.36333400000057736,
+              0.36341600000014296,
+              0.3550829999994676,
+              0.35320800000044983
+            ],
+            "medianMs": 0.3619589999998425
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floatArithmetic",
+            "variant": "os",
+            "elapsedMs": [
+              0.36958299999969313,
+              0.36820799999986775,
+              0.37245900000016263,
+              0.3640830000003916,
+              0.3640830000003916
+            ],
+            "medianMs": 0.36820799999986775
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floatArithmetic",
+            "variant": "oz",
+            "elapsedMs": [
+              0.3949160000001939,
+              0.36454199999934644,
+              0.35866600000008475,
+              0.358208999999988,
+              0.35379199999988487
+            ],
+            "medianMs": 0.35866600000008475
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floatConversions",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.6875420000005761,
+              0.6822910000000775,
+              0.6789579999995112,
+              0.6606250000004366,
+              0.6635420000002341
+            ],
+            "medianMs": 0.6789579999995112
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floatConversions",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.3932089999998425,
+              0.3904999999995198,
+              0.37458299999980227,
+              0.39158300000053714,
+              0.3723339999996824
+            ],
+            "medianMs": 0.3904999999995198
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floatConversions",
+            "variant": "os",
+            "elapsedMs": [
+              0.3986670000003869,
+              0.37924999999995634,
+              0.38312500000029104,
+              0.41512500000044383,
+              0.4100829999997586
+            ],
+            "medianMs": 0.3986670000003869
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "floatConversions",
+            "variant": "oz",
+            "elapsedMs": [
+              0.3782500000006621,
+              0.3730830000004062,
+              0.3749579999994239,
+              0.3772079999998823,
+              0.3955000000005384
+            ],
+            "medianMs": 0.3772079999998823
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorMemory",
+            "variant": "baseline",
+            "elapsedMs": [
+              1.048917000000074,
+              1.0174999999999272,
+              1.0037920000004306,
+              0.9914580000004207,
+              0.981792000000496
+            ],
+            "medianMs": 1.0037920000004306
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorMemory",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              1.0358750000004875,
+              1.0151249999998981,
+              1.012416999999914,
+              1.0096249999996871,
+              0.9877500000002328
+            ],
+            "medianMs": 1.012416999999914
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorMemory",
+            "variant": "os",
+            "elapsedMs": [
+              1.0303750000002765,
+              1.0997499999994034,
+              1.0389589999995223,
+              1.085667000000285,
+              1.0087499999999636
+            ],
+            "medianMs": 1.0389589999995223
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "vectorMemory",
+            "variant": "oz",
+            "elapsedMs": [
+              0.9500410000000556,
+              0.9426670000002559,
+              0.9998749999995198,
+              0.9875419999998485,
+              0.9852080000000569
+            ],
+            "medianMs": 0.9852080000000569
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "integerSignExtension",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.7475000000004002,
+              0.7207080000007409,
+              0.8003749999998035,
+              0.7168750000000728,
+              0.7115410000005795
+            ],
+            "medianMs": 0.7207080000007409
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "integerSignExtension",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.7224590000005264,
+              0.7143749999995634,
+              0.7361660000005941,
+              0.7119170000005397,
+              0.7114590000001044
+            ],
+            "medianMs": 0.7143749999995634
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "integerSignExtension",
+            "variant": "os",
+            "elapsedMs": [
+              1.3410839999996824,
+              1.3130000000001019,
+              1.31512500000008,
+              1.3113750000002256,
+              1.3191670000005615
+            ],
+            "medianMs": 1.31512500000008
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "integerSignExtension",
+            "variant": "oz",
+            "elapsedMs": [
+              0.7061249999997017,
+              0.7032500000004802,
+              0.7089169999999285,
+              0.7015840000003664,
+              0.701958000000559
+            ],
+            "medianMs": 0.7032500000004802
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "branchScalar",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.7953749999996944,
+              0.18829199999981938,
+              0.18566699999973935,
+              0.1875,
+              0.18558299999949668
+            ],
+            "medianMs": 0.1875
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "branchScalar",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.19750000000021828,
+              0.18670800000018062,
+              0.18466699999953562,
+              0.18637500000022555,
+              0.18616600000041217
+            ],
+            "medianMs": 0.18637500000022555
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "branchScalar",
+            "variant": "os",
+            "elapsedMs": [
+              0.19645799999943847,
+              0.19266700000025594,
+              0.19216599999981554,
+              0.1888330000001588,
+              0.1880410000003394
+            ],
+            "medianMs": 0.19216599999981554
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "branchScalar",
+            "variant": "oz",
+            "elapsedMs": [
+              0.19200000000000728,
+              0.18833400000039546,
+              0.19025000000056025,
+              0.18766599999980826,
+              0.18799999999919237
+            ],
+            "medianMs": 0.18833400000039546
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "branchVector",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.8627500000002328,
+              0.8427089999995587,
+              0.8440000000000509,
+              0.8530000000000655,
+              0.8353750000005675
+            ],
+            "medianMs": 0.8440000000000509
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "branchVector",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.8047919999999067,
+              0.7855410000001939,
+              0.7901250000004438,
+              0.7807499999998981,
+              0.7770829999999478
+            ],
+            "medianMs": 0.7855410000001939
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "branchVector",
+            "variant": "os",
+            "elapsedMs": [
+              0.8097500000003492,
+              0.8090840000004391,
+              0.811333999999988,
+              0.831000000000131,
+              0.8364170000004378
+            ],
+            "medianMs": 0.811333999999988
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "branchVector",
+            "variant": "oz",
+            "elapsedMs": [
+              0.747665999999299,
+              0.7452499999999418,
+              0.7560409999996409,
+              0.874709000000621,
+              0.7509169999993901
+            ],
+            "medianMs": 0.7509169999993901
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "branchMany",
+            "variant": "baseline",
+            "elapsedMs": [
+              5.165291999999681,
+              5.226375000000189,
+              5.357999999999265,
+              5.350292000000081,
+              5.117541999999958
+            ],
+            "medianMs": 5.226375000000189
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "branchMany",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              5.222459000000526,
+              5.239250000000538,
+              5.204375000000255,
+              5.176040999999714,
+              5.231166999999914
+            ],
+            "medianMs": 5.222459000000526
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "branchMany",
+            "variant": "os",
+            "elapsedMs": [
+              5.413583000000472,
+              5.463875000000371,
+              5.38445800000045,
+              5.463624999999411,
+              5.568957999999839
+            ],
+            "medianMs": 5.463624999999411
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "branchMany",
+            "variant": "oz",
+            "elapsedMs": [
+              4.940332999999555,
+              4.840500000000247,
+              4.93474999999944,
+              4.966541999999208,
+              5.056209000000308
+            ],
+            "medianMs": 4.940332999999555
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "noFusionLoop",
+            "variant": "baseline",
+            "elapsedMs": [
+              0.17395800000031159,
+              0.16258399999969697,
+              0.1604170000000522,
+              0.17300000000068394,
+              0.16462499999943248
+            ],
+            "medianMs": 0.16462499999943248
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "noFusionLoop",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              0.39291600000069593,
+              0.3767500000003565,
+              0.4168329999993148,
+              0.4257079999997586,
+              0.37687499999992724
+            ],
+            "medianMs": 0.39291600000069593
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "noFusionLoop",
+            "variant": "os",
+            "elapsedMs": [
+              0.16416599999956816,
+              0.16554199999973207,
+              0.1720420000001468,
+              0.19441699999970297,
+              0.16204100000049948
+            ],
+            "medianMs": 0.16554199999973207
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "noFusionLoop",
+            "variant": "oz",
+            "elapsedMs": [
+              0.16125000000010914,
+              0.16774999999961437,
+              0.15408300000035524,
+              0.15216599999985192,
+              0.1547499999996944
+            ],
+            "medianMs": 0.1547499999996944
+          },
+          {
+            "runtime": "interpreted",
+            "name": "direct",
+            "variant": "baseline",
+            "elapsedMs": [
+              14.668499999999767,
+              14.615208999999595,
+              14.742874999999913,
+              14.580290999998397,
+              14.594833000001017
+            ],
+            "medianMs": 14.615208999999595
+          },
+          {
+            "runtime": "interpreted",
+            "name": "direct",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              24.960125000001426,
+              24.62825000000157,
+              24.751500000000306,
+              25.01958299999933,
+              24.54558299999917
+            ],
+            "medianMs": 24.751500000000306
+          },
+          {
+            "runtime": "interpreted",
+            "name": "direct",
+            "variant": "os",
+            "elapsedMs": [
+              15.748333000001367,
+              15.432917000000089,
+              15.862624999999753,
+              15.5903330000001,
+              15.579042000001209
+            ],
+            "medianMs": 15.5903330000001
+          },
+          {
+            "runtime": "interpreted",
+            "name": "direct",
+            "variant": "oz",
+            "elapsedMs": [
+              14.034999999999854,
+              13.960375000000568,
+              14.001749999999447,
+              13.940625000001091,
+              13.684499999999389
+            ],
+            "medianMs": 13.960375000000568
+          },
+          {
+            "runtime": "interpreted",
+            "name": "indirect",
+            "variant": "baseline",
+            "elapsedMs": [
+              21.949125000001004,
+              21.806416999999783,
+              29.494666000000507,
+              21.5953329999993,
+              21.641458000000057
+            ],
+            "medianMs": 21.806416999999783
+          },
+          {
+            "runtime": "interpreted",
+            "name": "indirect",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              21.912082999999257,
+              21.712542000001122,
+              26.179541000001336,
+              21.69933300000048,
+              21.615874999999505
+            ],
+            "medianMs": 21.712542000001122
+          },
+          {
+            "runtime": "interpreted",
+            "name": "indirect",
+            "variant": "os",
+            "elapsedMs": [
+              24.736541000000216,
+              23.008834000000206,
+              23.140416000000187,
+              22.788124999999127,
+              23.058374999998705
+            ],
+            "medianMs": 23.058374999998705
+          },
+          {
+            "runtime": "interpreted",
+            "name": "indirect",
+            "variant": "oz",
+            "elapsedMs": [
+              33.350750000001426,
+              33.05687500000022,
+              33.12479099999837,
+              33.11974999999984,
+              33.31550000000061
+            ],
+            "medianMs": 33.12479099999837
+          },
+          {
+            "runtime": "interpreted",
+            "name": "indirectTypes",
+            "variant": "baseline",
+            "elapsedMs": [
+              22.68254100000013,
+              22.974500000000262,
+              22.73845799999981,
+              22.578125,
+              22.997584000000643
+            ],
+            "medianMs": 22.73845799999981
+          },
+          {
+            "runtime": "interpreted",
+            "name": "indirectTypes",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              22.745750000000044,
+              22.598125000000437,
+              22.478250000000116,
+              22.809290999999575,
+              22.673165999998673
+            ],
+            "medianMs": 22.673165999998673
+          },
+          {
+            "runtime": "interpreted",
+            "name": "indirectTypes",
+            "variant": "os",
+            "elapsedMs": [
+              24.179292000000714,
+              24.17541700000038,
+              24.001334000000497,
+              24.09191699999974,
+              24.105458
+            ],
+            "medianMs": 24.105458
+          },
+          {
+            "runtime": "interpreted",
+            "name": "indirectTypes",
+            "variant": "oz",
+            "elapsedMs": [
+              21.95874999999978,
+              21.65941699999894,
+              21.596457999999984,
+              21.586083000000144,
+              21.778709000000163
+            ],
+            "medianMs": 21.65941699999894
+          },
+          {
+            "runtime": "interpreted",
+            "name": "reference",
+            "variant": "baseline",
+            "elapsedMs": [
+              16.972334000000046,
+              17.210666000000856,
+              16.985625000001164,
+              16.893833000000086,
+              16.952624999999898
+            ],
+            "medianMs": 16.972334000000046
+          },
+          {
+            "runtime": "interpreted",
+            "name": "reference",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              16.95429200000035,
+              17.30266699999993,
+              16.883875000001353,
+              16.972708999999668,
+              17.140707999998995
+            ],
+            "medianMs": 16.972708999999668
+          },
+          {
+            "runtime": "interpreted",
+            "name": "reference",
+            "variant": "os",
+            "elapsedMs": [
+              18.147791999999754,
+              19.406458999999813,
+              18.057749999999942,
+              17.645167000000583,
+              17.881459000000177
+            ],
+            "medianMs": 18.057749999999942
+          },
+          {
+            "runtime": "interpreted",
+            "name": "reference",
+            "variant": "oz",
+            "elapsedMs": [
+              16.125583000000915,
+              15.92737500000112,
+              16.395291000000725,
+              16.133707999999388,
+              16.324916999999914
+            ],
+            "medianMs": 16.133707999999388
+          },
+          {
+            "runtime": "interpreted",
+            "name": "globalReference",
+            "variant": "baseline",
+            "elapsedMs": [
+              29.018542000001617,
+              29.10870900000009,
+              29.54962499999965,
+              29.44183300000077,
+              29.363624999999956
+            ],
+            "medianMs": 29.363624999999956
+          },
+          {
+            "runtime": "interpreted",
+            "name": "globalReference",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              17.53245799999968,
+              17.58508299999994,
+              17.70391699999891,
+              17.601708000000144,
+              17.480666999999812
+            ],
+            "medianMs": 17.58508299999994
+          },
+          {
+            "runtime": "interpreted",
+            "name": "globalReference",
+            "variant": "os",
+            "elapsedMs": [
+              18.4351659999993,
+              18.444124999999985,
+              18.51604100000077,
+              18.379915999999866,
+              18.813500000000204
+            ],
+            "medianMs": 18.444124999999985
+          },
+          {
+            "runtime": "interpreted",
+            "name": "globalReference",
+            "variant": "oz",
+            "elapsedMs": [
+              16.73608299999978,
+              16.37854199999856,
+              16.831709000000046,
+              16.702166999999463,
+              16.79412500000035
+            ],
+            "medianMs": 16.73608299999978
+          },
+          {
+            "runtime": "interpreted",
+            "name": "ordinary",
+            "variant": "baseline",
+            "elapsedMs": [
+              191.34570900000108,
+              191.3152910000008,
+              191.38737500000025,
+              190.8518750000003,
+              190.99695799999972
+            ],
+            "medianMs": 191.3152910000008
+          },
+          {
+            "runtime": "interpreted",
+            "name": "ordinary",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              191.73970800000097,
+              190.56437499999993,
+              191.36887500000012,
+              197.7877499999995,
+              193.97970799999894
+            ],
+            "medianMs": 191.73970800000097
+          },
+          {
+            "runtime": "interpreted",
+            "name": "ordinary",
+            "variant": "os",
+            "elapsedMs": [
+              328.4093750000011,
+              331.59604200000103,
+              328.99474999999984,
+              330.59791700000096,
+              328.89487499999996
+            ],
+            "medianMs": 328.99474999999984
+          },
+          {
+            "runtime": "interpreted",
+            "name": "ordinary",
+            "variant": "oz",
+            "elapsedMs": [
+              180.73574999999983,
+              178.14550000000054,
+              178.74208399999952,
+              190.79458299999897,
+              178.8436669999992
+            ],
+            "medianMs": 178.8436669999992
+          },
+          {
+            "runtime": "interpreted",
+            "name": "parameters",
+            "variant": "baseline",
+            "elapsedMs": [
+              36.64899999999943,
+              38.22337499999958,
+              37.83354200000031,
+              37.46545799999876,
+              37.35395800000151
+            ],
+            "medianMs": 37.46545799999876
+          },
+          {
+            "runtime": "interpreted",
+            "name": "parameters",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              36.68333399999938,
+              38.10066700000061,
+              38.44304200000079,
+              36.799291999999696,
+              37.723541999999725
+            ],
+            "medianMs": 37.723541999999725
+          },
+          {
+            "runtime": "interpreted",
+            "name": "parameters",
+            "variant": "os",
+            "elapsedMs": [
+              63.73149999999987,
+              65.04308300000048,
+              64.55816699999923,
+              65.95833400000083,
+              64.76729100000011
+            ],
+            "medianMs": 64.76729100000011
+          },
+          {
+            "runtime": "interpreted",
+            "name": "parameters",
+            "variant": "oz",
+            "elapsedMs": [
+              35.824208,
+              36.436375000001135,
+              35.41279200000099,
+              35.271333000000595,
+              35.16454199999862
+            ],
+            "medianMs": 35.41279200000099
+          },
+          {
+            "runtime": "interpreted",
+            "name": "memory",
+            "variant": "baseline",
+            "elapsedMs": [
+              29.3723340000015,
+              30.778791999999157,
+              30.86212500000147,
+              29.347499999999854,
+              29.57433299999684
+            ],
+            "medianMs": 29.57433299999684
+          },
+          {
+            "runtime": "interpreted",
+            "name": "memory",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              29.10412499999984,
+              29.10045899999932,
+              29.982708999999886,
+              29.123374999999214,
+              29.278207999999722
+            ],
+            "medianMs": 29.123374999999214
+          },
+          {
+            "runtime": "interpreted",
+            "name": "memory",
+            "variant": "os",
+            "elapsedMs": [
+              48.10950000000048,
+              47.636375000000044,
+              47.93845800000054,
+              48.17437500000233,
+              48.43145799999911
+            ],
+            "medianMs": 48.10950000000048
+          },
+          {
+            "runtime": "interpreted",
+            "name": "memory",
+            "variant": "oz",
+            "elapsedMs": [
+              27.27941600000122,
+              27.580792000000656,
+              41.56712499999958,
+              28.53833300000042,
+              27.74029199999859
+            ],
+            "medianMs": 27.74029199999859
+          },
+          {
+            "runtime": "interpreted",
+            "name": "conditions",
+            "variant": "baseline",
+            "elapsedMs": [
+              27.745208000000275,
+              27.747791000001598,
+              27.70770900000207,
+              29.129124999999476,
+              27.723833000000013
+            ],
+            "medianMs": 27.745208000000275
+          },
+          {
+            "runtime": "interpreted",
+            "name": "conditions",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              28.167249999998603,
+              27.87474999999904,
+              27.649499999999534,
+              27.77312499999971,
+              27.781000000002678
+            ],
+            "medianMs": 27.781000000002678
+          },
+          {
+            "runtime": "interpreted",
+            "name": "conditions",
+            "variant": "os",
+            "elapsedMs": [
+              46.40137499999764,
+              45.94187500000044,
+              45.90962500000023,
+              45.95974999999817,
+              45.57020900000134
+            ],
+            "medianMs": 45.94187500000044
+          },
+          {
+            "runtime": "interpreted",
+            "name": "conditions",
+            "variant": "oz",
+            "elapsedMs": [
+              26.18670900000143,
+              25.764416000001802,
+              26.263874999996915,
+              25.888333999999304,
+              26.012625000003027
+            ],
+            "medianMs": 26.012625000003027
+          },
+          {
+            "runtime": "interpreted",
+            "name": "loop",
+            "variant": "baseline",
+            "elapsedMs": [
+              10.523958000001585,
+              10.871666999999434,
+              10.42462499999965,
+              10.450542000002315,
+              10.569457999998122
+            ],
+            "medianMs": 10.523958000001585
+          },
+          {
+            "runtime": "interpreted",
+            "name": "loop",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              10.667709000001196,
+              10.769082999999227,
+              10.65545800000109,
+              10.595958000001701,
+              10.773958000001585
+            ],
+            "medianMs": 10.667709000001196
+          },
+          {
+            "runtime": "interpreted",
+            "name": "loop",
+            "variant": "os",
+            "elapsedMs": [
+              17.426832999997714,
+              17.82558400000198,
+              17.67358299999978,
+              18.41270799999984,
+              19.190209000000323
+            ],
+            "medianMs": 17.82558400000198
+          },
+          {
+            "runtime": "interpreted",
+            "name": "loop",
+            "variant": "oz",
+            "elapsedMs": [
+              9.64849999999933,
+              9.979417000002286,
+              9.860499999998865,
+              12.426292000000103,
+              9.652375000001484
+            ],
+            "medianMs": 9.860499999998865
+          },
+          {
+            "runtime": "interpreted",
+            "name": "mutualDirect",
+            "variant": "baseline",
+            "elapsedMs": [
+              15.669666999998299,
+              15.732750000002852,
+              15.410582999997132,
+              15.537124999998923,
+              15.593333999997412
+            ],
+            "medianMs": 15.593333999997412
+          },
+          {
+            "runtime": "interpreted",
+            "name": "mutualDirect",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              15.603791000001365,
+              15.380334000001312,
+              15.628958999997849,
+              15.781917000000249,
+              15.54462500000227
+            ],
+            "medianMs": 15.603791000001365
+          },
+          {
+            "runtime": "interpreted",
+            "name": "mutualDirect",
+            "variant": "os",
+            "elapsedMs": [
+              27.539832999998907,
+              27.2255839999998,
+              27.402249999999185,
+              27.260709000001953,
+              27.384791000000405
+            ],
+            "medianMs": 27.384791000000405
+          },
+          {
+            "runtime": "interpreted",
+            "name": "mutualDirect",
+            "variant": "oz",
+            "elapsedMs": [
+              16.21008299999812,
+              14.840207999997801,
+              14.754790999999386,
+              14.969583000001876,
+              14.737958000001527
+            ],
+            "medianMs": 14.840207999997801
+          },
+          {
+            "runtime": "interpreted",
+            "name": "mutualReference",
+            "variant": "baseline",
+            "elapsedMs": [
+              18.03429099999994,
+              17.947166000001744,
+              17.856458999998722,
+              17.746334000003117,
+              18.017500000001746
+            ],
+            "medianMs": 17.947166000001744
+          },
+          {
+            "runtime": "interpreted",
+            "name": "mutualReference",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              17.93816700000025,
+              17.933665999997174,
+              17.890582999996695,
+              18.190209000000323,
+              17.913500000002387
+            ],
+            "medianMs": 17.933665999997174
+          },
+          {
+            "runtime": "interpreted",
+            "name": "mutualReference",
+            "variant": "os",
+            "elapsedMs": [
+              30.96625000000131,
+              32.7913750000007,
+              31.389541000000463,
+              31.75587500000256,
+              31.320832999997947
+            ],
+            "medianMs": 31.389541000000463
+          },
+          {
+            "runtime": "interpreted",
+            "name": "mutualReference",
+            "variant": "oz",
+            "elapsedMs": [
+              17.02495799999815,
+              16.905375000002095,
+              17.05529099999694,
+              16.908791000001656,
+              17.251917000001413
+            ],
+            "medianMs": 17.02495799999815
+          },
+          {
+            "runtime": "interpreted",
+            "name": "bulkCopy",
+            "variant": "baseline",
+            "elapsedMs": [
+              72.65391699999964,
+              68.83437500000218,
+              67.30962500000169,
+              67.20470900000146,
+              67.6496670000015
+            ],
+            "medianMs": 67.6496670000015
+          },
+          {
+            "runtime": "interpreted",
+            "name": "bulkCopy",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              68.6103750000002,
+              67.34037499999977,
+              67.29358299999876,
+              68.87450000000172,
+              67.16987499999959
+            ],
+            "medianMs": 67.34037499999977
+          },
+          {
+            "runtime": "interpreted",
+            "name": "bulkCopy",
+            "variant": "os",
+            "elapsedMs": [
+              110.28245799999786,
+              110.02058399999805,
+              109.66362500000105,
+              110.3875420000004,
+              110.45120899999893
+            ],
+            "medianMs": 110.28245799999786
+          },
+          {
+            "runtime": "interpreted",
+            "name": "bulkCopy",
+            "variant": "oz",
+            "elapsedMs": [
+              62.21295900000041,
+              62.41437500000029,
+              62.06475000000137,
+              62.08849999999802,
+              63.671000000002095
+            ],
+            "medianMs": 62.21295900000041
+          },
+          {
+            "runtime": "interpreted",
+            "name": "bulkFill",
+            "variant": "baseline",
+            "elapsedMs": [
+              47.41962499999863,
+              46.540666999997484,
+              45.862833999999566,
+              47.38533399999869,
+              46.99712499999805
+            ],
+            "medianMs": 46.99712499999805
+          },
+          {
+            "runtime": "interpreted",
+            "name": "bulkFill",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              47.058249999998225,
+              46.261374999998225,
+              46.430499999998574,
+              46.427999999999884,
+              49.25979200000074
+            ],
+            "medianMs": 46.430499999998574
+          },
+          {
+            "runtime": "interpreted",
+            "name": "bulkFill",
+            "variant": "os",
+            "elapsedMs": [
+              75.62716699999874,
+              85.83774999999878,
+              75.25895799999853,
+              134.9046249999992,
+              75.33587500000067
+            ],
+            "medianMs": 75.62716699999874
+          },
+          {
+            "runtime": "interpreted",
+            "name": "bulkFill",
+            "variant": "oz",
+            "elapsedMs": [
+              42.82520799999838,
+              43.1351250000007,
+              42.515292000000045,
+              42.77425000000221,
+              42.5434589999968
+            ],
+            "medianMs": 42.77425000000221
+          },
+          {
+            "runtime": "interpreted",
+            "name": "growZero",
+            "variant": "baseline",
+            "elapsedMs": [
+              34.49933299999975,
+              34.76208399999814,
+              34.41450000000259,
+              34.87420800000109,
+              34.583833999997296
+            ],
+            "medianMs": 34.583833999997296
+          },
+          {
+            "runtime": "interpreted",
+            "name": "growZero",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              34.76216700000077,
+              36.92108300000109,
+              34.939415999997436,
+              34.915625000001455,
+              34.5644579999971
+            ],
+            "medianMs": 34.915625000001455
+          },
+          {
+            "runtime": "interpreted",
+            "name": "growZero",
+            "variant": "os",
+            "elapsedMs": [
+              56.558375000000524,
+              56.36583299999984,
+              56.063874999999825,
+              56.37145800000144,
+              56.404624999999214
+            ],
+            "medianMs": 56.37145800000144
+          },
+          {
+            "runtime": "interpreted",
+            "name": "growZero",
+            "variant": "oz",
+            "elapsedMs": [
+              32.00187499999811,
+              31.988792000000103,
+              31.77362500000163,
+              32.38008400000035,
+              33.20237499999712
+            ],
+            "medianMs": 32.00187499999811
+          },
+          {
+            "runtime": "interpreted",
+            "name": "growFailure",
+            "variant": "baseline",
+            "elapsedMs": [
+              34.512040999998135,
+              34.64441699999952,
+              34.24170900000172,
+              34.57866600000125,
+              34.42895799999678
+            ],
+            "medianMs": 34.512040999998135
+          },
+          {
+            "runtime": "interpreted",
+            "name": "growFailure",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              34.58570899999904,
+              34.774750000000495,
+              34.429917000001296,
+              34.48875000000044,
+              34.535791999998764
+            ],
+            "medianMs": 34.535791999998764
+          },
+          {
+            "runtime": "interpreted",
+            "name": "growFailure",
+            "variant": "os",
+            "elapsedMs": [
+              56.3648749999993,
+              56.49141700000109,
+              56.140625,
+              56.276834000000235,
+              56.046875
+            ],
+            "medianMs": 56.276834000000235
+          },
+          {
+            "runtime": "interpreted",
+            "name": "growFailure",
+            "variant": "oz",
+            "elapsedMs": [
+              31.63354100000288,
+              31.716292000000976,
+              33.62129199999981,
+              31.48770799999693,
+              31.730374999999185
+            ],
+            "medianMs": 31.716292000000976
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorByteArithmetic",
+            "variant": "baseline",
+            "elapsedMs": [
+              117.63612499999726,
+              117.45183299999917,
+              117.87304199999926,
+              117.40804100000241,
+              116.81725000000006
+            ],
+            "medianMs": 117.45183299999917
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorByteArithmetic",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              197.96341700000266,
+              209.55708400000003,
+              197.65704099999857,
+              201.95445800000016,
+              198.2689169999976
+            ],
+            "medianMs": 198.2689169999976
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorByteArithmetic",
+            "variant": "os",
+            "elapsedMs": [
+              123.07125000000087,
+              125.50641700000051,
+              122.75775000000067,
+              126.26658399999724,
+              122.50908300000083
+            ],
+            "medianMs": 123.07125000000087
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorByteArithmetic",
+            "variant": "oz",
+            "elapsedMs": [
+              108.56970899999942,
+              108.75766700000167,
+              109.3572920000006,
+              109.38850000000093,
+              108.18225000000166
+            ],
+            "medianMs": 108.75766700000167
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorShortArithmetic",
+            "variant": "baseline",
+            "elapsedMs": [
+              108.61766699999862,
+              108.78912499999933,
+              108.65179199999693,
+              108.84141699999964,
+              110.68383299999914
+            ],
+            "medianMs": 108.78912499999933
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorShortArithmetic",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              108.97662500000297,
+              110.18624999999884,
+              117.28341699999874,
+              108.64491700000144,
+              110.56637499999852
+            ],
+            "medianMs": 110.18624999999884
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorShortArithmetic",
+            "variant": "os",
+            "elapsedMs": [
+              192.53050000000076,
+              190.27958299999955,
+              189.78991699999824,
+              190.26245800000106,
+              190.3450840000005
+            ],
+            "medianMs": 190.27958299999955
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorShortArithmetic",
+            "variant": "oz",
+            "elapsedMs": [
+              102.32958300000246,
+              100.52787499999977,
+              101.78404199999932,
+              104.8468329999996,
+              101.24749999999767
+            ],
+            "medianMs": 101.78404199999932
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorFloatArithmetic",
+            "variant": "baseline",
+            "elapsedMs": [
+              107.05645899999945,
+              107.24916699999812,
+              107.7263329999987,
+              107.11570899999788,
+              107.4355420000029
+            ],
+            "medianMs": 107.24916699999812
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorFloatArithmetic",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              180.61291600000186,
+              180.97095799999806,
+              182.20970800000214,
+              180.59554099999878,
+              181.44724999999744
+            ],
+            "medianMs": 180.97095799999806
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorFloatArithmetic",
+            "variant": "os",
+            "elapsedMs": [
+              113.55133299999943,
+              112.69574999999895,
+              112.11466699999801,
+              111.6919999999991,
+              112.34100000000035
+            ],
+            "medianMs": 112.34100000000035
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorFloatArithmetic",
+            "variant": "oz",
+            "elapsedMs": [
+              99.95149999999921,
+              100.64533400000073,
+              99.39158300000054,
+              100.84983300000022,
+              100.16104199999972
+            ],
+            "medianMs": 100.16104199999972
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorArithmetic",
+            "variant": "baseline",
+            "elapsedMs": [
+              104.79658299999937,
+              104.77866699999868,
+              103.9802090000012,
+              105.94316699999763,
+              104.03262499999983
+            ],
+            "medianMs": 104.77866699999868
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorArithmetic",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              104.10633299999972,
+              104.63033300000097,
+              104.43987500000003,
+              104.17754100000093,
+              105.55291600000055
+            ],
+            "medianMs": 104.43987500000003
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorArithmetic",
+            "variant": "os",
+            "elapsedMs": [
+              181.60945800000263,
+              180.79554100000314,
+              181.66387499999837,
+              180.54491600000256,
+              182.32012500000565
+            ],
+            "medianMs": 181.60945800000263
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorArithmetic",
+            "variant": "oz",
+            "elapsedMs": [
+              96.56770799999867,
+              95.77137500000026,
+              96.41983400000026,
+              96.08950000000186,
+              96.16795799999818
+            ],
+            "medianMs": 96.16795799999818
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorMixed",
+            "variant": "baseline",
+            "elapsedMs": [
+              95.564750000005,
+              97.60620799999742,
+              96.19495800000004,
+              96.13908399999491,
+              96.41316700000607
+            ],
+            "medianMs": 96.19495800000004
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorMixed",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              161.55045800000516,
+              162.16920799999934,
+              161.89041699999507,
+              161.72054200000275,
+              162.56691699999647
+            ],
+            "medianMs": 161.89041699999507
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorMixed",
+            "variant": "os",
+            "elapsedMs": [
+              100.96495799999684,
+              100.13874999999825,
+              100.36883300000045,
+              110.34695900000224,
+              102.0714580000058
+            ],
+            "medianMs": 100.96495799999684
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorMixed",
+            "variant": "oz",
+            "elapsedMs": [
+              91.85766700000386,
+              92.6964999999982,
+              88.00883399999293,
+              89.23566600000049,
+              89.75100000000384
+            ],
+            "medianMs": 89.75100000000384
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorSelect",
+            "variant": "baseline",
+            "elapsedMs": [
+              110.52599999999802,
+              109.98924999999872,
+              111.12658299999748,
+              110.23649999999907,
+              113.02412500000355
+            ],
+            "medianMs": 110.52599999999802
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorSelect",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              109.61012499999924,
+              110.04512499999691,
+              109.26908399999957,
+              109.12566599999991,
+              110.0457499999975
+            ],
+            "medianMs": 109.61012499999924
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorSelect",
+            "variant": "os",
+            "elapsedMs": [
+              191.04591600000276,
+              191.17608300000575,
+              191.77295800000138,
+              191.43658400000277,
+              191.0523749999993
+            ],
+            "medianMs": 191.17608300000575
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorSelect",
+            "variant": "oz",
+            "elapsedMs": [
+              102.69924999999785,
+              101.08795899999677,
+              100.89220899999782,
+              101.4197920000006,
+              101.50125000000116
+            ],
+            "medianMs": 101.4197920000006
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floatArithmetic",
+            "variant": "baseline",
+            "elapsedMs": [
+              44.22258300000249,
+              43.69925000000512,
+              43.669167000000016,
+              43.79479100000026,
+              43.72058399999514
+            ],
+            "medianMs": 43.72058399999514
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floatArithmetic",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              43.6617499999993,
+              43.69895800000086,
+              43.663875000005646,
+              43.94662499999686,
+              43.653125000004366
+            ],
+            "medianMs": 43.663875000005646
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floatArithmetic",
+            "variant": "os",
+            "elapsedMs": [
+              73.32975000000442,
+              71.76724999999715,
+              71.5234169999967,
+              71.20804199999839,
+              71.33675000000221
+            ],
+            "medianMs": 71.5234169999967
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floatArithmetic",
+            "variant": "oz",
+            "elapsedMs": [
+              43.027249999999185,
+              47.29766599999857,
+              39.91504200000054,
+              40.78745799999888,
+              40.13037500000064
+            ],
+            "medianMs": 40.78745799999888
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floatConversions",
+            "variant": "baseline",
+            "elapsedMs": [
+              46.43245799999568,
+              45.799582999999984,
+              46.0401669999992,
+              45.838792000002286,
+              46.27470899999753
+            ],
+            "medianMs": 46.0401669999992
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floatConversions",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              46.225334000002476,
+              46.42408299999806,
+              45.77908299999399,
+              46.057542000002286,
+              45.9890000000014
+            ],
+            "medianMs": 46.057542000002286
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floatConversions",
+            "variant": "os",
+            "elapsedMs": [
+              75.44125000000349,
+              76.36216699999932,
+              75.59908300000097,
+              75.59900000000198,
+              75.22920799999702
+            ],
+            "medianMs": 75.59900000000198
+          },
+          {
+            "runtime": "interpreted",
+            "name": "floatConversions",
+            "variant": "oz",
+            "elapsedMs": [
+              42.54862499999581,
+              42.406833000000915,
+              44.127459000003,
+              42.862082999999984,
+              43.10162499999569
+            ],
+            "medianMs": 42.862082999999984
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorMemory",
+            "variant": "baseline",
+            "elapsedMs": [
+              113.64008299999841,
+              115.1933330000029,
+              114.20420799999556,
+              115.14812499999971,
+              117.75729200000205
+            ],
+            "medianMs": 115.14812499999971
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorMemory",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              189.16300000000047,
+              189.59766700000182,
+              191.2609169999996,
+              199.33891699999367,
+              187.48849999999948
+            ],
+            "medianMs": 189.59766700000182
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorMemory",
+            "variant": "os",
+            "elapsedMs": [
+              118.32066699999996,
+              120.71624999999767,
+              119.45729199999914,
+              123.97354199999972,
+              118.76604100000259
+            ],
+            "medianMs": 119.45729199999914
+          },
+          {
+            "runtime": "interpreted",
+            "name": "vectorMemory",
+            "variant": "oz",
+            "elapsedMs": [
+              105.80308399999922,
+              106.8961249999993,
+              106.16300000000047,
+              156.91649999999936,
+              105.75312500000291
+            ],
+            "medianMs": 106.16300000000047
+          },
+          {
+            "runtime": "interpreted",
+            "name": "integerSignExtension",
+            "variant": "baseline",
+            "elapsedMs": [
+              82.07162499999686,
+              81.18595800000185,
+              80.92062499999884,
+              81.14241699999548,
+              81.19195900000341
+            ],
+            "medianMs": 81.18595800000185
+          },
+          {
+            "runtime": "interpreted",
+            "name": "integerSignExtension",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              83.54450000000361,
+              80.9864579999994,
+              81.24358400000347,
+              81.50612499999988,
+              81.2025000000067
+            ],
+            "medianMs": 81.24358400000347
+          },
+          {
+            "runtime": "interpreted",
+            "name": "integerSignExtension",
+            "variant": "os",
+            "elapsedMs": [
+              84.13654099999985,
+              84.47166699999798,
+              83.72270900000149,
+              83.98291700000118,
+              84.0997090000019
+            ],
+            "medianMs": 84.0997090000019
+          },
+          {
+            "runtime": "interpreted",
+            "name": "integerSignExtension",
+            "variant": "oz",
+            "elapsedMs": [
+              120.53958399999829,
+              120.45245900000009,
+              120.23249999999825,
+              119.37324999999691,
+              120.56141699999716
+            ],
+            "medianMs": 120.45245900000009
+          },
+          {
+            "runtime": "interpreted",
+            "name": "branchScalar",
+            "variant": "baseline",
+            "elapsedMs": [
+              24.14658399999462,
+              24.089416999995592,
+              24.05174999999872,
+              24.09549999999581,
+              23.921791000000667
+            ],
+            "medianMs": 24.089416999995592
+          },
+          {
+            "runtime": "interpreted",
+            "name": "branchScalar",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              24.1776250000039,
+              24.261082999997598,
+              23.955916999999317,
+              24.160709000003408,
+              23.979832999997598
+            ],
+            "medianMs": 24.160709000003408
+          },
+          {
+            "runtime": "interpreted",
+            "name": "branchScalar",
+            "variant": "os",
+            "elapsedMs": [
+              25.469375000000582,
+              25.06575000000157,
+              25.019875000005413,
+              25.01091699999961,
+              24.848207999995793
+            ],
+            "medianMs": 25.019875000005413
+          },
+          {
+            "runtime": "interpreted",
+            "name": "branchScalar",
+            "variant": "oz",
+            "elapsedMs": [
+              22.484917000001587,
+              22.60124999999971,
+              22.28320800000074,
+              22.24383400000079,
+              22.306250000001455
+            ],
+            "medianMs": 22.306250000001455
+          },
+          {
+            "runtime": "interpreted",
+            "name": "branchVector",
+            "variant": "baseline",
+            "elapsedMs": [
+              93.13083400000323,
+              92.62579199999891,
+              92.71941599999991,
+              92.63524999999936,
+              93.39470900000015
+            ],
+            "medianMs": 92.71941599999991
+          },
+          {
+            "runtime": "interpreted",
+            "name": "branchVector",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              93.01637500000652,
+              93.02275000000373,
+              92.84362499999406,
+              92.8492499999993,
+              93.25783299999603
+            ],
+            "medianMs": 93.01637500000652
+          },
+          {
+            "runtime": "interpreted",
+            "name": "branchVector",
+            "variant": "os",
+            "elapsedMs": [
+              97.17291700000351,
+              98.05195800000365,
+              97.3260420000006,
+              96.94358400000056,
+              96.48054199999751
+            ],
+            "medianMs": 97.17291700000351
+          },
+          {
+            "runtime": "interpreted",
+            "name": "branchVector",
+            "variant": "oz",
+            "elapsedMs": [
+              148.3726250000036,
+              147.41537499999686,
+              148.31716600000073,
+              147.812208000003,
+              147.3782080000019
+            ],
+            "medianMs": 147.812208000003
+          },
+          {
+            "runtime": "interpreted",
+            "name": "branchMany",
+            "variant": "baseline",
+            "elapsedMs": [
+              579.8862500000032,
+              579.8065409999981,
+              581.700625000005,
+              594.1164579999968,
+              592.0997920000009
+            ],
+            "medianMs": 581.700625000005
+          },
+          {
+            "runtime": "interpreted",
+            "name": "branchMany",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              582.5228330000027,
+              583.8400000000038,
+              588.3860000000059,
+              593.4072090000045,
+              647.5580419999969
+            ],
+            "medianMs": 588.3860000000059
+          },
+          {
+            "runtime": "interpreted",
+            "name": "branchMany",
+            "variant": "os",
+            "elapsedMs": [
+              609.1871670000037,
+              616.3060420000038,
+              659.1611249999987,
+              618.086374999999,
+              614.0827079999945
+            ],
+            "medianMs": 616.3060420000038
+          },
+          {
+            "runtime": "interpreted",
+            "name": "branchMany",
+            "variant": "oz",
+            "elapsedMs": [
+              538.4724579999965,
+              539.1579159999965,
+              556.4432910000032,
+              551.0617080000011,
+              539.9724160000042
+            ],
+            "medianMs": 539.9724160000042
+          },
+          {
+            "runtime": "interpreted",
+            "name": "noFusionLoop",
+            "variant": "baseline",
+            "elapsedMs": [
+              18.968541000002006,
+              18.854250000003958,
+              18.857041999996,
+              18.710666999999376,
+              18.567167000001064
+            ],
+            "medianMs": 18.854250000003958
+          },
+          {
+            "runtime": "interpreted",
+            "name": "noFusionLoop",
+            "variant": "o4-strip",
+            "elapsedMs": [
+              18.84979200000089,
+              18.74370800000179,
+              18.820666999999958,
+              18.724541000003228,
+              18.60479199999827
+            ],
+            "medianMs": 18.74370800000179
+          },
+          {
+            "runtime": "interpreted",
+            "name": "noFusionLoop",
+            "variant": "os",
+            "elapsedMs": [
+              19.784042000006593,
+              19.93629200000578,
+              19.791041999997105,
+              19.66895800000202,
+              19.46125000000029
+            ],
+            "medianMs": 19.784042000006593
+          },
+          {
+            "runtime": "interpreted",
+            "name": "noFusionLoop",
+            "variant": "oz",
+            "elapsedMs": [
+              17.796542000003683,
+              17.663042000000132,
+              17.695417000002635,
+              17.67345899999782,
+              17.488375000000815
+            ],
+            "medianMs": 17.67345899999782
+          }
+        ]
+      },
+      "standaloneAudits": {
+        "baseline": {
+          "elapsedMs": 130006.40479199999,
+          "passed": 65199,
+          "skipped": 0,
+          "failed": 0,
+          "phases": {
+            "construction": {
+              "elapsedMs": 46777.37480100014,
+              "count": 7393
+            },
+            "loading": {
+              "elapsedMs": 29858.132242999985,
+              "count": 7393
+            },
+            "execution": {
+              "elapsedMs": 51519.43706600078,
+              "count": 57984
+            },
+            "other": {
+              "elapsedMs": 1851.4606819990731
+            }
+          },
+          "fileCount": 258
+        },
+        "os": {
+          "elapsedMs": 130823.52562500001,
+          "passed": 65199,
+          "skipped": 0,
+          "failed": 0,
+          "phases": {
+            "construction": {
+              "elapsedMs": 44732.95650000054,
+              "count": 7393
+            },
+            "loading": {
+              "elapsedMs": 30151.14735799981,
+              "count": 7393
+            },
+            "execution": {
+              "elapsedMs": 54062.583623001156,
+              "count": 57984
+            },
+            "other": {
+              "elapsedMs": 1876.838143998495
+            }
+          },
+          "fileCount": 258
+        },
+        "oz": {
+          "elapsedMs": 130629.02866699999,
+          "passed": 65199,
+          "skipped": 0,
+          "failed": 0,
+          "phases": {
+            "construction": {
+              "elapsedMs": 44797.97228800019,
+              "count": 7393
+            },
+            "loading": {
+              "elapsedMs": 30033.627640999683,
+              "count": 7393
+            },
+            "execution": {
+              "elapsedMs": 53892.15404700114,
+              "count": 57984
+            },
+            "other": {
+              "elapsedMs": 1905.27469099898
+            }
+          },
+          "fileCount": 258
+        }
+      },
+      "fullSpec": {
+        "elapsedMs": 132026.964625,
+        "passed": 65199,
+        "skipped": 0,
+        "failed": 0,
+        "phases": {
+          "construction": {
+            "elapsedMs": 45500.575940000446,
+            "count": 7393
+          },
+          "loading": {
+            "elapsedMs": 30826.561189000175,
+            "count": 7393
+          },
+          "execution": {
+            "elapsedMs": 53793.274616000985,
+            "count": 57984
+          },
+          "other": {
+            "elapsedMs": 1906.5528799983877
+          }
+        },
+        "fileCount": 258
+      },
+      "bootstrapAudit": {
+        "elapsedMs": 5416.447084,
+        "passed": 65199,
+        "skipped": 0,
+        "failed": 0,
+        "phases": {
+          "construction": {
+            "elapsedMs": 1075.1780809999937,
+            "count": 7393
+          },
+          "loading": {
+            "elapsedMs": 1621.3915549999797,
+            "count": 7393
+          },
+          "execution": {
+            "elapsedMs": 904.935526999976,
+            "count": 57984
+          },
+          "other": {
+            "elapsedMs": 1814.941921000051
+          }
+        },
+        "fileCount": 258
+      },
+      "validation": {
+        "tests": 246,
+        "failed": 0,
+        "skipped": 0,
+        "postAlignmentProbeTests": 19,
+        "postAlignmentProbeFailures": 0,
+        "probePhaseBenchmarkVerified": true,
+        "context": "Full suite verified selected release runtime first. Seven private probe compiler invocations and phase diagnostic were then aligned from O4 to Oz and reverified with all 19 affected tests; no runtime code changed."
+      },
+      "completeTestSuite": {
+        "elapsedMs": 139621.756458
+      },
+      "printer": {
+        "withoutFeatureFlagsExitCode": 1,
+        "noValidationDiagnosticExitCode": 0,
+        "noValidationTextMatchesBaseline": true,
+        "omitBulkMemoryExitCode": 1,
+        "omitSignExtExitCode": 0,
+        "omitNontrappingFloatToIntExitCode": 1,
+        "productionValidationKept": true,
+        "printPassesSupportedByBinaryen133": false,
+        "passDebugProducesIdenticalOzBinary": true
+      },
+      "passOrder": [
+        "duplicate-function-elimination",
+        "remove-unused-module-elements",
+        "memory-packing",
+        "once-reduction",
+        "ssa-nomerge",
+        "dce",
+        "remove-unused-names",
+        "remove-unused-brs",
+        "remove-unused-names",
+        "optimize-instructions",
+        "pick-load-signs",
+        "precompute-propagate",
+        "code-pushing",
+        "simplify-locals-nostructure",
+        "vacuum",
+        "reorder-locals",
+        "remove-unused-brs",
+        "merge-locals",
+        "coalesce-locals",
+        "local-cse",
+        "simplify-locals",
+        "vacuum",
+        "reorder-locals",
+        "coalesce-locals",
+        "reorder-locals",
+        "vacuum",
+        "code-folding",
+        "merge-blocks",
+        "remove-unused-brs",
+        "remove-unused-names",
+        "constraint-analysis",
+        "merge-blocks",
+        "precompute-propagate",
+        "optimize-instructions",
+        "rse",
+        "vacuum",
+        "dae-optimizing",
+        "inlining-optimizing",
+        "duplicate-function-elimination",
+        "duplicate-import-elimination",
+        "merge-similar-functions",
+        "simplify-globals-optimizing",
+        "remove-unused-module-elements",
+        "reorder-globals",
+        "directize",
+        "strip-debug",
+        "strip-producers",
+        "duplicate-function-elimination",
+        "remove-unused-module-elements",
+        "memory-packing",
+        "once-reduction",
+        "ssa-nomerge",
+        "dce",
+        "remove-unused-names",
+        "remove-unused-brs",
+        "remove-unused-names",
+        "optimize-instructions",
+        "pick-load-signs",
+        "precompute-propagate",
+        "code-pushing",
+        "simplify-locals-nostructure",
+        "vacuum",
+        "reorder-locals",
+        "remove-unused-brs",
+        "merge-locals",
+        "coalesce-locals",
+        "local-cse",
+        "simplify-locals",
+        "vacuum",
+        "reorder-locals",
+        "coalesce-locals",
+        "reorder-locals",
+        "vacuum",
+        "code-folding",
+        "merge-blocks",
+        "remove-unused-brs",
+        "remove-unused-names",
+        "constraint-analysis",
+        "merge-blocks",
+        "precompute-propagate",
+        "optimize-instructions",
+        "rse",
+        "vacuum",
+        "dae-optimizing",
+        "inlining-optimizing",
+        "duplicate-function-elimination",
+        "duplicate-import-elimination",
+        "merge-similar-functions",
+        "simplify-globals-optimizing",
+        "remove-unused-module-elements",
+        "reorder-globals",
+        "directize",
+        "strip-debug",
+        "strip-producers",
+        "duplicate-function-elimination",
+        "remove-unused-module-elements",
+        "memory-packing",
+        "once-reduction",
+        "ssa-nomerge",
+        "dce",
+        "remove-unused-names",
+        "remove-unused-brs",
+        "remove-unused-names",
+        "optimize-instructions",
+        "pick-load-signs",
+        "precompute-propagate",
+        "code-pushing",
+        "simplify-locals-nostructure",
+        "vacuum",
+        "reorder-locals",
+        "remove-unused-brs",
+        "merge-locals",
+        "coalesce-locals",
+        "local-cse",
+        "simplify-locals",
+        "vacuum",
+        "reorder-locals",
+        "coalesce-locals",
+        "reorder-locals",
+        "vacuum",
+        "code-folding",
+        "merge-blocks",
+        "remove-unused-brs",
+        "remove-unused-names",
+        "constraint-analysis",
+        "merge-blocks",
+        "precompute-propagate",
+        "optimize-instructions",
+        "rse",
+        "vacuum",
+        "dae-optimizing",
+        "inlining-optimizing",
+        "duplicate-function-elimination",
+        "duplicate-import-elimination",
+        "merge-similar-functions",
+        "simplify-globals-optimizing",
+        "remove-unused-module-elements",
+        "reorder-globals",
+        "directize",
+        "strip-debug",
+        "strip-producers",
+        "duplicate-function-elimination",
+        "remove-unused-module-elements",
+        "memory-packing",
+        "once-reduction",
+        "ssa-nomerge",
+        "dce",
+        "remove-unused-names",
+        "remove-unused-brs",
+        "remove-unused-names",
+        "optimize-instructions",
+        "pick-load-signs",
+        "precompute-propagate",
+        "code-pushing",
+        "simplify-locals-nostructure",
+        "vacuum",
+        "reorder-locals",
+        "remove-unused-brs",
+        "merge-locals",
+        "coalesce-locals",
+        "local-cse",
+        "simplify-locals",
+        "vacuum",
+        "reorder-locals",
+        "coalesce-locals",
+        "reorder-locals",
+        "vacuum",
+        "code-folding",
+        "merge-blocks",
+        "remove-unused-brs",
+        "remove-unused-names",
+        "constraint-analysis",
+        "merge-blocks",
+        "precompute-propagate",
+        "optimize-instructions",
+        "rse",
+        "vacuum",
+        "dae-optimizing",
+        "inlining-optimizing",
+        "duplicate-function-elimination",
+        "duplicate-import-elimination",
+        "merge-similar-functions",
+        "simplify-globals-optimizing",
+        "remove-unused-module-elements",
+        "reorder-globals",
+        "directize",
+        "strip-debug",
+        "strip-producers"
+      ],
+      "method": "All candidates derive from identical raw release bytes; size presets include convergence and both strips. Alternate candidate order in construction and execution samples. Complete standalone audits run sequentially Os, Oz, O4 on the same machine. The duplicated O4 control is byte-identical yet has some large execution timing differences; do not treat those noisy individual ratios as reliable speedups. Full audits retain unchanged frozen stress inputs.",
+      "stripping": "Both individual strip-debug and combined strip-debug/strip-producers leave current O4 wasm and WAT byte-for-byte unchanged. No debug/producers sections are present. Keep explicit stripping in release configuration only.",
+      "passInspection": "Binaryen 133 rejects --print-passes. make inspect-opt uses BINARYEN_PASS_DEBUG=1, the mechanism used by installed upstream unit tests, with stable ordered names printed in CI and full diagnostics in build/opt-passes.log. A traced Oz build is byte-identical to its untraced build.",
+      "selectionReconsidered": {
+        "defaultPreset": "-O4",
+        "reason": "Prefer interpreter execution speed and overall speed/size balance. Oz saves 5.5% wasm and 7.9% WAT but costs about 4.6% execution and 0.5% total in the standalone comparison. Normal native callers do not incur hosted interpreter construction. Strips, feature validation and pass-order diagnostics remain retained."
+      }
+    },
+    {
+      "label": "Restore O4 release default after reviewing speed and size tradeoffs",
+      "retained": true,
+      "node": "v24.11.1",
+      "binaryen": "wasm-opt version 133",
+      "tag": "wg-3.0",
+      "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
+      "runtime": "interpreted",
+      "interpreterDepth": 1,
+      "selectedPreset": "-O4",
+      "flags": "-O4 --converge --strip-debug --strip-producers",
+      "engineSourceSha256": "f2d104a1eae64b4fbfc9244bb4bbd5d47a957903452b2649c7cdbabd682ce59f",
+      "binarySha256": "ee7dd296258089f6cdf5cff559d697608ad541679f8de3a118e3d1f21f2c07ba",
+      "frontendSha256": "174f96ef880f306238aa3e9ff277b369658f02dca9b495fbc01e8196cc6bc8e9",
+      "harnessSha256": "35a60c50e29c63c833f3e829b7442c3d5b17ebd476e4a544d3faeb0416ab1223",
+      "fullSpec": {
+        "elapsedMs": 127898.38375000001,
+        "passed": 65199,
+        "failed": 0,
+        "skipped": 0,
+        "phases": {
+          "construction": {
+            "elapsedMs": 48286.2434390002,
+            "count": 7393
+          },
+          "loading": {
+            "elapsedMs": 31232.35805499996,
+            "count": 7393
+          },
+          "execution": {
+            "elapsedMs": 46411.96479100047,
+            "count": 57984
+          },
+          "other": {
+            "elapsedMs": 1967.8174649993744
+          }
+        },
+        "fileCount": 258
+      },
+      "bootstrapAudit": {
+        "elapsedMs": 5073.061917,
+        "passed": 65199,
+        "failed": 0,
+        "skipped": 0,
+        "phases": {
+          "construction": {
+            "elapsedMs": 957.4510770000093,
+            "count": 7393
+          },
+          "loading": {
+            "elapsedMs": 1491.8256699999938,
+            "count": 7393
+          },
+          "execution": {
+            "elapsedMs": 852.7153630000684,
+            "count": 57984
+          },
+          "other": {
+            "elapsedMs": 1771.0698069999285
+          }
+        },
+        "fileCount": 258
+      },
+      "validation": {
+        "tests": 246,
+        "failed": 0,
+        "skipped": 0,
+        "allPrivateProbesUseO4": true,
+        "buildModeSwitchRegressionPassed": true
+      },
+      "completeTestSuite": {
+        "elapsedMs": 136590.537125
+      },
+      "tradeoffs": "Restore O4 as the default for execution speed and overall balance; preserve all candidate size/timing data in the preceding comparison. Release stripping, supported feature flags for printing, and CI pass-order inspection remain. Rebuilt artifacts are byte-identical to the original O4 comparison input."
     }
   ],
   "experiments": [

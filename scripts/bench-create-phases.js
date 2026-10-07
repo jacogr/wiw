@@ -44,7 +44,7 @@ try {
   const wat=join(directory,'probe.wat'),wasm=join(directory,'probe-opt.wasm');
   await writeFile(wat,probe);
   execFileSync('wat2wasm',[wat,'-o',wasm]);
-  execFileSync('wasm-opt',['--enable-bulk-memory','--enable-sign-ext','--enable-nontrapping-float-to-int','-O4','--converge',wasm,'-o',wasm]);
+  execFileSync('wasm-opt',['--enable-bulk-memory','--enable-sign-ext','--enable-nontrapping-float-to-int','-O4','--converge','--strip-debug','--strip-producers',wasm,'-o',wasm]);
   const instrumented=await readFile(wasm),timings=[];
   // Warm the diagnostic code before collecting independent, fresh instance samples.
   for(let sample=0;sample<samples+10;sample++) {

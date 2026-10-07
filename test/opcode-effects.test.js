@@ -25,7 +25,7 @@ before(async () => {
   binary=join(directory,'probe-opt.wasm');
   await writeFile(wat,source);
   execFileSync('wat2wasm',[wat,'-o',binary]);
-  execFileSync('wasm-opt',['--enable-bulk-memory','--enable-sign-ext','--enable-nontrapping-float-to-int','-O4','--converge',binary,'-o',binary]);
+  execFileSync('wasm-opt',['--enable-bulk-memory','--enable-sign-ext','--enable-nontrapping-float-to-int','-O4','--converge','--strip-debug','--strip-producers',binary,'-o',binary]);
   opcodes=(await readFile(new URL('../scripts/opcodes.tsv',import.meta.url),'utf8'))
     .split('\n').filter(line => line && !line.startsWith('#'))
     .map(line => line.split(/\s+/)).filter(fields => Number(fields[0])>=203);

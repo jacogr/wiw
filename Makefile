@@ -15,7 +15,7 @@ FLAGS_M4 = -P -DDEBUG
 FLAGS_OPT = $(FLAGS_OPT_BASE) -O0
 else
 FLAGS_M4 = -P -DRELEASE
-FLAGS_OPT = $(FLAGS_OPT_BASE) -O4 --converge
+FLAGS_OPT = $(FLAGS_OPT_BASE) -O4 --converge --strip-debug --strip-producers
 endif
 
 # Force every derived artifact when configuration changes, even within one timestamp tick.
@@ -27,7 +27,7 @@ endif
 
 .DELETE_ON_ERROR:
 
-.PHONY: all check check-spec audit-spec audit-selfhost bench bench-load bench-create bench-create-phases clean FORCE
+.PHONY: all check check-spec audit-spec audit-selfhost bench bench-load bench-create bench-create-phases inspect-opt clean FORCE
 all: build/wiw-opt.wasm build/wiw-opt.wat
 
 build:
@@ -58,8 +58,17 @@ build/wiw-opt.wasm: build/wiw.wasm build/flags $(FLAGS_REBUILD)
 
 # Print the already optimized binary as compact WAT for the interpreted engine copy.
 # Authoring/probe source remains the readable m4 expansion in build/wiw.wat.
+# Feature flags allow validation of existing instructions; no optimization preset is applied.
 build/wiw-opt.wat: build/wiw-opt.wasm Makefile $(FLAGS_REBUILD)
 	$(WASM_OPT) $(FLAGS_OPT_BASE) --print-minified $< -o /dev/null > $@
+
+# Binaryen 133 exposes executed pass order through its supported debug environment variable.
+# Keep the full diagnostic log while printing stable names without pass timing noise.
+inspect-opt: build/wiw.wasm build/flags
+	$(WASM_OPT) --version
+	@printf '%s\n' '$(FLAGS_OPT)'
+	BINARYEN_PASS_DEBUG=1 $(WASM_OPT) $(FLAGS_OPT) build/wiw.wasm -o /dev/null > build/opt-passes.log 2>&1
+	@awk '/running pass:/ { sub(/^.*running pass: /, ""); sub(/\.\.\..*/, ""); print }' build/opt-passes.log
 
 check: all
 	$(NODE) $(FLAGS_NODE) --test test/*.test.js

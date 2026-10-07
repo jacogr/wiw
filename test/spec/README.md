@@ -17,7 +17,7 @@ against the recorded revision and verifies file/license hashes. Missing or
 mismatched checkouts fail with an actionable diagnostic.
 
 The complete 3.0 core suite passes through the default interpreted WAT copy
-on the optimized bootstrap (`-O4 --converge`):
+on the optimized bootstrap (`-O4 --converge --strip-debug --strip-producers`):
 
 | Scope | Files | Passed | Skipped | Failed |
 | --- | ---: | ---: | ---: | ---: |

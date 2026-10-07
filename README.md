@@ -23,7 +23,7 @@ binary, and optimized `build/wiw-opt.wasm`. It also emits compact `build/wiw-opt
 from that optimized binary for the interpreted copy. Guest text and binary
 modules are parsed, validated and executed by the WAT engine. wat2wasm builds
 the bootstrap and serves as a differential test oracle. The optimized bootstrap
-uses `wasm-opt -O4 --converge`; all tests and audits run only `wiw-opt.wasm`.
+uses `wasm-opt -O4 --converge --strip-debug --strip-producers`; all tests and audits run only `wiw-opt.wasm`.
 `make DEBUG=1 check` selects `-O0` for that same binary and its derived WAT instead. The m4 defines
 are `RELEASE` by default and `DEBUG` with `DEBUG=1`. Switching modes rebuilds
 automatically; `make check` switches back to release without requiring `make clean`.
@@ -204,9 +204,9 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 246 tests in 138,017.353 ms
-(2m18.02s). The hosted audit within that run passes all 65,199 commands in
-130,753.257 ms (2m10.75s), with zero failures or skips.
+The latest complete `make check` run passes all 246 tests in 136,590.537 ms
+(2m16.59s). The hosted audit within that run passes all 65,199 commands in
+127,898.384 ms (2m07.90s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -326,9 +326,9 @@ Both audit commands now print exclusive construction, loading, execution and
 other timings, with per-file and cumulative values in their JSON reports.
 Construction includes the fresh self-hosted interpreter copy; loading includes
 initialization/start functions. Failed attempts are counted, and forwarded
-callbacks stay in their enclosing phase. The latest hosted run spends 47.15s
-constructing, 29.93s loading, 51.81s executing and 1.86s on other harness work:
-construction and loading account for 59% of its total. These are API wall times,
+callbacks stay in their enclosing phase. The latest hosted run spends 48.29s
+constructing, 31.23s loading, 46.41s executing and 1.97s on other harness work:
+construction and loading account for 62% of its total. These are API wall times,
 not pure guest instruction CPU times, and profiling is not a speedup claim.
 
 The detailed fresh-construction follow-up retains safe atom-word prefixes,
@@ -355,3 +355,11 @@ and the expanded development/probe source retain their readable formatting.
 A build regression also checks rapid release/debug/release switches: changed
 flags force every derived artifact even when timestamps would otherwise hide
 the change, while unchanged flags still avoid rebuilding.
+
+`make inspect-opt` prints the installed Binaryen version, release/debug flags and
+executed optimization pass order, including convergence repetitions. CI runs it
+before the tests. Full diagnostic timings/validation messages stay in
+`build/opt-passes.log`; Binaryen 133 does not support `--print-passes`.
+The WAT printer retains feature flags for input validation, with
+no optimization preset. Removing those flags rejects bulk-memory and saturating
+conversion instructions in the current input.

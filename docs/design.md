@@ -402,7 +402,7 @@ language restrictions, and remain explicit bounds on self-hosted programs.
 
 `make check` runs regressions, negative/capacity cases, differential native-Wasm
 oracles and the complete spec suite through the default interpreted WAT copy,
-using the optimized bootstrap (`-O4 --converge`). Explicit low-level ABI tests
+using the optimized bootstrap (`-O4 --converge --strip-debug --strip-producers`). Explicit low-level ABI tests
 inspect the bootstrap directly. Harness tests check exact scalar
 bits, trap classes, isolated negative assertions, linking, coverage accounting
 and revision/hash verification. The official `wg-3.0` submodule at
@@ -1154,7 +1154,7 @@ groups instead reduce expanded WAT from 1,490,333 to 1,445,170 bytes, saving 45,
 bytes (3.0%). Constructor behavior retains the original fresh parsing path.
 
 New tests expose test-only hooks on the interpreter, compile only the instrumented
-bootstrap with `-O4 --converge`, and also run its WAT through the production
+bootstrap with the selected release flags, and also run its WAT through the production
 bootstrap. They verify all 498 wire mappings including nullable aliases, every
 namespace hole through the final mapping, large unsigned invalid keys, exact
 mnemonic bytes and separators, adjacent sentinels, exact-capacity writes, one-byte
@@ -2753,7 +2753,9 @@ totals and per-file command outcomes were captured before the report replacement
 
 The default hosted copy now loads `build/wiw-opt.wat`, emitted from the same
 `build/wiw-opt.wasm` that Node instantiates as the native bootstrap. Binaryen
-optimizes the interpreter at build time using the existing `-O4 --converge`.
+optimizes the interpreter at build time using the selected release flags
+(`-O4 --converge` for the measurements in this section; the later flag
+comparison evaluates size presets but retains `-O4`).
 A subsequent `--print-minified` pass prints the already optimized binary's
 WAT without another optimization pass. The discarded binary output goes to
 `/dev/null`, while the text output becomes the generated WAT artifact. This
@@ -2863,3 +2865,68 @@ The final full suite passes 246 tests in 2m18.02s; its hosted audit takes
 2m10.75s. The native audit also passes the full inventory.
 New concurrent-creation tests verify isolated globals, memory/growth, fuel,
 reloads, validation failures and exported functions for both runtime levels.
+
+
+Binaryen 133 optimization-flag comparison
+
+Release builds explicitly strip debug and producers metadata. For current input,
+`--strip-debug` alone and both strips with `-O4 --converge` produce byte-identical
+WASM and compact WAT to the preceding release. There are no custom metadata
+sections to remove; stripping does not shorten the hosted WAT here. Debug mode
+continues to use `-O0` without the release strips.
+
+| Preset with convergence and strips | WASM bytes | Compact WAT bytes | Hosted audit |
+| --- | ---: | ---: | ---: |
+| -O4 | 132,793 | 854,491 | 2m10.01s |
+| -Os | 125,519 | 786,784 | 2m10.82s |
+| -Oz | 125,504 | 786,660 | 2m10.63s |
+
+The size experiment initially selected `-Oz`: 5.5% smaller WASM and 7.9% smaller
+WAT, with 0.5% higher overall standalone audit time than the fresh O4 reference.
+Construction improves about 4%; execution costs about 4.6% more. After review,
+the release default returns to `-O4` for its speed/size balance. Ordinary native
+use does not pay the repeated hosted-WAT construction cost; self-hosted tests
+remain a stress test. Both release strips and the pass-order diagnostic remain. Candidate construction medians and
+all execution samples are retained in performance history. The byte-identical
+O4 control exhibits some substantial execution timing variation, so isolated
+benchmark speedups are not treated as reliable. All three standalone hosted
+audits pass 65,199 commands over 258 files, with zero failures or skips.
+Final verification passes 246 tests in 2m19.62s, including a complete
+hosted audit in 2m12.03s; the native audit passes the same
+frozen inventory. Each candidate starts from the same raw release binary.
+Seven private probe compiler invocations and the phase diagnostic were also
+aligned to Oz plus both strips. All 19 affected probe/mode tests pass after that
+alignment, and the updated phase diagnostic completes successfully. The complete
+suite timing precedes this probe-only alignment; the product runtime and its
+complete spec audit already used the selected Oz build.
+
+`--print-minified` is a printing pass, and feature-enable flags do not request
+additional optimizations. Without feature flags the printer fails input
+validation. Omitting bulk-memory or nontrapping conversion support fails;
+omitting sign-ext alone currently succeeds. Keep the common supported feature
+set rather than bypassing validation. A diagnostic print with validation
+disabled matches the feature-enabled WAT byte-for-byte; production validation
+remains enabled.
+
+Binaryen 133 rejects the article's `--print-passes` option. Upstream's installed
+`test/unit/test_passes.py` captures pass names using `BINARYEN_PASS_DEBUG=1`.
+`make inspect-opt` uses that mechanism on the raw release binary, preserves its
+full log in `build/opt-passes.log`, and prints version, flags and ordered pass
+names without timing noise. CI runs this diagnostic before testing. The trace
+includes actual convergence repetitions; the traced Oz binary matches the
+untraced one byte-for-byte. The diagnostic output is discarded, so build
+artifacts are always produced by the ordinary optimizer recipe.
+
+
+After the size comparison, the release default returns to `-O4 --converge`
+with both metadata strips. O4 has the better overall speed/size balance and
+about 4.6% faster execution in the standalone phase comparison. Ordinary native
+usage does not pay hosted interpreter construction; tests continue to exercise
+the default hosted frontend as a stress test. The API selection is unchanged:
+`createInterpreter()` is hosted, `createBootstrapInterpreter()` is native.
+All private probes and the phase diagnostic again use O4 with the strips.
+The pass-order target and CI step are retained. Rebuilt WASM and WAT are
+byte-identical to the original O4 comparison artifacts. Final verification
+passes all 246 tests in 2m16.59s; its hosted audit passes all 65,199
+commands in 2m07.90s, and the native audit also passes all
+65,199 commands. Both audits have zero failures or skips.

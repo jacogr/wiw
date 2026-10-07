@@ -23,7 +23,7 @@ test('build mode switches rebuild binary and hosted WAT together regardless of t
         const value=JSON.parse(fs.readFileSync(input,'utf8'));
         if(kind==='wasm-opt' && args.includes('--print-minified')) process.stdout.write(JSON.stringify(value));
         else {
-          if(kind==='wasm-opt') value.optimization=args.find(arg=>/^-O[0-4]$/.test(arg));
+          if(kind==='wasm-opt') value.optimization=args.find(arg=>/^-O(?:[0-4]|s|z)$/.test(arg));
           fs.writeFileSync(args[args.indexOf('-o')+1],JSON.stringify(value));
         }
       }
