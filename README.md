@@ -219,11 +219,11 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` / `check-wat` run passes all 196 tests in 136,941.463 ms
-(2m16.94s). `check-wasm` passes the same 196 registered tests in
-11,741.451 ms (0m11.74s). Each executes all 65,199 spec commands:
-WAT takes 130,212.856 ms (2m10.21s), and WASM takes
-6,367.399 ms (0m06.37s), with zero failures or skips.
+The latest complete `make check` / `check-wat` run passes all 197 tests in 136,758.666 ms
+(2m16.76s). `check-wasm` passes the same 197 registered tests in
+11,671.701 ms (0m11.67s). Each executes all 65,199 spec commands:
+WAT takes 130,031.827 ms (2m10.03s), and WASM takes
+6,405.030 ms (0m06.41s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -343,8 +343,8 @@ Both audit commands now print exclusive construction, loading, execution and
 other timings, with per-file and cumulative values in their JSON reports.
 Construction includes the fresh self-hosted interpreter copy; loading includes
 initialization/start functions. Failed attempts are counted, and forwarded
-callbacks stay in their enclosing phase. The latest hosted run spends 46.95s
-constructing, 31.14s loading, 50.06s executing and 2.06s on other harness work:
+callbacks stay in their enclosing phase. The latest hosted run spends 47.02s
+constructing, 30.96s loading, 50.04s executing and 2.00s on other harness work:
 construction and loading account for 60% of its total. These are API wall times,
 not pure guest instruction CPU times, and profiling is not a speedup claim.
 
@@ -409,3 +409,11 @@ slots. Checked large-array cases improve 68–91% natively and 95–97% hosted;
 small native cases can be around 10% slower, and fresh hosted construction is
 roughly flat (+0.6%). The object layout, reference identity, bounds/fuel behavior
 and fixed constructor operand order remain unchanged.
+
+Pure strict/relaxed SIMD operations now enter the existing fixed-signature
+validator directly. Confirmed vector-heavy text loading improves about 13%
+natively and 10% hosted; binary vector loading improves 10% and 4%. Construction
+is nearly flat (+0.2%); WASM/WAT grow only 24/152 bytes. Memory selectors and
+widths, operand typing, lane/shuffle bounds and unreachable-code checks retain
+their existing handling. These are paired loading measurements, not isolated
+validator CPU times or a full-suite speedup claim.

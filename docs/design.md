@@ -3213,3 +3213,56 @@ historical measurements; no paired full-suite speedup is claimed. Public
 benchmark smoke and the two-level regression pass. Raw samples, hashes and
 matrix reports remain in performance history. Only this second requested round
 is complete; validation dispatch remains for the next go.
+
+
+### Direct pure SIMD signature validation
+
+A new named block surrounds the existing control/reference/call/resource
+resolution region. Pure SIMD instructions branch to its end and enter the
+unchanged fixed-signature operand/output validation. The eligible ranges cover
+234 instructions: v128.const and strict non-memory SIMD, plus relaxed SIMD.
+Memory operations retain selector resolution, logical address width, offsets,
+resource existence and all operand checks. Lane and shuffle bounds are enforced
+by both text and binary decoding before instruction validation. No lookup table,
+record field, arena, guest compilation or duplicate type checker is introduced.
+The large source diff reindents the enclosed existing handlers; functional changes
+are the named block, range guard and branch to the shared path.
+
+Two earlier trials are reverted. Moving local handlers ahead of control/exception
+branches improves hosted local-heavy loads about 2%, but construction is 0.8%
+slower. Replacing matching scalar operands in-place has only 1–2% hosted loading
+gains and nearly flat construction; it duplicates pop/push invariants and does
+not justify its additional guarded path. Both corrected measurements remain in
+history. The retained SIMD shortcut reuses the original operand helpers.
+
+The independent signature regression covers all 234 eligible instructions,
+valid input/output types, reachable underflow, absent unreachable operands,
+known mismatches in each argument position and exact diagnostic offsets. It also
+checks nested control floors, bitselect polymorphism, invalid lane/shuffle bounds,
+missing memories, memory32 offsets, memory64 address typing, the 4096-operand
+capacity boundary, replacement at capacity and recovery. Existing every-SIMD
+native-oracle tests cover text and binary execution. Full self-hosting tests
+exercise the selected engine through two interpreted layers.
+
+Initial paired vector text loading improves 14% native/9.5% hosted; binary loading
+improves 7%/5%. A longer confirmation gives 13.1%/9.6% text and 10.4%/4.0% binary.
+Unrelated confirmed loader cases stay within about 1.3%. Construction medians
+are 6.049/6.061 ms (+0.2%). WASM grows from 127,961 to 127,985 bytes and optimized
+WAT from 818,987 to 819,139 bytes. The modest costs are retained for repeatable
+vector loading gains. No execution microbenchmark gain is claimed.
+
+Both variants use immutable optimized artifacts with identical frontend. Fresh
+construction uses fifteen alternating rounds of ten factories; guest execution
+checks stay outside timing. Loading uses an independent engine per runtime,
+variant and case, three warm loads, and thirteen alternating samples of seven
+repeated loads; initial/rejected trials use nine samples of five repeats. Result
+checks stay outside timing. Measurements include parsing/resolution/validation,
+not isolated validator CPU time. No tests or audits overlap these benchmarks.
+
+Both complete targets pass all 197 tests, zero failures/skips: 2m16.76s
+hosted and 0m11.67s native. Each passes all 65,199 wg-3.0 commands
+across 258 files; spec times are 2m10.03s WAT and
+0m06.41s WASM. Full-suite comparisons are historical; no matched
+full-suite speedup is claimed. Raw initial/confirmation/rejected samples, hashes
+and complete matrix reports remain in performance history. This completes the
+third requested optimization round.
