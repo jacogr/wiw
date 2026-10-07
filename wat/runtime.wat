@@ -399,7 +399,7 @@
 					;; Local get is the common read path and preserves the complete raw value.
 					(if (i32.eq (local.get $op) (i32.const M4_OP_LOCAL_GET))
 						(then
-							;; Fuse marked scalar reads, constants and non-trapping binary operations while preserving source records.
+							;; Fuse marked scalar reads, local/constant operands and non-trapping binary operations while preserving source records.
 							(block $fusion-miss
 								;; Non-matching local reads need one marker load rather than repeated successor classification.
 								(local.set $selector (i32.load offset=M4_FUSION_OPERATOR_OFFSET (local.get $record)))
@@ -410,16 +410,33 @@
 										(i32.gt_u (global.get $sp) (i32.const M4_FUSION_STACK_MAX))))
 								(local.set $a (i64.load offset=M4_CALL_LOCALS_OFFSET
 									(i32.add (local.get $frame) (i32.mul (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $record)) (i32.const M4_SLOT_BYTES)))))
-								;; Narrow operations preserve signed low-word canonicalization.
-								(if (i32.le_u (local.get $selector) (i32.const M4_OP_I32_POPCNT))
+								;; A second local read supplies the same raw low half as ordinary local.get.
+								(if (i32.eq (i32.load (local.get $next)) (i32.const M4_OP_LOCAL_GET))
 									(then
-										(local.set $value (i64.extend_i32_s (call $apply (local.get $selector)
-											(i32.wrap_i64 (local.get $a)) (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $next))))))
-									;; Wide constants and operations retain their complete raw bit patterns.
+										(local.set $b (i64.load offset=M4_CALL_LOCALS_OFFSET
+											(i32.add (local.get $frame) (i32.mul (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $next)) (i32.const M4_SLOT_BYTES)))))
+										;; The validated integer operation determines narrow/wide input and result handling.
+										(if (i32.le_u (local.get $selector) (i32.const M4_OP_I32_POPCNT))
+											(then (local.set $value (i64.extend_i32_s (call $apply (local.get $selector)
+												(i32.wrap_i64 (local.get $a)) (i32.wrap_i64 (local.get $b))))))
+											;; Wide reads and binary operands retain all 64 bits.
+											(else (local.set $value (call $apply64 (local.get $selector) (local.get $a) (local.get $b))))
+										)
+									)
+									;; Preserve the existing constant paths and their canonicalization.
 									(else
-										(local.set $b (i64.or (i64.extend_i32_u (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $next)))
-											(i64.shl (i64.extend_i32_u (i32.load offset=M4_INSTRUCTION_EXTRA_OFFSET (local.get $next))) (i64.const M4_WORD_BITS))))
-										(local.set $value (call $apply64 (local.get $selector) (local.get $a) (local.get $b)))
+										;; Narrow operations preserve signed low-word canonicalization.
+										(if (i32.le_u (local.get $selector) (i32.const M4_OP_I32_POPCNT))
+											(then
+												(local.set $value (i64.extend_i32_s (call $apply (local.get $selector)
+													(i32.wrap_i64 (local.get $a)) (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $next))))))
+											;; Wide constants and operations retain their complete raw bit patterns.
+											(else
+												(local.set $b (i64.or (i64.extend_i32_u (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $next)))
+													(i64.shl (i64.extend_i32_u (i32.load offset=M4_INSTRUCTION_EXTRA_OFFSET (local.get $next))) (i64.const M4_WORD_BITS))))
+												(local.set $value (call $apply64 (local.get $selector) (local.get $a) (local.get $b)))
+											)
+										)
 									)
 								)
 								(local.set $fuel (i64.sub (local.get $fuel) (i64.const 2)))

@@ -189,6 +189,17 @@ cases.noFusionLoop = `(module (func (export "run") (param i64) (result i64)
     i64.const -1 local.get 0 i64.add local.set 0
     local.get 0 i64.eqz i32.eqz br_if $again) local.get 0))`;
 
+// Two local operands isolate the adjacent-read fusion from the existing constant pattern.
+for(const type of ['i32','i64']) cases['localLocal'+type]=`(module
+  (func (export "run") (param i64) (result i64) (local $sum ${type}) (local $delta ${type})
+    ${type}.const 17 local.set $delta
+    (loop $again
+      local.get $sum local.get $delta ${type}.add local.set $sum
+      local.get $sum local.get $delta ${type}.sub local.set $sum
+      local.get 0 i64.const 1 i64.sub local.set 0
+      local.get 0 i64.const 0 i64.ne br_if $again)
+    local.get $sum ${type}.eqz i32.eqz if unreachable end i64.const 0))`;
+
 const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
 const report = {node: process.version, binaryen: execFileSync('wasm-opt', ['--version'], {encoding:'utf8'}).trim(),
   engineSourceSha256: createHash('sha256').update(await readFile(new URL('../build/wiw-opt.wat', import.meta.url))).digest('hex'),

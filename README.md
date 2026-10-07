@@ -215,11 +215,11 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` / `check-wat` run passes all 191 tests in 127,135.534 ms
-(2m07.14s). `check-wasm` passes the same 191 registered tests in
-10,437.981 ms (0m10.44s). Each executes all 65,199 spec commands:
-WAT takes 121,538.148 ms (2m01.54s), and WASM takes
-5,898.879 ms (0m05.90s), with zero failures or skips.
+The latest complete `make check` / `check-wat` run passes all 192 tests in 140,601.392 ms
+(2m20.60s). `check-wasm` passes the same 192 registered tests in
+11,742.642 ms (0m11.74s). Each executes all 65,199 spec commands:
+WAT takes 132,989.995 ms (2m12.99s), and WASM takes
+6,372.377 ms (0m06.37s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -339,9 +339,9 @@ Both audit commands now print exclusive construction, loading, execution and
 other timings, with per-file and cumulative values in their JSON reports.
 Construction includes the fresh self-hosted interpreter copy; loading includes
 initialization/start functions. Failed attempts are counted, and forwarded
-callbacks stay in their enclosing phase. The latest hosted run spends 45.93s
-constructing, 28.80s loading, 44.90s executing and 1.91s on other harness work:
-construction and loading account for 61% of its total. These are API wall times,
+callbacks stay in their enclosing phase. The latest hosted run spends 48.12s
+constructing, 30.97s loading, 51.85s executing and 2.06s on other harness work:
+construction and loading account for 59% of its total. These are API wall times,
 not pure guest instruction CPU times, and profiling is not a speedup claim.
 
 The detailed fresh-construction follow-up retains safe atom-word prefixes,
@@ -376,3 +376,8 @@ before the tests. Full diagnostic timings/validation messages stay in
 The WAT printer retains feature flags for input validation, with
 no optimization preset. Removing those flags rejects bulk-memory and saturating
 conversion instructions in the current input.
+
+Adjacent integer arithmetic now also fuses `local.get`, `local.get` and a
+non-trapping binary operation, with optional following `local.set`. Matching
+loops improve about 29–31% natively and 36% when hosted; construction is flat.
+Both runtime targets retain exact fuel, trap offsets and operand-capacity checks.

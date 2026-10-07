@@ -13,19 +13,23 @@ for(const [runtime,create] of runtimeFactories) {
     const directory=await mkdtemp(join(tmpdir(),'wiw-fusion-'));
     try {
       const cases=[];
-      for(const type of ['i32','i64']) for(const operation of operations) for(const literal of ['1','-1',type==='i32'?'0x80000001':'0xfedcba9876543210']) {
+      for(const operand of ['constant','local']) for(const type of ['i32','i64']) for(const operation of operations) for(const literal of ['1','-1',type==='i32'?'0x80000001':'0xfedcba9876543210']) {
         const result=operations.indexOf(operation)>=11?'i32':type;
         const name=`f${cases.length}`;
-        cases.push({type,result,name,body:`(func (export "${name}") (param ${type}) (result ${result}) (local ${result})
-          local.get 0 ${type}.const ${literal} ${type}.${operation} local.set 1 local.get 1)`});
+        cases.push({type,result,name,operand,right:type==='i32'?Number(BigInt(literal)):BigInt(literal),body:`(func (export "${name}") (param ${type}) ${operand==='local'?`(param $rhs ${type})`:''} (result ${result}) (local ${result})
+          local.get 0 ${operand==='local'?'local.get $rhs':`${type}.const ${literal}`} ${type}.${operation} local.set ${operand==='local'?2:1} local.get ${operand==='local'?2:1})`});
       }
       const source=`(module ${cases.map(item=>item.body).join('\n')})`;
       const wat=join(directory,'guest.wat'),wasm=join(directory,'guest.wasm');
       await writeFile(wat,source);execFileSync('wat2wasm',[wat,'-o',wasm]);
-      const {instance}=await WebAssembly.instantiate(await readFile(wasm));
-      const engine=await create();engine.load(source);
-      for(const {type,name} of cases) for(const value of type==='i32'?[-2147483648,-1,0,2147483647]:[-(1n<<63n),-1n,0n,(1n<<63n)-1n]) {
-        assert.equal(engine.invoke(name,value),instance.exports[name](value),`${name}/${value}`);
+      const bytes=await readFile(wasm),{instance}=await WebAssembly.instantiate(bytes);
+      const engine=await create();
+      for(const format of ['text','binary']) {
+        if(format==='text')engine.load(source);else engine.loadBinary(bytes);
+        for(const {type,name,operand,right} of cases) for(const value of type==='i32'?[-2147483648,-1,0,2147483647]:[-(1n<<63n),-1n,0n,(1n<<63n)-1n]) {
+          const args=operand==='local'?[value,right]:[value];
+          assert.equal(engine.invoke(name,...args),instance.exports[name](...args),`${format}/${name}/${value}`);
+        }
       }
     } finally {await rm(directory,{recursive:true,force:true});}
   });
@@ -94,5 +98,39 @@ for(const [runtime,create] of runtimeFactories) {
       (func (export "run") (result i32)
         ${'i32.const 1 '.repeat(4093)} i32.const 40 call $calculate ${'i32.add '.repeat(4093)}))`);
     assert.equal(engine.invoke('run'),4135);
+  });
+}
+
+for(const [runtime,create] of runtimeFactories) {
+  test(`${runtime}: local/local fusion retains every fuel boundary, aliases and trapping operations`,async()=>{
+    const engine=await create();
+    for(const operation of ['add','div_s']) {
+      const instructions=['local.get 0','local.get $rhs',`i32.${operation}`,'local.set 0','local.get 0'];
+      const source=`(module (func (export "run") (param i32) (param $rhs i32) (result i32) ${instructions.join(' ')}))`;
+      engine.load(source);
+      for(let fuel=0;fuel<instructions.length;fuel++) {
+        engine.setFuel(fuel);
+        const at=fuel===4?source.lastIndexOf(instructions[fuel]):source.indexOf(instructions[fuel]);
+        assert.throws(()=>engine.invoke('run',40,2),new RegExp(`exhausted fuel at byte ${at}$`));
+        engine.setFuel(5);assert.equal(engine.invoke('run',40,2),operation==='add'?42:20);
+      }
+      if(operation==='div_s')assert.throws(()=>engine.invoke('run',40,0),/divide by zero/);
+    }
+    assert.throws(()=>engine.load('(module (func (param i32 f64) (result i32) local.get 0 local.get 1 i32.add))'),/operand stack/);
+    engine.setFuel(100000);
+    for(const padding of [4094,4095]) {
+      const source=`(module
+        (func $calculate (param i32) (result i32) (local i32)
+          i32.const 2 local.set 1 local.get 0 local.get 1 i32.add)
+        (func (export "run") (result i32)
+          ${'i32.const 1 '.repeat(padding)} i32.const 40 call $calculate ${'i32.add '.repeat(padding)}))`;
+      engine.load(source);
+      if(padding===4094)assert.equal(engine.invoke('run'),4136);
+      else assert.throws(()=>engine.invoke('run'),new RegExp(`resource limit at byte ${source.indexOf('local.get 1')}$`));
+    }
+    engine.load('(module (func (export "run") (param i64) (result i64) local.get 0 local.get 0 i64.xor))');
+    assert.equal(engine.invoke('run',-1n),0n);
+    engine.load('(module (func (export "run") (param v128) (result i32) local.get 0 local.get 0 i8x16.eq i8x16.all_true))');
+    assert.equal(engine.invoke('run',1n<<127n),1);
   });
 }

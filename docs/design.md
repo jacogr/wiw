@@ -2953,3 +2953,49 @@ complete spec; WASM takes 0m10.44s, including its
 commands across 258 frozen files. Counts decrease from the previous single-run
 246 because 56 duplicated runtime registrations are split across targets, and
 one selected-runtime behavior check is added. Frozen spec coverage is unchanged.
+
+
+### Adjacent local/local integer fusion
+
+The existing validator marker now recognizes a second `local.get` before a
+non-trapping integer binary operation, alongside the existing integer constant
+pattern. Successors remain within the current function. Normal validation
+resolves successor names and checks types before execution is possible. The
+runtime reads both low halves from the current frame before an optional local
+write, preserving aliases and i32 canonicalization. The existing two-instruction
+fuel and two-slot capacity guards preserve all intermediate failure boundaries;
+partial fuel and near-capacity execution use ordinary dispatch. Division,
+remainder, floating-point and vector operations remain outside the pattern.
+No new opcode, record format, instruction rewriting or guest compilation is
+introduced. New WAT branches remain documented.
+
+Alternating samples over three fresh instances per variant show matching i32/i64
+loops improving 29–31% natively and about 36% hosted. Construction medians are
+6.392/6.386 ms before/after, effectively flat. Unrelated controls are mostly
+within a few percent; native memory is 3.6% slower in this sample set. Binary
+size increases 68 bytes and optimized WAT 501 bytes. These are targeted execution
+gains, not a claim that all workloads or suite timing improve by that amount.
+`make bench` includes both new i32/i64 patterns for future comparisons.
+
+Differential tests exercise every supported non-trapping binary family at i32
+and i64 widths, through text and binary loading, against native guest Wasm.
+Additional tests cover named RHS resolution, aliasing, exact fuel/source offsets,
+trapping division fallback, invalid mixed types, vector non-matches and the
+second local read at the operand-capacity boundary. Existing caller-vector and
+callback-recovery tests remain. Final sequential validation passes all 192 tests
+in each target: WAT takes 2m20.60s, WASM 0m11.74s.
+Both complete audits pass all 65,199 commands across 258 files with zero
+failures/skips. Hosted spec time is 2m12.99s, native spec time
+0m06.37s. Historical preceding suite times are retained in
+performance history but are not a controlled before/after suite comparison.
+Only this first experiment is implemented; SIMD and parser work remain pending.
+
+A follow-up controlled complete audit pair addresses the slower initial suite
+relative to its historical baseline. The same current frontend/runner and
+frozen inventory take 133,093.967 ms (2m13.09s) with the before snapshot and
+131,305.422 ms (2m11.31s) with local/local fusion, a 1.34% reduction. Construction
+is 47.64/47.36s, loading 30.77/30.31s and execution 52.76/51.71s before/after.
+Both execute every command with zero failures/skips. The fresh baseline also
+runs slower than the historical suite, so that historical difference is not
+claimed as a patch regression. The public benchmark script also completes a
+bounded smoke run with all cases, including the newly added local/local loops.
