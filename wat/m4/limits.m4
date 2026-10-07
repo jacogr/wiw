@@ -41,7 +41,7 @@ m4_define(<!M4_FP_A_OFFSET!>,<!26757120!>)m4_dnl
 m4_define(<!M4_FP_B_OFFSET!>,<!26761216!>)m4_dnl
 m4_define(<!M4_FP_T_OFFSET!>,<!26765312!>)m4_dnl
 m4_define(<!M4_MEMORY_OFFSET!>,<!26769408!>)m4_dnl
-m4_define(<!M4_OWNED_BYTES!>,<!44312832!>)m4_dnl
+m4_define(<!M4_OWNED_BYTES!>,<!44427520!>)m4_dnl
 m4_define(<!M4_LOCAL_NAME_BYTES!>,<!8704!>)m4_dnl
 m4_define(<!M4_REFERENCE_TYPE_OFFSET!>,<!26802176!>)m4_dnl
 m4_define(<!M4_TYPE_COMPARISON_OFFSET!>,<!26933248!>)m4_dnl
@@ -51,3 +51,21 @@ m4_define(<!M4_HEAP_TYPE_OFFSET!>,<!26945792!>)m4_dnl
 m4_define(<!M4_FIELD_TYPE_OFFSET!>,<!26994944!>)m4_dnl
 m4_define(<!M4_GC_OBJECT_OFFSET!>,<!27519232!>)m4_dnl
 m4_define(<!M4_TAG_OFFSET!>,<!44296448!>)m4_dnl
+m4_dnl Load-time name indexes: source pointer, byte length, index and namespace generation.
+m4_define(<!M4_FUNCTION_NAME_INDEX_OFFSET!>,<!44312832!>)m4_dnl
+m4_define(<!M4_TYPE_NAME_INDEX_OFFSET!>,<!44329216!>)m4_dnl
+m4_define(<!M4_LOCAL_NAME_INDEX_OFFSET!>,<!44361984!>)m4_dnl
+m4_define(<!M4_FUNCTION_NAME_INDEX_MASK!>,<!1023!>)m4_dnl
+m4_define(<!M4_TYPE_NAME_INDEX_MASK!>,<!2047!>)m4_dnl
+m4_define(<!M4_LOCAL_NAME_INDEX_MASK!>,<!4095!>)m4_dnl
+m4_define(<!M4_FUNCTION_NAME_INDEX_BYTES!>,<!16384!>)m4_dnl
+m4_define(<!M4_TYPE_NAME_INDEX_BYTES!>,<!32768!>)m4_dnl
+m4_define(<!M4_LOCAL_NAME_INDEX_BYTES!>,<!65536!>)m4_dnl
+m4_define(<!M4_NAME_INDEX_SLOT_SHIFT!>,<!4!>)m4_dnl
+m4_define(<!M4_NAME_INDEX_MIN!>,<!16!>)m4_dnl
+m4_define(<!M4_LOCAL_NAME_INDEX_MIN!>,<!32!>)m4_dnl
+m4_define(<!M4_NAME_HASH_SEED!>,<!2166136261!>)m4_dnl
+m4_define(<!M4_NAME_HASH_PRIME!>,<!16777619!>)m4_dnl
+m4_define(<!M4_NAME_INDEX_LENGTH_OFFSET!>,<!4!>)m4_dnl
+m4_define(<!M4_NAME_INDEX_VALUE_OFFSET!>,<!8!>)m4_dnl
+m4_define(<!M4_NAME_INDEX_GENERATION_OFFSET!>,<!12!>)m4_dnl

@@ -2439,3 +2439,50 @@ Final restored-engine validation passes all 226 tests in 178,465.648 ms
 (2m58.47s). Both standalone audits pass 65,199 commands across 258 files with
 zero failures or skips; hosted coverage takes 171,399.829 ms. Expanded
 source and optimized binary hashes exactly match the pre-experiment baseline.
+
+### Bounded indexes for larger name namespaces
+
+Function and declared type namespaces switch from their existing scans to
+source-backed hash indexes at 16 records; local namespaces switch at 32 slots.
+Smaller namespaces keep the scan. Index construction is lazy and incremental,
+so each new declaration is indexed once when a lookup needs it. Anonymous
+records are skipped. Numeric indices retain the original resolution path.
+
+FNV-1a chooses a bucket, and linear probing always compares the complete byte
+length and spelling before accepting a match. The function, type and local
+tables have 1,024, 2,048 and 4,096 slots, respectively; each live named namespace
+fits below its table capacity. Each slot stores source pointer, byte length,
+declaration index and generation in 16 bytes. The three disjoint arenas add
+112 KiB to private owned memory. Their constants and offsets live in limits.m4;
+there is no host-side name index or prepared engine cache.
+
+Module tables clear lazily on their first indexed lookup after each load. One
+local table is shared between functions, with generation tags replacing a
+clear on every scope change. Applying deferred function signatures invalidates
+the local scope because inherited parameters may shift named local indices.
+Failed loads, reloads and source-layout changes reset the indexing state.
+Execution continues to use validated numeric indices and unchanged instruction
+records; the new tables are consulted only during name resolution.
+
+Six bootstrap/hosted regressions exercise collision chains wrapping through the
+last bucket, duplicate and missing names in all three namespaces, forward uses,
+UTF-8 identifiers, local scope isolation, inherited parameter shifts, reloads,
+and full function/type/local capacities. Wide local and named type workloads
+join the existing shared-prefix and mixed-length loading benchmarks.
+
+Seven alternating samples of three loads each compare frozen before/after
+optimized engines, without overlapping builds, tests or audits. Hosted shared-
+prefix function names, wide locals and many named types improve by 49.3%, 42.2%
+and 40.2%, respectively. Integer and mixed-length name controls are 1.2% and
+0.9% slower; the ordinary many-function control is 0.9% faster. Seven fresh
+hosted constructions improve by 6.3%, including loading the expanded interpreter.
+A separate invocation pair is 0.4–2.3% slower across the selected workloads;
+no execution speedup is claimed. These tradeoffs remain in performance history.
+
+The final optimized engine passes all 232 tests in 179,347.656 ms (2m59.35s),
+including six additional name-resolution regressions and nested self-hosting.
+Both standalone audits pass 65,199 commands across 258 files with zero failures
+or skips; isolated hosted coverage takes 167,904.056 ms (2m47.90s). Whole-suite
+timing remains roughly flat compared with the preceding 178,465.648 ms run.
+Raw loading/construction/invocation samples and source/binary hashes are retained
+separately; no CI performance threshold or spec input is changed.

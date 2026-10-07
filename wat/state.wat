@@ -306,3 +306,13 @@
 	(global $exception-value (mut i64) (i64.const 0))
 	(global $exception-calls (mut i32) (i32.const 0))
 	(global $exception-pending (mut i32) (i32.const 0))
+
+	;; Name indexes are private to this load; locals reuse one table with distinct generations.
+	(global $function-name-index (mut i32) (i32.const 0))
+	(global $type-name-index (mut i32) (i32.const 0))
+	(global $local-name-index (mut i32) (i32.const 0))
+	(global $function-names-indexed (mut i32) (i32.const 0))
+	(global $types-indexed (mut i32) (i32.const 0))
+	(global $locals-indexed (mut i32) (i32.const 0))
+	(global $local-name-function (mut i32) (i32.const -1))
+	(global $local-name-generation (mut i32) (i32.const 0))

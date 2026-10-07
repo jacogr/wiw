@@ -10,6 +10,12 @@
 
 		;; The 512-function declaration bitmap occupies reserved static bytes below guest source.
 		(call $zero-bytes (i32.const 3920) (i32.const 64))
+		;; Rebuild indexes lazily from this source rather than retaining previous module names.
+		(global.set $function-names-indexed (i32.const 0))
+		(global.set $types-indexed (i32.const 0))
+		(global.set $locals-indexed (i32.const 0))
+		(global.set $local-name-function (i32.const -1))
+		(global.set $local-name-generation (i32.const 0))
 		(global.set $start-state (i32.const 0))
 		(global.set $start-function (i32.const 0))
 		(global.set $start-length (i32.const 0))
@@ -154,6 +160,9 @@
 		(global.set $fp-a-base (i32.add (global.get $code-base) (i32.const M4_FP_A_OFFSET)))
 		(global.set $fp-b-base (i32.add (global.get $code-base) (i32.const M4_FP_B_OFFSET)))
 		(global.set $fp-t-base (i32.add (global.get $code-base) (i32.const M4_FP_T_OFFSET)))
+		(global.set $function-name-index (i32.add (global.get $code-base) (i32.const M4_FUNCTION_NAME_INDEX_OFFSET)))
+		(global.set $type-name-index (i32.add (global.get $code-base) (i32.const M4_TYPE_NAME_INDEX_OFFSET)))
+		(global.set $local-name-index (i32.add (global.get $code-base) (i32.const M4_LOCAL_NAME_INDEX_OFFSET)))
 		(global.set $host-base (i32.wrap_i64 (local.get $required)))
 		;; Reset optional descriptor fields when reload reuses an existing arena layout.
 		(call $zero-bytes (global.get $segment-base) (i32.const 6144))

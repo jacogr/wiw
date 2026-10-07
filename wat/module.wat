@@ -145,6 +145,22 @@
 		(local $i i32)
 		(local $record i32)
 
+		;; Large module namespaces amortize index construction over duplicate checks and references.
+		(if (i32.and (i32.ne (local.get $n) (i32.const 0)) (i32.ge_u (global.get $function-count) (i32.const M4_NAME_INDEX_MIN)))
+			(then
+				;; The first indexed lookup clears stale slots from any previous source layout.
+				(if (i32.eqz (global.get $function-names-indexed))
+					(then (call $zero-bytes (global.get $function-name-index) (i32.const M4_FUNCTION_NAME_INDEX_BYTES)))
+				)
+				(local.set $i (call $indexed-name (global.get $function-base) (i32.const 32)
+					(global.get $function-count) (global.get $function-names-indexed)
+					(global.get $function-name-index) (i32.const M4_FUNCTION_NAME_INDEX_MASK)
+					(i32.const 1) (local.get $p) (local.get $n)))
+				(global.set $function-names-indexed (global.get $function-count))
+				(return (local.get $i))
+			)
+		)
+
 		;; Exhausting the function table reaches the not-found result below.
 		(block $missing
 			;; Search earlier records in source order; anonymous functions have no matching name.
@@ -183,6 +199,30 @@
 		(local $record i32)
 
 		(local.set $count (i32.load offset=20 (call $function (global.get $current-function))))
+		;; Short local namespaces retain the scan, avoiding hashing and setup for common tiny functions.
+		(if (i32.and (i32.ne (local.get $n) (i32.const 0)) (i32.ge_u (local.get $count) (i32.const M4_LOCAL_NAME_INDEX_MIN)))
+			(then
+				;; Each function or invalidated signature receives a fresh namespace generation.
+				(if (i32.ne (global.get $local-name-function) (global.get $current-function))
+					(then
+						;; Clear backing once per load; generation tags avoid clearing for every function.
+						(if (i32.eqz (global.get $local-name-generation))
+							(then (call $zero-bytes (global.get $local-name-index) (i32.const M4_LOCAL_NAME_INDEX_BYTES)))
+						)
+						(global.set $local-name-generation (i32.add (global.get $local-name-generation) (i32.const 1)))
+						(global.set $local-name-function (global.get $current-function))
+						(global.set $locals-indexed (i32.const 0))
+					)
+				)
+				(local.set $i (call $indexed-name (call $local-name (i32.const 0)) (i32.const 8)
+					(local.get $count) (global.get $locals-indexed)
+					(global.get $local-name-index) (i32.const M4_LOCAL_NAME_INDEX_MASK)
+					(global.get $local-name-generation) (local.get $p) (local.get $n)))
+				(global.set $locals-indexed (local.get $count))
+				(return (local.get $i))
+			)
+		)
+
 		;; Exhausting this function's local declarations means the name is unknown.
 		(block $missing
 			;; Parameters occupy the first indices; declared locals follow them.
@@ -678,6 +718,8 @@
 		(call $validate-heap-types)
 		(call $intern-function-types)
 		(call $resolve-signatures)
+		;; Inherited parameters may shift named locals, so their final indices must be rebuilt.
+		(global.set $local-name-function (i32.const -1))
 		(global.set $function-types-resolved (i32.eqz (global.get $error)))
 		(call $resolve-tags)
 		(call $resolve-control-signatures)

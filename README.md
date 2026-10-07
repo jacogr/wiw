@@ -195,9 +195,9 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 226 tests in 178,465.648 ms
-(2m58.47s). The isolated hosted spec audit passes all 65,199 commands in
-171,399.829 ms (2m51.40s), with zero failures or skips.
+The latest complete `make check` run passes all 232 tests in 179,347.656 ms
+(2m59.35s). The isolated hosted spec audit passes all 65,199 commands in
+167,904.056 ms (2m47.90s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -278,3 +278,11 @@ regressed complete hosted coverage, operand preparation was essentially flat,
 and high-half elision regressed several alternating workloads. Their raw samples
 remain in performance history. Two recovery and exact-fuel regressions remain;
 no production optimization is retained from these rounds.
+
+Bounded, lazy name indexes now accelerate larger function, type and local
+namespaces; smaller namespaces retain scans. Seven alternating samples improve
+hosted loading for shared-prefix function names, wide local namespaces and many
+named types by 49%, 42% and 40%, respectively. Fresh hosted construction improves
+6%. The indexes add 112 KiB of private storage and reset on reload. Selected
+invocation medians are 0.4–2.3% slower in this pair; whole-suite time remains
+roughly flat, and no execution speedup is claimed.

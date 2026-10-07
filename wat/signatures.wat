@@ -22,6 +22,22 @@
 		(local $i i32)
 		(local $s i32)
 
+		;; Named type uses share a lazily extended index once the namespace is large enough.
+		(if (i32.and (i32.ne (local.get $n) (i32.const 0)) (i32.ge_u (global.get $signature-count) (i32.const M4_NAME_INDEX_MIN)))
+			(then
+				;; Anonymous signatures are skipped, and old source pointers are cleared on first use.
+				(if (i32.eqz (global.get $types-indexed))
+					(then (call $zero-bytes (global.get $type-name-index) (i32.const M4_TYPE_NAME_INDEX_BYTES)))
+				)
+				(local.set $i (call $indexed-name (global.get $signature-base) (i32.const 544)
+					(global.get $signature-count) (global.get $types-indexed)
+					(global.get $type-name-index) (i32.const M4_TYPE_NAME_INDEX_MASK)
+					(i32.const 1) (local.get $p) (local.get $n)))
+				(global.set $types-indexed (global.get $signature-count))
+				(return (local.get $i))
+			)
+		)
+
 		;; Finish after all explicit declarations, returning -1 for a missing name.
 		(block $done
 			;; Compare source-backed identifier bytes without interning them.

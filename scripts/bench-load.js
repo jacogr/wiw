@@ -66,6 +66,16 @@ cases.namesLengths=`(module
   (func (export "run") (result i32)
     ${Array.from({length:192},(_,index)=>`call $${'x'.repeat(index%96+1)} drop`).join(' ')} i32.const 0))`;
 
+// Wide local and type namespaces isolate source-name resolution from execution.
+cases.locals=`(module (func (export "run") (result i32)
+  ${Array.from({length:128},(_,index)=>`(local $local_${index} i32)`).join(' ')}
+  ${Array.from({length:512},(_,index)=>`i32.const 0 local.set $local_${index%128} local.get $local_${index%128} drop`).join(' ')}
+  i32.const 0))`;
+cases.types=`(module
+  ${Array.from({length:128},(_,index)=>`(type $type_${index} (func (result i32)))`).join(' ')}
+  ${Array.from({length:128},(_,index)=>`(func $fn_${index} (type $type_${index}) i32.const 0)`).join(' ')}
+  (func (export "run") (result i32) call $fn_127))`;
+
 // Hand-encode binary equivalents so the benchmark never compiles guest modules.
 const uleb=value=>{
   const bytes=[];

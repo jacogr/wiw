@@ -8,6 +8,7 @@ m4_include(<!m4/constants.m4!>)m4_dnl
 	m4_include(<!state.wat!>)
 	m4_include(<!lexer.wat!>)
 	m4_include(<!opcodes.wat!>)
+	m4_include(<!names.wat!>)
 	m4_include(<!module.wat!>)
 	m4_include(<!types.wat!>)
 	m4_include(<!references.wat!>)
