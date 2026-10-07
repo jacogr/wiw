@@ -27,6 +27,9 @@ for (const binary of ['wiw-opt.wasm']) {
   });
   await saveReport(output, {...report, complete: true});
   console.log(`${report.tag}/${binary}/interpreted: ${report.passed} passed, ${report.skipped} skipped, ${report.failed} failed across ${report.files.length} files in ${(report.elapsedMs / 1000).toFixed(1)}s`);
+  for (const [name,phase] of Object.entries(report.phases)) {
+    console.log(`  ${name}: ${(phase.elapsedMs/1000).toFixed(2)}s${phase.count === undefined ? '' : ` (${phase.count} calls)`}`);
+  }
   incomplete ||= report.failed !== 0 || report.skipped !== 0;
   assert.deepEqual(report.files.map(({file, passed, skipped, failed}) => ({file, commands: passed + skipped + failed})),
     coverage.expectedCoverage.map(({file, passed}) => ({file, commands: passed})),

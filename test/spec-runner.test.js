@@ -224,3 +224,66 @@ test('interpreted audit retains isolated failures, named registrations and cumul
   assert.equal(report.timings[0].file, 'fixture.wast');
   assert.ok(report.timings[0].elapsedMs >= 0 && report.elapsedMs >= report.timings[0].elapsedMs);
 });
+
+for(const interpreted of [false,true]) {
+  test(`${interpreted?'interpreted':'bootstrap'} audit phases count successful and failed attempts without changing coverage`,async()=>{
+    const source=`
+      (module $A (global (export "g") i32 (i32.const 7))
+        (func (export "f") (result i32) i32.const 42)
+        (func (export "trap") unreachable))
+      (register "a" $A)
+      (assert_return (invoke $A "f") (i32.const 42))
+      (assert_return (get $A "g") (i32.const 7))
+      (assert_trap (invoke $A "trap") "unreachable")
+      (assert_invalid (module (func (result i64) i32.const 1)) "type mismatch")
+      (module (func $f (import "a" "f") (result i32)) (func (export "run") (result i32) call $f))
+      (assert_return (invoke "run") (i32.const 42))
+      (assert_return (invoke "run") (i32.const 43))
+      (module (func (export "future") future.test))
+      (assert_return (invoke "future") (i32.const 0))`;
+    let snapshot;
+    const report=await run(source,undefined,{audit:true,interpreted,profile:true,onFile:(_counts,partial)=>{snapshot=structuredClone(partial);}});
+    const ordinary=await run(source,undefined,{audit:true,interpreted,profile:false});
+    for(const key of ['passed','failed','skipped','files','skips','failures']) assert.deepEqual(report[key],ordinary[key],key);
+    assert.equal(report.passed,8);assert.equal(report.failed,1);assert.equal(report.skipped,2);
+    assert.equal(report.phases.construction.count,4);
+    assert.equal(report.phases.loading.count,4);
+    assert.equal(report.phases.execution.count,5);
+    for(const timing of [report,report.timings[0],snapshot]) {
+      for(const phase of Object.values(timing.phases)) assert.ok(Number.isFinite(phase.elapsedMs)&&phase.elapsedMs>=0);
+      const total=Object.values(timing.phases).reduce((sum,phase)=>sum+phase.elapsedMs,0);
+      assert.ok(Math.abs(total-timing.elapsedMs)<0.000001,'exclusive phases sum to wall time');
+    }
+    assert.equal(snapshot.phases.construction.count,4);
+    assert.equal(ordinary.phases,undefined);assert.equal(ordinary.timings,undefined);assert.equal(ordinary.elapsedMs,undefined);
+  });
+}
+
+test('profiled selections account for empty setup and cumulative file phases',async()=>{
+  const report=await run('(module)',undefined,{audit:true,profile:true,files:[]});
+  assert.equal(report.passed,0);assert.deepEqual(report.timings,[]);
+  for(const name of ['construction','loading','execution']) assert.deepEqual(report.phases[name],{elapsedMs:0,count:0});
+  assert.equal(report.phases.other.elapsedMs,report.elapsedMs);
+  assert.ok(report.elapsedMs>=0);
+  const directory=await mkdtemp(join(tmpdir(),'wiw-phase-files-'));
+  try {
+    const files=['first.wast','second.wast'].map((file,index)=>({file,source:`(module (func (export "run") (result i32) i32.const ${42+index})) (assert_return (invoke "run") (i32.const ${42+index}))`}));
+    const provenance={revision:'fixture',files:files.map(({file,source})=>({file,sha256:createHash('sha256').update(source).digest('hex')}))};
+    for(const {file,source} of files) await writeFile(join(directory,file),source);
+    await writeFile(join(directory,'upstream.json'),JSON.stringify(provenance));
+    await writeFile(join(directory,'capabilities.json'),JSON.stringify({capacityModules:{},fuelPerInvocation:100000}));
+    const snapshots=[];
+    const complete=await runSuite(binary,pathToFileURL(directory+'/'),{audit:true,profile:true,onFile:(_counts,partial)=>snapshots.push(structuredClone(partial))});
+    assert.equal(complete.passed,4);assert.equal(complete.failed,0);assert.equal(complete.skipped,0);
+    assert.deepEqual(snapshots.map(item=>item.phases.construction.count),[2,4]);
+    assert.deepEqual(snapshots.map(item=>item.phases.loading.count),[2,4]);
+    assert.deepEqual(snapshots.map(item=>item.phases.execution.count),[1,2]);
+    for(const name of ['construction','loading','execution']) {
+      assert.equal(complete.phases[name].count,complete.timings.reduce((sum,file)=>sum+file.phases[name].count,0));
+      const elapsed=complete.timings.reduce((sum,file)=>sum+file.phases[name].elapsedMs,0);
+      assert.ok(Math.abs(complete.phases[name].elapsedMs-elapsed)<0.000001);
+    }
+    assert.ok(complete.phases.other.elapsedMs>=complete.timings.reduce((sum,file)=>sum+file.phases.other.elapsedMs,0));
+  } finally {await rm(directory,{recursive:true,force:true});}
+
+});

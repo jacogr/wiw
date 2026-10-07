@@ -279,10 +279,27 @@ export async function runSuite(binary, root = new URL('../test/spec/', import.me
   const opcodes = new Set(table.split('\n').filter(s => s && !s.startsWith('#')).map(s => s.split(/\s+/)[1]));
   const report = { tag: provenance.tag ?? null, revision: provenance.revision, binary: new URL(binary).pathname.split('/').at(-1), passed: 0, skipped: 0, files: [], skips: [], failed: 0, failures: [] };
   if (interpreted) Object.assign(report, {runtime: 'interpreted', interpreterDepth: 1, engineSourceSha256: createHash('sha256').update(engineSource).digest('hex')});
-  if (options.profile) report.timings = [];
+  // Exclusive wall-clock phases include failed attempts; other retains all harness overhead.
+  const newPhases = () => Object.fromEntries(['construction','loading','execution'].map(name => [name,{elapsedMs:0,count:0}]));
+  if (options.profile) {report.timings = [];report.phases = newPhases();}
   for (const entry of provenance.files) {
     if (options.files && !options.files.includes(entry.file)) continue;
     const fileStarted = performance.now();
+    const phases = options.profile ? newPhases() : undefined;
+    // Factory time includes creating and loading the self-hosted interpreter copy.
+    async function constructEngine() {
+      if (!phases) return createEngine();
+      const start = performance.now();phases.construction.count++;
+      try {return await createEngine();}
+      finally {phases.construction.elapsedMs += performance.now()-start;}
+    }
+    // Starts/forwarded callbacks stay inside their enclosing load or execution interval.
+    function measure(name, execute) {
+      if (!phases) return execute();
+      const start = performance.now();phases[name].count++;
+      try {return execute();}
+      finally {phases[name].elapsedMs += performance.now()-start;}
+    }
     const source = await readFile(new URL(provenance.checkout ? entry.path : entry.file, fixtures), 'utf8');
     assert.equal(createHash('sha256').update(source).digest('hex'), entry.sha256, `${entry.file}: upstream hash`);
     const parsed = parseScript(source), forms = [];
@@ -294,9 +311,9 @@ export async function runSuite(binary, root = new URL('../test/spec/', import.me
       forms.push({start: group[0].start, end: group.at(-1).end, children: [{atom: 'module'}, ...group], inlineSource: `(module ${source.slice(group[0].start, group.at(-1).end)})`});
     }
     const modules = new Map(), registered = Object.create(null), unavailable = new Set();
-    const host = await createEngine();
+    const host = await constructEngine();
     const prints = {print: [], print_i32: ['i32'], print_i64: ['i64'], print_f32: ['f32'], print_f64: ['f64'], print_i32_f32: ['i32', 'f32'], print_f64_f64: ['f64', 'f64']};
-    host.load(`(module ${Object.entries(prints).map(([name, params]) => `(func (export "${name}") ${params.length ? `(param ${params.join(' ')})` : ''})`).join(' ')} (memory (export "memory") 1 2) (table (export "table") 10 20 funcref) (table (export "table64") i64 10 20 funcref) ${['i32', 'i64', 'f32', 'f64'].map(type => `(global (export "global_${type}") ${type} (${type}.const ${type.startsWith('f') ? '666.6' : '666'}))`).join(' ')})`);
+    measure('loading', () => host.load(`(module ${Object.entries(prints).map(([name, params]) => `(func (export "${name}") ${params.length ? `(param ${params.join(' ')})` : ''})`).join(' ')} (memory (export "memory") 1 2) (table (export "table") 10 20 funcref) (table (export "table64") i64 10 20 funcref) ${['i32', 'i64', 'f32', 'f64'].map(type => `(global (export "global_${type}") ${type} (${type}.const ${type.startsWith('f') ? '666.6' : '666'}))`).join(' ')})`));
     registered.spectest = host.exportNamespace();
     // A skipped registered instance remains unavailable until a usable registration replaces it.
     function dependencyReasons(module) {
@@ -322,7 +339,7 @@ export async function runSuite(binary, root = new URL('../test/spec/', import.me
       if (target.reasons.length) return {reasons: target.reasons};
       const name = node.children[index++]?.string === undefined ? undefined : scriptString(node.children[index - 1].string);
       assert.ok(name !== undefined, 'missing script export name');
-      return {execute: () => head(node) === 'get' ? target.engine.getGlobal(name) : target.engine.invoke(name, ...node.children.slice(index).map(value)), raw: () => target.engine.invokeRaw(name, ...node.children.slice(index).map(rawValue))};
+      return {execute: () => measure('execution', () => head(node) === 'get' ? target.engine.getGlobal(name) : target.engine.invoke(name, ...node.children.slice(index).map(value))), raw: () => measure('execution', () => target.engine.invokeRaw(name, ...node.children.slice(index).map(rawValue)))};
     }
     for (const node of forms) {
       try {
@@ -343,9 +360,9 @@ export async function runSuite(binary, root = new URL('../test/spec/', import.me
           const id = node.children[definition || instance ? 2 : 1]?.atom;
           if (id?.startsWith('$')) modules.set(id, current);
           if (reasons.length) { skip(node, reasons); continue; }
-          current.engine = await createEngine();
+          current.engine = await constructEngine();
           current.engine.setFuel(capabilities.fuelPerInvocation);
-          loadModule(current.engine, source, module, registered, definition);
+          measure('loading', () => loadModule(current.engine, source, module, registered, definition));
         } else if (kind === 'register') {
           const target = node.children[2]?.atom ? modules.get(node.children[2].atom) : current;
           assert.ok(target, 'registration has no module');
@@ -359,17 +376,17 @@ export async function runSuite(binary, root = new URL('../test/spec/', import.me
         } else if (['assert_invalid', 'assert_malformed', 'assert_unlinkable', 'assert_uninstantiable'].includes(kind)) {
           const module = node.children[1], reasons = kind === 'assert_invalid' || kind === 'assert_malformed' ? unsupported(module, opcodes).filter(reason => reason === 'encoded-script-module') : [...unsupported(module, opcodes), ...dependencyReasons(module)];
           if (reasons.length) { skip(node, reasons); continue; }
-          const engine = await createEngine();
+          const engine = await constructEngine();
           const expected = kind === 'assert_invalid' ? /operand stack|reference|immutable|alignment|memory limits|table limits|syntax|unsupported|integer out of range/ : kind === 'assert_malformed' ? (module.children?.some(child => child.atom === 'quote') ? /syntax|integer out of range|unsupported|reference/ : /syntax|integer out of range|unsupported/) : kind === 'assert_uninstantiable' ? /memory out of bounds/ : /missing function import|missing resource import|signature mismatch|memory out of bounds|element out of bounds/;
-          assert.throws(() => loadModule(engine, source, module, registered), expected);
+          assert.throws(() => measure('loading', () => loadModule(engine, source, module, registered)), expected);
         } else if (kind === 'assert_trap' && head(node.children[1]) === 'module') {
           const module = node.children[1], reasons = kind === 'assert_invalid' || kind === 'assert_malformed' ? unsupported(module, opcodes).filter(reason => reason === 'encoded-script-module') : [...unsupported(module, opcodes), ...dependencyReasons(module)];
           if (reasons.length) { skip(node, reasons); continue; }
           const expected = trapMessages[node.children[2].string.replace(/ \d+$/, '')];
           assert.ok(expected, `unknown expected trap ${node.children[2].string}`);
-          const engine = await createEngine();
+          const engine = await constructEngine();
           engine.setFuel(capabilities.fuelPerInvocation);
-          assert.throws(() => loadModule(engine, source, module, registered), expected);
+          assert.throws(() => measure('loading', () => loadModule(engine, source, module, registered)), expected);
         } else if (['assert_return', 'assert_return_canonical_nan', 'assert_return_arithmetic_nan', 'assert_trap', 'assert_exhaustion', 'assert_exception', 'invoke'].includes(kind)) {
           const call = action(kind === 'invoke' ? node : node.children[1]);
           if (call.reasons) { skip(node, call.reasons); continue; }
@@ -408,9 +425,22 @@ export async function runSuite(binary, root = new URL('../test/spec/', import.me
     }
     report.files.push(counts);
     report.passed += counts.passed; report.skipped += counts.skipped;
-    if (options.profile) report.timings.push({file: entry.file, elapsedMs: performance.now() - fileStarted});
+    if (phases) {
+      const elapsedMs = performance.now()-fileStarted;
+      const tracked = Object.values(phases).reduce((sum,phase) => sum+phase.elapsedMs,0);
+      for (const [name,phase] of Object.entries(phases)) {
+        report.phases[name].elapsedMs += phase.elapsedMs;report.phases[name].count += phase.count;
+      }
+      report.timings.push({file:entry.file,elapsedMs,phases:{...phases,other:{elapsedMs:elapsedMs-tracked}}});
+      // Progress snapshots include cumulative phases; final other also includes save/output overhead.
+      report.elapsedMs = performance.now()-started;
+      report.phases.other = {elapsedMs:report.elapsedMs-['construction','loading','execution'].reduce((sum,name) => sum+report.phases[name].elapsedMs,0)};
+    }
     if (options.onFile) await options.onFile(counts, report);
   }
-  if (options.profile) report.elapsedMs = performance.now() - started;
+  if (options.profile) {
+    report.elapsedMs = performance.now()-started;
+    report.phases.other = {elapsedMs:report.elapsedMs-['construction','loading','execution'].reduce((sum,name) => sum+report.phases[name].elapsedMs,0)};
+  }
   return report;
 }

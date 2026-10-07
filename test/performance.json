@@ -59428,6 +59428,734 @@
         ]
       },
       "tradeoffs": "First hosted reference queries improve 95%; warm queries are roughly flat. Whole-suite/audit timing remains roughly flat. Existing descriptor offset 24 stores index+1, cleared on foreign result changes and reload. No arena or persistent cache added."
+    },
+    {
+      "label": "Prepare fusion operator in consumed local-name instruction field",
+      "retained": true,
+      "node": "v24.11.1",
+      "binaryen": "wasm-opt version 133",
+      "tag": "wg-3.0",
+      "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
+      "runtime": "interpreted",
+      "interpreterDepth": 1,
+      "engineSourceSha256": "4e1a9e6f66d4e0d56601d94e671b70fca33106b1e7fac0cbcda7b666426a70ce",
+      "binarySha256": "775ef2f41fa7941ce1f033c2c0e87067c3e97c25848bd4c1276666d20ef07b35",
+      "frontendSha256": "c94acd9e2e1d28cd5713bfb830167a807083b93a56dae96d25f7e57ebad95f16",
+      "fullSpec": {
+        "elapsedMs": 158469.406875,
+        "previousElapsedMs": 163731.262,
+        "passed": 65199,
+        "failed": 0,
+        "skipped": 0,
+        "fileCount": 258,
+        "slowestFiles": [
+          {
+            "file": "return_call_ref.wast",
+            "elapsedMs": 19334.930833000006
+          },
+          {
+            "file": "return_call.wast",
+            "elapsedMs": 16160.791540999999
+          },
+          {
+            "file": "simd/simd_const.wast",
+            "elapsedMs": 7032.300457999998
+          },
+          {
+            "file": "const.wast",
+            "elapsedMs": 6824.005375000001
+          },
+          {
+            "file": "return_call_indirect.wast",
+            "elapsedMs": 3901.507249999995
+          }
+        ]
+      },
+      "validation": {
+        "tests": 240,
+        "failed": 0,
+        "skipped": 0,
+        "bootstrapPassed": 65199,
+        "bootstrapFileCount": 258,
+        "targetedTests": 14
+      },
+      "completeTestSuite": {
+        "elapsedMs": 169702.651875,
+        "previousElapsedMs": 174179.634167
+      },
+      "alternatingInvocationBenchmark": {
+        "phase": "alternating-prepared-fusion",
+        "iterations": 5000,
+        "samples": 7,
+        "cases": [
+          {
+            "name": "direct",
+            "elapsedMsBefore": [
+              25.34204100000001,
+              16.670458000000025,
+              16.061000000000007,
+              16.021208,
+              16.112707999999998,
+              16.233209000000016,
+              16.376666999999998
+            ],
+            "elapsedMs": [
+              23.589208999999997,
+              14.921042,
+              14.892167,
+              14.739666999999997,
+              14.727499999999992,
+              14.705375000000004,
+              14.752250000000004
+            ],
+            "medianMsBefore": 16.233209000000016,
+            "medianMs": 14.752250000000004,
+            "reductionPercent": 9.12302059315574
+          },
+          {
+            "name": "ordinary",
+            "elapsedMsBefore": [
+              203.39533300000005,
+              203.6215830000001,
+              202.829209,
+              202.57104200000003,
+              202.051958,
+              202.19895799999995,
+              202.98195799999985
+            ],
+            "elapsedMs": [
+              187.1585,
+              186.5056669999999,
+              186.3287499999999,
+              185.12295800000015,
+              184.9156670000002,
+              185.9967499999998,
+              186.1378749999999
+            ],
+            "medianMsBefore": 202.829209,
+            "medianMs": 186.1378749999999,
+            "reductionPercent": 8.229255580245399
+          },
+          {
+            "name": "memory",
+            "elapsedMsBefore": [
+              33.085999999999785,
+              32.96641600000021,
+              32.825708000000304,
+              33.337916999999834,
+              33.196249999999964,
+              32.79300000000012,
+              33.204457999999704
+            ],
+            "elapsedMs": [
+              31.886708,
+              31.009917000000314,
+              31.229417000000012,
+              31.22970899999973,
+              31.34804099999974,
+              31.11850000000004,
+              30.825584000000163
+            ],
+            "medianMsBefore": 33.085999999999785,
+            "medianMs": 31.229417000000012,
+            "reductionPercent": 5.611385480262909
+          },
+          {
+            "name": "loop",
+            "elapsedMsBefore": [
+              12.947165999999925,
+              12.615250000000287,
+              12.583791999999903,
+              12.738374999999905,
+              12.490582999999788,
+              12.516749999999774,
+              12.582667000000129
+            ],
+            "elapsedMs": [
+              16.440042000000176,
+              10.861249999999927,
+              10.636124999999993,
+              10.404916999999841,
+              10.469708999999966,
+              10.595499999999902,
+              10.466541999999663
+            ],
+            "medianMsBefore": 12.583791999999903,
+            "medianMs": 10.595499999999902,
+            "reductionPercent": 15.800420095945778
+          },
+          {
+            "name": "floatArithmetic",
+            "elapsedMsBefore": [
+              46.90220799999997,
+              46.276124999999865,
+              46.200374999999894,
+              46.46812499999942,
+              46.096166999999696,
+              46.60725000000002,
+              46.72133300000041
+            ],
+            "elapsedMs": [
+              45.59699999999975,
+              44.344040999999834,
+              44.35620800000015,
+              44.858042000000296,
+              43.8686660000003,
+              44.23466599999938,
+              44.27783399999953
+            ],
+            "medianMsBefore": 46.46812499999942,
+            "medianMs": 44.344040999999834,
+            "reductionPercent": 4.571055965782156
+          },
+          {
+            "name": "floatConversions",
+            "elapsedMsBefore": [
+              49.318874999999935,
+              48.4868749999996,
+              48.82574999999997,
+              49.17645799999991,
+              49.12633299999925,
+              48.7446659999996,
+              48.582791000000725
+            ],
+            "elapsedMs": [
+              47.068999999999505,
+              46.95799999999963,
+              46.285916999999245,
+              46.382792000000336,
+              46.233666999999514,
+              46.16758299999947,
+              47.31929200000013
+            ],
+            "medianMsBefore": 48.82574999999997,
+            "medianMs": 46.382792000000336,
+            "reductionPercent": 5.003421350413739
+          },
+          {
+            "name": "vectorMemory",
+            "elapsedMsBefore": [
+              120.89750000000004,
+              121.13212500000009,
+              120.56716599999982,
+              120.69737500000065,
+              120.12049999999999,
+              120.22004200000083,
+              120.1572500000002
+            ],
+            "elapsedMs": [
+              118.41404200000034,
+              116.90350000000035,
+              118.25287500000013,
+              117.2696249999999,
+              117.9468339999994,
+              117.07516699999996,
+              116.9639589999997
+            ],
+            "medianMsBefore": 120.56716599999982,
+            "medianMs": 117.2696249999999,
+            "reductionPercent": 2.735024061194169
+          },
+          {
+            "name": "branchMany",
+            "elapsedMsBefore": [
+              617.6668340000006,
+              660.8733329999995,
+              642.4185830000006,
+              630.671875,
+              624.2839160000003,
+              645.1579170000005,
+              643.1959580000002
+            ],
+            "elapsedMs": [
+              615.7349160000003,
+              632.0695830000004,
+              656.2363330000007,
+              620.3269579999996,
+              618.6229999999996,
+              627.2157500000012,
+              621.8483329999999
+            ],
+            "medianMsBefore": 642.4185830000006,
+            "medianMs": 621.8483329999999,
+            "reductionPercent": 3.2020010853267333
+          },
+          {
+            "name": "parameters",
+            "elapsedMsBefore": [
+              40.98304199999984,
+              40.67274999999972,
+              42.69262499999968,
+              39.99687500000073,
+              40.09758299999885,
+              40.305458000000726,
+              42.21391699999913
+            ],
+            "elapsedMs": [
+              37.937165999999706,
+              38.72420899999997,
+              37.33366700000079,
+              36.84537499999897,
+              37.16558299999997,
+              37.25512499999968,
+              38.214334000000235
+            ],
+            "medianMsBefore": 40.67274999999972,
+            "medianMs": 37.33366700000079,
+            "reductionPercent": 8.209631755902802
+          },
+          {
+            "name": "noFusionLoop",
+            "elapsedMsBefore": [
+              20.70050000000265,
+              20.253124999999272,
+              19.949334000000817,
+              19.850540999999794,
+              19.900082999996812,
+              19.94933299999684,
+              33.122708999999304
+            ],
+            "elapsedMs": [
+              29.4945000000007,
+              19.410541000001103,
+              19.380083000000013,
+              19.45233300000109,
+              19.181375000000116,
+              19.3193339999998,
+              19.194416999998793
+            ],
+            "medianMsBefore": 19.949334000000817,
+            "medianMs": 19.380083000000013,
+            "reductionPercent": 2.853483730337969
+          }
+        ]
+      },
+      "alternatingLoadBenchmark": {
+        "phase": "alternating-fusion-load",
+        "iterations": 3,
+        "samples": 7,
+        "engines": [
+          {
+            "stage": "round1",
+            "engineSourceSha256": "457e9f39bab4609e8f54fee81065444325a29e48d1b4d4af3b2050716ef68566",
+            "binarySha256": "b14b0dea003feaf6162f68a7dbba1634c9530bea1ebf14a4dc324d5d28a58bdc"
+          },
+          {
+            "stage": "round2",
+            "engineSourceSha256": "4e1a9e6f66d4e0d56601d94e671b70fca33106b1e7fac0cbcda7b666426a70ce",
+            "binarySha256": "775ef2f41fa7941ce1f033c2c0e87067c3e97c25848bd4c1276666d20ef07b35"
+          }
+        ],
+        "cases": [
+          {
+            "runtime": "bootstrap",
+            "name": "integers",
+            "elapsedMsBefore": [
+              0.17529166666666876,
+              0.1618613333333343,
+              0.15505533333333452,
+              0.15251400000000123,
+              0.15463866666666584,
+              0.16790300000000022,
+              0.2658053333333328
+            ],
+            "elapsedMs": [
+              0.22890266666666767,
+              0.20618066666666598,
+              0.196041666666666,
+              0.19348633333333254,
+              0.1942083333333334,
+              0.25069433333333296,
+              0.20595833333333266
+            ],
+            "medianMsBefore": 0.1618613333333343,
+            "medianMs": 0.20595833333333266,
+            "reductionPercent": -27.243690072159367
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "functions",
+            "elapsedMsBefore": [
+              0.2635136666666682,
+              0.24668066666666752,
+              0.2403196666666645,
+              0.251222333333331,
+              0.2539306666666666,
+              0.24143066666666377,
+              0.24081966666666688
+            ],
+            "elapsedMs": [
+              0.26819433333333603,
+              0.2574720000000023,
+              0.2544026666666686,
+              0.5949999999999989,
+              0.25729166666666475,
+              0.24908333333333132,
+              0.26059733333333196
+            ],
+            "medianMsBefore": 0.24668066666666752,
+            "medianMs": 0.2574720000000023,
+            "reductionPercent": -4.374616575816548
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "types",
+            "elapsedMsBefore": [
+              0.10308333333333526,
+              0.09552800000000161,
+              0.09549999999999652,
+              0.0973890000000021,
+              0.09719433333333427,
+              0.09601399999999671,
+              0.09495833333333319
+            ],
+            "elapsedMs": [
+              0.0983333333333339,
+              0.09744466666666558,
+              0.0954306666666677,
+              0.10004166666666474,
+              0.10747233333333384,
+              0.09849999999999663,
+              0.09575000000000007
+            ],
+            "medianMsBefore": 0.09601399999999671,
+            "medianMs": 0.0983333333333339,
+            "reductionPercent": -2.4156199443177595
+          },
+          {
+            "runtime": "bootstrap",
+            "name": "locals",
+            "elapsedMsBefore": [
+              0.18522233333333324,
+              0.1688196666666689,
+              0.16894466666666594,
+              0.1707223333333303,
+              0.1665833333333353,
+              0.2047363333333294,
+              0.4154166666666678
+            ],
+            "elapsedMs": [
+              0.17190266666666787,
+              0.1686109999999985,
+              0.16901399999999947,
+              0.17279166666666393,
+              0.16619466666666463,
+              0.16970833333333246,
+              0.16268066666666434
+            ],
+            "medianMsBefore": 0.1707223333333303,
+            "medianMs": 0.16901399999999947,
+            "reductionPercent": 1.000650178553597
+          },
+          {
+            "runtime": "interpreted",
+            "name": "integers",
+            "elapsedMsBefore": [
+              12.227375000000004,
+              11.59797233333334,
+              11.910402666666661,
+              11.705680666666675,
+              11.383444666666682,
+              11.61136133333332,
+              11.52694466666666
+            ],
+            "elapsedMs": [
+              11.235972333333327,
+              10.953527666666664,
+              11.074166666666656,
+              11.091555666666673,
+              11.089124999999987,
+              10.917972333333333,
+              10.91597200000001
+            ],
+            "medianMsBefore": 11.61136133333332,
+            "medianMs": 11.074166666666656,
+            "reductionPercent": 4.626457236538773
+          },
+          {
+            "runtime": "interpreted",
+            "name": "functions",
+            "elapsedMsBefore": [
+              23.455096999999984,
+              23.412402666666633,
+              23.806110999999948,
+              23.591222333333388,
+              23.701180333333316,
+              23.44073633333331,
+              23.312055666666613
+            ],
+            "elapsedMs": [
+              22.606250000000006,
+              22.349153,
+              22.43890266666669,
+              22.74561099999998,
+              22.373583333333347,
+              22.622902666666732,
+              22.361375000000027
+            ],
+            "medianMsBefore": 23.455096999999984,
+            "medianMs": 22.43890266666669,
+            "reductionPercent": 4.332509617561153
+          },
+          {
+            "runtime": "interpreted",
+            "name": "types",
+            "elapsedMsBefore": [
+              5.487361333333335,
+              5.49361133333332,
+              5.854458333333317,
+              5.392861000000039,
+              5.270708333333308,
+              5.267458333333328,
+              5.284055333333299
+            ],
+            "elapsedMs": [
+              5.9849999999999755,
+              5.122833333333347,
+              5.14648600000002,
+              5.140458333333299,
+              5.229069666666646,
+              5.109875000000026,
+              5.148694333333348
+            ],
+            "medianMsBefore": 5.392861000000039,
+            "medianMs": 5.14648600000002,
+            "reductionPercent": 4.568539778793057
+          },
+          {
+            "runtime": "interpreted",
+            "name": "locals",
+            "elapsedMsBefore": [
+              15.03783333333331,
+              15.183652666666754,
+              15.011430333333314,
+              15.195528000000044,
+              14.973694333333393,
+              15.13775000000002,
+              14.905458333333476
+            ],
+            "elapsedMs": [
+              14.840138666666613,
+              14.581903000000088,
+              14.487944333333417,
+              14.404333333333247,
+              14.450666666666772,
+              14.594208333333427,
+              14.488235999999992
+            ],
+            "medianMsBefore": 15.03783333333331,
+            "medianMs": 14.488235999999992,
+            "reductionPercent": 3.6547640950047255
+          }
+        ],
+        "construction": {
+          "elapsedMsBefore": [
+            9.698249999999916,
+            9.755249999999705,
+            9.529207999999926,
+            10.263750000000073,
+            10.22304099999974,
+            10.126083999999992,
+            10.299999999999727
+          ],
+          "elapsedMs": [
+            10.025375000000167,
+            9.63216599999987,
+            10.188416999999845,
+            11.619833000000199,
+            10.973415999999816,
+            10.306916999999885,
+            10.268417000000227
+          ],
+          "medianMsBefore": 10.126083999999992,
+          "medianMs": 10.268417000000227,
+          "reductionPercent": -1.4056075379212274
+        }
+      },
+      "tradeoffs": "Non-matching loop improves 2.9%, scalar loops 15.8%, ordinary calls 8.2% over the previous fusion. Fresh construction is 1.4% slower; loading controls improve in the measured pair. Opcode/immediate/source fields and record layout remain intact; consumed local-name length holds the eligible binary opcode."
+    },
+    {
+      "label": "Exclusive construction/loading/execution profiling in the official audit runner",
+      "retained": true,
+      "node": "v24.11.1",
+      "binaryen": "wasm-opt version 133",
+      "tag": "wg-3.0",
+      "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
+      "runtime": "interpreted",
+      "interpreterDepth": 1,
+      "engineSourceSha256": "4e1a9e6f66d4e0d56601d94e671b70fca33106b1e7fac0cbcda7b666426a70ce",
+      "binarySha256": "775ef2f41fa7941ce1f033c2c0e87067c3e97c25848bd4c1276666d20ef07b35",
+      "frontendSha256": "c94acd9e2e1d28cd5713bfb830167a807083b93a56dae96d25f7e57ebad95f16",
+      "harnessSha256": "ee87e9d3cc2947a1b75b58ee535f42afe9db92cc8d1c4b5c8020cf4b2e6a1100",
+      "productionEngineChanged": false,
+      "fullSpec": {
+        "elapsedMs": 161215.31425,
+        "previousElapsedMs": 158469.406875,
+        "passed": 65199,
+        "failed": 0,
+        "skipped": 0,
+        "fileCount": 258,
+        "phases": {
+          "construction": {
+            "elapsedMs": 77933.49863000041,
+            "count": 7393
+          },
+          "loading": {
+            "elapsedMs": 25562.869654999035,
+            "count": 7393
+          },
+          "execution": {
+            "elapsedMs": 55100.272588999025,
+            "count": 57984
+          },
+          "other": {
+            "elapsedMs": 2618.673376001534
+          }
+        },
+        "slowestFiles": [
+          {
+            "file": "return_call_ref.wast",
+            "elapsedMs": 19349.719459,
+            "phases": {
+              "construction": {
+                "elapsedMs": 166.52425099998072,
+                "count": 17
+              },
+              "loading": {
+                "elapsedMs": 70.94916799999191,
+                "count": 17
+              },
+              "execution": {
+                "elapsedMs": 19108.174121999924,
+                "count": 35
+              },
+              "other": {
+                "elapsedMs": 4.071918000103324
+              }
+            }
+          },
+          {
+            "file": "return_call.wast",
+            "elapsedMs": 16166.179374999992,
+            "phases": {
+              "construction": {
+                "elapsedMs": 141.5838350000122,
+                "count": 15
+              },
+              "loading": {
+                "elapsedMs": 60.90995800004748,
+                "count": 15
+              },
+              "execution": {
+                "elapsedMs": 15960.643083999952,
+                "count": 33
+              },
+              "other": {
+                "elapsedMs": 3.0424979999806965
+              }
+            }
+          },
+          {
+            "file": "const.wast",
+            "elapsedMs": 7166.786917000001,
+            "phases": {
+              "construction": {
+                "elapsedMs": 5259.91527400005,
+                "count": 479
+              },
+              "loading": {
+                "elapsedMs": 1834.8054180000145,
+                "count": 479
+              },
+              "execution": {
+                "elapsedMs": 14.325248000011925,
+                "count": 300
+              },
+              "other": {
+                "elapsedMs": 57.7409769999249
+              }
+            }
+          },
+          {
+            "file": "simd/simd_const.wast",
+            "elapsedMs": 7015.531749999995,
+            "phases": {
+              "construction": {
+                "elapsedMs": 5181.782002999884,
+                "count": 494
+              },
+              "loading": {
+                "elapsedMs": 1781.3536369998474,
+                "count": 494
+              },
+              "execution": {
+                "elapsedMs": 12.285000999909244,
+                "count": 265
+              },
+              "other": {
+                "elapsedMs": 40.11110900035419
+              }
+            }
+          },
+          {
+            "file": "return_call_indirect.wast",
+            "elapsedMs": 3896.7464580000087,
+            "phases": {
+              "construction": {
+                "elapsedMs": 305.8429189999588,
+                "count": 31
+              },
+              "loading": {
+                "elapsedMs": 117.05404500005534,
+                "count": 31
+              },
+              "execution": {
+                "elapsedMs": 3467.1158359999536,
+                "count": 49
+              },
+              "other": {
+                "elapsedMs": 6.733658000041032
+              }
+            }
+          }
+        ]
+      },
+      "bootstrapAudit": {
+        "elapsedMs": 13259.136625,
+        "passed": 65199,
+        "failed": 0,
+        "skipped": 0,
+        "fileCount": 258,
+        "phases": {
+          "construction": {
+            "elapsedMs": 9053.538154999944,
+            "count": 7393
+          },
+          "loading": {
+            "elapsedMs": 1471.107923999981,
+            "count": 7393
+          },
+          "execution": {
+            "elapsedMs": 860.7636499999833,
+            "count": 57984
+          },
+          "other": {
+            "elapsedMs": 1873.726896000091
+          }
+        }
+      },
+      "validation": {
+        "tests": 243,
+        "failed": 0,
+        "skipped": 0,
+        "targetedTests": 16,
+        "finalTargetedTests": 16
+      },
+      "completeTestSuite": {
+        "elapsedMs": 163505.960834,
+        "previousElapsedMs": 169702.651875
+      },
+      "tradeoffs": "Diagnostic profiling, with no engine/source change or speedup claim. Exclusive phase times include failed attempts. Construction includes the fresh self-hosted copy; loading includes initialization/start; execution includes script actions and callbacks; other includes harness and in-run progress I/O. Setup accounts for 64.2% of this hosted run."
     }
   ],
   "experiments": [

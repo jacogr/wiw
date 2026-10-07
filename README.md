@@ -195,9 +195,9 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 240 tests in 174,513.100 ms
-(2m54.51s). The isolated hosted spec audit passes all 65,199 commands in
-161,475.916 ms (2m41.48s), with zero failures or skips.
+The latest complete `make check` run passes all 243 tests in 163,505.961 ms
+(2m43.51s). The isolated hosted spec audit passes all 65,199 commands in
+161,215.314 ms (2m41.22s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -297,9 +297,27 @@ control is 2.6% slower. Raw comparisons and full validation remain in history.
 
 Dynamic scalar instruction fusion recognizes adjacent local.get, integer
 constant and non-trapping binary operations, optionally followed by local.set.
-Original records, exact fuel prefixes and temporary stack limits are preserved.
+Original opcodes, source offsets, exact fuel prefixes and temporary stack limits
+are preserved.
 Seven alternating samples improve scalar loops, scalar memory and direct tails
 by 33%, 17% and 12%; floating and vector workloads also benefit from fused scalar
 work. A deliberately non-matching loop is 6% slower and fresh construction 4%
 slower. Complete test time remains flat; the latest standalone hosted audit takes
 3.5% less time than the preceding run. No arena or instruction layout is added.
+
+Completed implicit type indices now carry forward to the first function-reference
+query, reducing cold hosted queries by 95% in the targeted pair. Fusion eligibility
+is prepared in the consumed local-name field during validation; its non-matching
+loop improves 3% and matching scalar loops another 16% over dynamic probing.
+Fresh construction is 1% slower in that pair. Foreign result changes and reloads
+invalidate the retained type index; original instruction opcodes and source
+locations stay intact.
+
+Both audit commands now print exclusive construction, loading, execution and
+other timings, with per-file and cumulative values in their JSON reports.
+Construction includes the fresh self-hosted interpreter copy; loading includes
+initialization/start functions. Failed attempts are counted, and forwarded
+callbacks stay in their enclosing phase. The latest hosted run spends 77.93s
+constructing, 25.56s loading, 55.10s executing and 2.62s on other harness work:
+construction and loading account for 64% of its total. These are API wall times,
+not pure guest instruction CPU times, and profiling is not a speedup claim.

@@ -2600,3 +2600,62 @@ and both audits pass 65,199 commands across 258 files with zero failures/skips.
 Hosted coverage takes 163,731.262 ms, roughly flat against the preceding
 161,475.916 ms audit. Invalidation and reload regressions verify that changed
 foreign results cannot reuse either cached value. No additional storage is added.
+
+### Preparing the fusion operator during local validation
+
+Local validation consumes the local-name length after resolving the final index.
+That existing extra field now holds an eligible adjacent binary opcode, or zero
+for ordinary execution. The recognizer checks the current function end, integer
+constant width, generated non-trapping route and binary arity. It does not remove
+or change the original opcode, immediate or source offset. Emission and validation
+rebuild the hint on every load, including binary-decoded and named local reads.
+
+Runtime reads one hint instead of repeatedly classifying successor instructions.
+Fuel and temporary operand-capacity guards still choose ordinary execution when
+a prefix must be observable. Arithmetic publication and the optional local.set
+remain unchanged. The marker adds no arena or new record format, and is prepared
+within the existing validation pass rather than a separate walk of all code.
+
+Seven alternating samples improve the deliberately non-matching loop by 2.9%,
+scalar loops by 15.8% and ordinary calls by 8.2% over the preceding dynamic
+probe. Fresh construction is 1.4% slower; the selected hosted loading controls
+improve in this pair. All 240 tests pass in 169,702.652 ms (2m49.70s), and both
+audits pass 65,199 commands across 258 files with zero failures/skips. Hosted
+coverage takes 158,469.407 ms. Paired raw samples and hashes remain in
+performance history, separately from the complete-suite measurements.
+
+### Exclusive audit phase timing
+
+Profiled audits report construction, loading and execution elapsed time and call
+counts for each file and cumulatively. Construction includes the factory's fresh
+WAT interpreter copy. Loading includes script-module decoding, guest parsing,
+validation, binding, initialization and any start function. Execution includes
+scripted invocation/global-get actions and their forwarding callbacks. Timers
+use finally blocks, so rejected loads, trapped actions and other failed attempts
+remain counted in their proper phases. Skipped commands do not create calls.
+
+Other time completes the wall-clock total: fixture reading/parsing, classification,
+registration/export descriptions, assertions and driver overhead. At suite level
+it also includes progress snapshot/output work performed inside onFile. Per-file
+phase durations are exclusive and sum to that file's elapsed time; cumulative
+phases sum to suite elapsed time. They measure whole API phases rather than pure
+guest instruction CPU time. Nested starts and callbacks stay inside their outer
+loading/execution interval, avoiding double counting.
+
+Both standalone audit commands print the phase summary and retain it in JSON.
+Progress snapshots contain cumulative phase counts. Profiling remains optional
+for runSuite; unprofiled reports retain their original fields and coverage.
+Bootstrap/hosted regressions compare profiled and unprofiled success/failure/skip
+inventories, count negative loads and trapped actions, verify additive timing,
+and cover an empty file selection with no engine construction.
+
+A two-file progress regression also checks cumulative call counts and sums of
+per-file phase durations. Final focused runner tests pass after full coverage.
+All 243 tests pass in 163,505.961 ms (2m43.51s); both audits pass 65,199 commands
+across 258 files with zero failures/skips. The hosted audit takes 161,215.314 ms
+(2m41.22s), split into 77,933.499 ms construction, 25,562.870 ms loading,
+55,100.273 ms execution and 2,618.673 ms other. It constructs and loads 7,393
+instances and performs 57,984 script actions. Setup accounts for 64.2% of this
+run. Source and optimized binary hashes match the engine validated in the prior
+round; this diagnostic change makes no engine performance improvement claim.
+Complete phase summaries and raw reports are retained alongside prior timings.
