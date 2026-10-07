@@ -7,6 +7,7 @@
 	)
 
 	;; Locate deferred function type metadata; offset 20 retains a completed non-null reference type.
+	;; Offset M4_FUNCTION_INTERNED_TYPE_OFFSET retains a completed implicit type index plus one.
 	(func $function-type
 		(param $index i32)
 		(result i32)
@@ -547,6 +548,10 @@
 								(global.set $signature-count (i32.add (global.get $signature-count) (i32.const 1)))
 							)
 						)
+						;; Retain the selected implicit index instead of rediscovering it at the first reference query.
+						(i32.store offset=M4_FUNCTION_INTERNED_TYPE_OFFSET (call $function-type (local.get $i))
+							(i32.add (local.get $j) (i32.const 1)))
+
 					)
 				)
 				(local.set $i (i32.add (local.get $i) (i32.const 1)))

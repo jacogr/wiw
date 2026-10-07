@@ -399,40 +399,19 @@
 					;; Local get is the common read path and preserves the complete raw value.
 					(if (i32.eq (local.get $op) (i32.const M4_OP_LOCAL_GET))
 						(then
-							;; Fuse adjacent scalar reads, constants and non-trapping binary operations without rewriting records.
+							;; Fuse marked scalar reads, constants and non-trapping binary operations while preserving source records.
 							(block $fusion-miss
-								;; A final local read has no adjacent constant and cannot enter a fused sequence.
-								(br_if $fusion-miss (i32.eq (local.get $next) (local.get $finish)))
-								(local.set $count (i32.load (local.get $next)))
-								;; Float/vector constants cannot supply an integer binary operation.
-								(br_if $fusion-miss
-									(i32.eqz (i32.or (i32.eq (local.get $count) (i32.const M4_OP_I32_CONST))
-										(i32.eq (local.get $count) (i32.const M4_OP_I64_CONST)))))
-								;; Near-capacity or partial-fuel execution keeps each original publication and failure boundary.
+								;; Non-matching local reads need one marker load rather than repeated successor classification.
+								(local.set $selector (i32.load offset=M4_FUSION_OPERATOR_OFFSET (local.get $record)))
+								(br_if $fusion-miss (i32.eqz (local.get $selector)))
+								;; Partial fuel and near-capacity execution preserve every original intermediate boundary.
 								(br_if $fusion-miss
 									(i32.or (i64.lt_u (local.get $fuel) (i64.const 2))
-										(i32.or (i32.gt_u (global.get $sp) (i32.const M4_FUSION_STACK_MAX))
-											(i32.lt_u (i32.sub (local.get $finish) (local.get $next)) (i32.const M4_FUSION_TAIL_BYTES)))))
-								(local.set $selector (i32.load offset=M4_INSTRUCTION_BYTES (local.get $next)))
-								;; The generated integer family excludes division/remainder and every other trapping operation.
-								(br_if $fusion-miss
-									(i32.ne
-										(i32.and (i32.shr_u
-											(i32.load8_u offset=M4_ROUTE_TABLE_BASE (i32.shr_u (local.get $selector) (i32.const 1)))
-											(i32.shl (i32.and (local.get $selector) (i32.const 1)) (i32.const 2)))
-											(i32.const M4_NIBBLE_MASK))
-										(i32.const M4_ROUTE_INTEGER)))
-								;; Unary operations and mismatched integer widths retain normal dispatch.
-								(br_if $fusion-miss
-									(i32.or
-										(i32.ne (i32.shr_u (i32.load8_u offset=M4_EFFECT_TABLE_BASE (i32.shl (local.get $selector) (i32.const 1)))
-											(i32.const M4_NIBBLE_SHIFT)) (i32.const 2))
-										(i32.ne (i32.eq (local.get $count) (i32.const M4_OP_I32_CONST))
-											(i32.le_u (local.get $selector) (i32.const M4_OP_I32_POPCNT)))))
+										(i32.gt_u (global.get $sp) (i32.const M4_FUSION_STACK_MAX))))
 								(local.set $a (i64.load offset=M4_CALL_LOCALS_OFFSET
 									(i32.add (local.get $frame) (i32.mul (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $record)) (i32.const M4_SLOT_BYTES)))))
 								;; Narrow operations preserve signed low-word canonicalization.
-								(if (i32.eq (local.get $count) (i32.const M4_OP_I32_CONST))
+								(if (i32.le_u (local.get $selector) (i32.const M4_OP_I32_POPCNT))
 									(then
 										(local.set $value (i64.extend_i32_s (call $apply (local.get $selector)
 											(i32.wrap_i64 (local.get $a)) (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $next))))))

@@ -30,6 +30,7 @@ m4_include(<!m4/constants.m4!>)m4_dnl
 	m4_include(<!bulk-memory.wat!>)
 	m4_include(<!data.wat!>)
 	m4_include(<!control-parse.wat!>)
+	m4_include(<!fusion.wat!>)
 	m4_include(<!validate.wat!>)
 	m4_include(<!instructions.wat!>)
 	m4_include(<!parser.wat!>)

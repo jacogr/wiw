@@ -574,6 +574,11 @@
 						;; A non-defaultable local cannot be read before an assignment in its current scope.
 						(if (i32.eq (local.get $op) (i32.const M4_OP_LOCAL_GET))
 							(then
+								;; Name resolution has consumed this field; cache only the adjacent binary opcode.
+								(i32.store offset=M4_FUSION_OPERATOR_OFFSET (local.get $record)
+									(call $fusion-operator (local.get $record)
+										(i32.add (global.get $code-base) (i32.shl (i32.load offset=12 (local.get $f)) (i32.const M4_INSTRUCTION_SHIFT)))))
+
 								;; Initialized parameters and prior enclosing-scope assignments remain available.
 								(if
 									(i32.eqz (i32.load (call $local-init-slot (i32.load offset=4 (local.get $record)))))

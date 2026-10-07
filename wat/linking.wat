@@ -340,6 +340,7 @@
 		(i32.store offset=24 (call $function (local.get $index)) (local.get $shape))
 		;; Completing a foreign result vector invalidates any previously derived reference type.
 		(i32.store offset=20 (call $function-type (local.get $index)) (i32.const 0))
+		(i32.store offset=M4_FUNCTION_INTERNED_TYPE_OFFSET (call $function-type (local.get $index)) (i32.const 0))
 		(global.get $error)
 	)
 

@@ -10,13 +10,13 @@ for(const runtime of ['bootstrap','interpreted']) {
     if(runtime==='bootstrap') {
       const {instance}=await WebAssembly.instantiate(await readFile(binary));
       call=(name,...args)=>instance.exports[name](...args);
-      write=bytes=>new Uint8Array(instance.exports.memory.buffer).set(bytes,4096);
+      write=(bytes,at=4096)=>new Uint8Array(instance.exports.memory.buffer).set(bytes,at);
     } else {
       const parent=await createBootstrapInterpreter(binary);
       parent.load(await readFile(new URL('../build/wiw.wat',import.meta.url),'utf8'));
       parent.setFuel(10000000);
       call=(name,...args)=>parent.invoke(name,...args);
-      write=bytes=>parent.writeMemory(4096,bytes);
+      write=(bytes,at=4096)=>parent.writeMemory(at,bytes);
     }
     const load=source=>{
       const bytes=Buffer.from(source);
@@ -71,6 +71,12 @@ for(const runtime of ['bootstrap','interpreted']) {
     call('set_fuel',1000);
     const bits=new DataView(new ArrayBuffer(8));bits.setFloat64(0,1e-300,true);
     assert.equal(call('invoke64',4096+float.indexOf('run'),3,0,0),bits.getBigInt64(0,true));
+    // Trusted foreign result installation invalidates both the derived reference and retained index.
+    load('(module (type (func (result i32))) (type (func (result i64))) (func (result i32) i32.const 42))');
+    assert.equal(heap(0),0);
+    write(Uint8Array.of(2,0,0,0),61440);
+    assert.equal(call('foreign_results',0,61440,1),0);
+    assert.equal(heap(0),1);
     load('(module (func (param f64) (result f64) local.get 0))');
     assert.equal(heap(0),0);assert.equal(call('heap_param_type',0,0),4);
   });

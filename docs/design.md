@@ -2581,3 +2581,22 @@ fuel/recovery and boundary checks pass after the full audits. Raw samples,
 source/binary/frontend hashes and tradeoffs remain in performance history;
 all timed phases run without overlapping builds, tests or audits. Fusion byte
 spans and stack limits derive from the existing M4 instruction and operand limits.
+
+
+### Carrying completed implicit type indices into first reference queries
+
+Type interning retains the selected index plus one at offset 24 of the existing
+function-type descriptor. Completed inline function-reference queries use that
+index instead of repeating structural matching. Explicit type uses retain their
+nominal resolution, unfinished parsing retains its original lookup, and foreign
+functions without an interned index retain structural search. Foreign result
+installation clears both this hint and the derived reference cache at offset 20;
+new function descriptors and reloads clear their metadata as before.
+
+Seven alternating samples query 256 cold and then warm function references
+against frozen optimized engines. Hosted cold queries improve 95.0%; warm calls
+remain roughly flat. The complete suite passes all 240 tests in 174,179.634 ms,
+and both audits pass 65,199 commands across 258 files with zero failures/skips.
+Hosted coverage takes 163,731.262 ms, roughly flat against the preceding
+161,475.916 ms audit. Invalidation and reload regressions verify that changed
+foreign results cannot reuse either cached value. No additional storage is added.

@@ -200,3 +200,7 @@ m4_define(<!M4_FUSION_STACK_MAX!>,<!m4_eval(M4_CAP_OPERANDS - 2)!>)m4_dnl
 m4_define(<!M4_FUSION_TAIL_BYTES!>,<!m4_eval(M4_INSTRUCTION_BYTES * 2)!>)m4_dnl
 m4_define(<!M4_FUSION_BYTES!>,<!m4_eval(M4_INSTRUCTION_BYTES * 3)!>)m4_dnl
 m4_define(<!M4_FUSION_BINARY_SOURCE_OFFSET!>,<!m4_eval(M4_INSTRUCTION_BYTES * 2 + M4_INSTRUCTION_SOURCE_OFFSET)!>)m4_dnl
+m4_dnl Completed implicit type index plus one; zero requires the ordinary structural lookup.
+m4_define(<!M4_FUNCTION_INTERNED_TYPE_OFFSET!>,<!24!>)m4_dnl
+m4_dnl A validated local.get reuses its consumed name-length field for the adjacent binary opcode.
+m4_define(<!M4_FUSION_OPERATOR_OFFSET!>,<!M4_INSTRUCTION_EXTRA_OFFSET!>)m4_dnl

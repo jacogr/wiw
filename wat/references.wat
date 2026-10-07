@@ -1514,6 +1514,17 @@
 			(else
 				;; Complete at the matching implicit or explicit structural signature.
 				(block $done
+					;; Completed inline functions carry the exact source-order result of type interning.
+					(if (global.get $function-types-resolved)
+						(then
+							(local.set $type (i32.load offset=M4_FUNCTION_INTERNED_TYPE_OFFSET (local.get $use)))
+							;; Foreign result changes clear this hint and retain the original structural search.
+							(if (local.get $type)
+								(then (local.set $i (i32.sub (local.get $type) (i32.const 1))) (br $done))
+							)
+						)
+					)
+
 					;; Search only the declared type namespace, excluding anonymous indirect call records.
 					(loop $types
 						(br_if $done (i32.eq (local.get $i) (global.get $signature-count)))
