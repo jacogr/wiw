@@ -2535,3 +2535,49 @@ across 258 files with zero failures/skips. Hosted coverage takes 167,314.469 ms
 capacity and floating-scratch checks also pass after the complete audits.
 All timed comparisons run without overlapping compilation, tests or audits;
 raw samples and source/binary/frontend hashes remain in performance history.
+
+### Dynamic fusion of adjacent scalar instructions
+
+At a local.get, runtime lookahead can recognize an adjacent i32/i64 constant
+and a non-trapping binary integer operation. The generated route/effect tables
+exclude trapping operations and unary conversions; integer widths must agree.
+The existing arithmetic helpers retain wrapping, shifts, comparisons and signed
+low-word canonicalization. An immediately following local.set can complete the
+update without publishing a temporary result. Otherwise the three instructions
+publish the same complete scalar slot as normal dispatch.
+
+Original instruction records, opcodes and source offsets remain unchanged.
+Lookahead stops at the current function end and never crosses a control/call
+instruction. With fewer than three available instruction fuel units or fewer
+than two temporary operand slots, ordinary dispatch preserves each prefix and
+its exact failure offset. A fourth local.set requires its own remaining fuel;
+otherwise the arithmetic result is published before the normal fuel failure.
+Every consumed instruction still charges one unit and advances to its original
+successor. Pending imports retain the same remaining fuel on resume.
+
+The probe rejects non-constant successors before its more expensive eligibility
+checks, limiting overhead in non-matching code. No load-time preparation, engine
+cache, new record format or additional arena is introduced. Six bootstrap/hosted
+regressions compare all 42 non-trapping binary integer operators against native
+execution at three constant bit patterns and signed endpoints, then check fuel
+prefixes, import suspension/recovery, trapping division fallback, live caller
+vectors, branch boundaries and zero/one/two available temporary operand slots.
+
+Seven alternating samples of 5,000 iterations compare frozen optimized before/
+after engines. Scalar loops, memory and direct tails improve by 33.4%, 17.2%
+and 11.7%; ordinary calls and wide-parameter calls improve by 9.4% and 7.3%.
+Floating arithmetic/conversion workloads improve 12.6%/10.5%; vector memory and
+many-result branches improve 8.0% and 4.7%, including their scalar loop work.
+The deliberately non-matching loop is 5.8% slower and now appears in the regular
+benchmark script. Fresh construction is 4.4% slower. Loading controls remain
+roughly flat. The initial probe with earlier eligibility checks is archived
+separately; only the reordered final probe receives complete validation.
+
+All 240 tests pass in 174,513.100 ms (2m54.51s), essentially flat against the
+preceding 174,580.904 ms run. Both standalone audits pass 65,199 commands across
+258 files with zero failures/skips. Hosted coverage takes 161,475.916 ms
+(2m41.48s), 3.5% less time than the preceding 167,314.469 ms audit. Final import
+fuel/recovery and boundary checks pass after the full audits. Raw samples,
+source/binary/frontend hashes and tradeoffs remain in performance history;
+all timed phases run without overlapping builds, tests or audits. Fusion byte
+spans and stack limits derive from the existing M4 instruction and operand limits.

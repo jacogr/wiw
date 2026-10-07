@@ -185,7 +185,7 @@ loops, reference calls
 through a mutable global, a call with multiple parameters and locals, a scalar
 loop, alternating conditional arms, memory reads/writes, bulk copy/fill loops,
 zero-page and failed growth, and SIMD arithmetic,
-mixed scalar/vector operands, three-vector selection and vector loads/stores
+mixed scalar/vector operands, three-vector selection and vector loads/stores, plus a deliberately non-matching scalar loop,
 on both the bootstrap
 and hosted runtime. SIMD workloads check every byte of the result each iteration.
 Taken branch workloads also check scalar/vector results and overlapping multivalue
@@ -195,9 +195,9 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 234 tests in 174,580.904 ms
-(2m54.58s). The isolated hosted spec audit passes all 65,199 commands in
-167,314.469 ms (2m47.31s), with zero failures or skips.
+The latest complete `make check` run passes all 240 tests in 174,513.100 ms
+(2m54.51s). The isolated hosted spec audit passes all 65,199 commands in
+161,475.916 ms (2m41.48s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -294,3 +294,12 @@ for crowded repeated signatures and many distinct inline signatures by 16% and
 19%. Scratch and spare descriptor fields provide the index without arena growth.
 Fresh construction and invocation remain roughly flat; a declared-type loading
 control is 2.6% slower. Raw comparisons and full validation remain in history.
+
+Dynamic scalar instruction fusion recognizes adjacent local.get, integer
+constant and non-trapping binary operations, optionally followed by local.set.
+Original records, exact fuel prefixes and temporary stack limits are preserved.
+Seven alternating samples improve scalar loops, scalar memory and direct tails
+by 33%, 17% and 12%; floating and vector workloads also benefit from fused scalar
+work. A deliberately non-matching loop is 6% slower and fresh construction 4%
+slower. Complete test time remains flat; the latest standalone hosted audit takes
+3.5% less time than the preceding run. No arena or instruction layout is added.

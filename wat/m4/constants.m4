@@ -195,3 +195,8 @@ m4_define(<!M4_HOST_RESULT_BASE_OFFSET!>,<!4!>)m4_dnl
 m4_define(<!M4_HOST_RESULT_HIGH_OFFSET!>,<!8!>)m4_dnl
 m4_define(<!M4_HOST_RESULT_TYPES_OFFSET!>,<!12!>)m4_dnl
 m4_define(<!M4_TYPE_BYTES!>,<!4!>)m4_dnl
+m4_dnl Fusion consumes original records while retaining two temporary operand-capacity boundaries.
+m4_define(<!M4_FUSION_STACK_MAX!>,<!m4_eval(M4_CAP_OPERANDS - 2)!>)m4_dnl
+m4_define(<!M4_FUSION_TAIL_BYTES!>,<!m4_eval(M4_INSTRUCTION_BYTES * 2)!>)m4_dnl
+m4_define(<!M4_FUSION_BYTES!>,<!m4_eval(M4_INSTRUCTION_BYTES * 3)!>)m4_dnl
+m4_define(<!M4_FUSION_BINARY_SOURCE_OFFSET!>,<!m4_eval(M4_INSTRUCTION_BYTES * 2 + M4_INSTRUCTION_SOURCE_OFFSET)!>)m4_dnl

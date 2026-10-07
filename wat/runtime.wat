@@ -399,6 +399,77 @@
 					;; Local get is the common read path and preserves the complete raw value.
 					(if (i32.eq (local.get $op) (i32.const M4_OP_LOCAL_GET))
 						(then
+							;; Fuse adjacent scalar reads, constants and non-trapping binary operations without rewriting records.
+							(block $fusion-miss
+								;; A final local read has no adjacent constant and cannot enter a fused sequence.
+								(br_if $fusion-miss (i32.eq (local.get $next) (local.get $finish)))
+								(local.set $count (i32.load (local.get $next)))
+								;; Float/vector constants cannot supply an integer binary operation.
+								(br_if $fusion-miss
+									(i32.eqz (i32.or (i32.eq (local.get $count) (i32.const M4_OP_I32_CONST))
+										(i32.eq (local.get $count) (i32.const M4_OP_I64_CONST)))))
+								;; Near-capacity or partial-fuel execution keeps each original publication and failure boundary.
+								(br_if $fusion-miss
+									(i32.or (i64.lt_u (local.get $fuel) (i64.const 2))
+										(i32.or (i32.gt_u (global.get $sp) (i32.const M4_FUSION_STACK_MAX))
+											(i32.lt_u (i32.sub (local.get $finish) (local.get $next)) (i32.const M4_FUSION_TAIL_BYTES)))))
+								(local.set $selector (i32.load offset=M4_INSTRUCTION_BYTES (local.get $next)))
+								;; The generated integer family excludes division/remainder and every other trapping operation.
+								(br_if $fusion-miss
+									(i32.ne
+										(i32.and (i32.shr_u
+											(i32.load8_u offset=M4_ROUTE_TABLE_BASE (i32.shr_u (local.get $selector) (i32.const 1)))
+											(i32.shl (i32.and (local.get $selector) (i32.const 1)) (i32.const 2)))
+											(i32.const M4_NIBBLE_MASK))
+										(i32.const M4_ROUTE_INTEGER)))
+								;; Unary operations and mismatched integer widths retain normal dispatch.
+								(br_if $fusion-miss
+									(i32.or
+										(i32.ne (i32.shr_u (i32.load8_u offset=M4_EFFECT_TABLE_BASE (i32.shl (local.get $selector) (i32.const 1)))
+											(i32.const M4_NIBBLE_SHIFT)) (i32.const 2))
+										(i32.ne (i32.eq (local.get $count) (i32.const M4_OP_I32_CONST))
+											(i32.le_u (local.get $selector) (i32.const M4_OP_I32_POPCNT)))))
+								(local.set $a (i64.load offset=M4_CALL_LOCALS_OFFSET
+									(i32.add (local.get $frame) (i32.mul (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $record)) (i32.const M4_SLOT_BYTES)))))
+								;; Narrow operations preserve signed low-word canonicalization.
+								(if (i32.eq (local.get $count) (i32.const M4_OP_I32_CONST))
+									(then
+										(local.set $value (i64.extend_i32_s (call $apply (local.get $selector)
+											(i32.wrap_i64 (local.get $a)) (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $next))))))
+									;; Wide constants and operations retain their complete raw bit patterns.
+									(else
+										(local.set $b (i64.or (i64.extend_i32_u (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $next)))
+											(i64.shl (i64.extend_i32_u (i32.load offset=M4_INSTRUCTION_EXTRA_OFFSET (local.get $next))) (i64.const M4_WORD_BITS))))
+										(local.set $value (call $apply64 (local.get $selector) (local.get $a) (local.get $b)))
+									)
+								)
+								(local.set $fuel (i64.sub (local.get $fuel) (i64.const 2)))
+								(global.set $tok (i32.load offset=M4_FUSION_BINARY_SOURCE_OFFSET (local.get $record)))
+								(local.set $next (i32.add (local.get $record) (i32.const M4_FUSION_BYTES)))
+								;; A following local.set can finish the update when its own fuel is still available.
+								(if (i32.and (i64.ne (local.get $fuel) (i64.const 0)) (i32.ne (local.get $next) (local.get $finish)))
+									(then
+										;; Keep every other instruction, including control/call boundaries, in ordinary dispatch.
+										(if (i32.eq (i32.load (local.get $next)) (i32.const M4_OP_LOCAL_SET))
+											(then
+												(local.set $meta (i32.mul (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $next)) (i32.const M4_SLOT_BYTES)))
+												(i64.store offset=M4_CALL_LOCALS_OFFSET (i32.add (local.get $frame) (local.get $meta)) (local.get $value))
+												(i64.store (i32.add (local.get $frame-high) (local.get $meta)) (i64.const 0))
+												(global.set $tok (i32.load offset=M4_INSTRUCTION_SOURCE_OFFSET (local.get $next)))
+												(local.set $fuel (i64.sub (local.get $fuel) (i64.const 1)))
+												(local.set $next (i32.add (local.get $next) (i32.const M4_INSTRUCTION_BYTES)))
+												(br $dispatch)
+											)
+										)
+									)
+								)
+								;; Three fused instructions publish the same scalar result above the unchanged caller stack.
+								(local.set $meta (i32.mul (global.get $sp) (i32.const M4_SLOT_BYTES)))
+								(i64.store (i32.add (global.get $stack-base) (local.get $meta)) (local.get $value))
+								(i64.store (i32.add (global.get $stack-high-base) (local.get $meta)) (i64.const 0))
+								(global.set $sp (i32.add (global.get $sp) (i32.const 1)))
+								(br $dispatch)
+							)
 							(local.set $meta (i32.mul (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $record)) (i32.const M4_SLOT_BYTES)))
 							(local.set $value (i64.load offset=M4_CALL_LOCALS_OFFSET (i32.add (local.get $frame) (local.get $meta))))
 							(local.set $value-high (i64.load (i32.add (local.get $frame-high) (local.get $meta))))

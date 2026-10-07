@@ -183,6 +183,12 @@ for (const [name,count] of [['branchVector',1],['branchMany',8]]) {
       local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
 }
 
+// A reversed add and unary loop condition deliberately avoid adjacent local/constant binary fusion.
+cases.noFusionLoop = `(module (func (export "run") (param i64) (result i64)
+  (loop $again
+    i64.const -1 local.get 0 i64.add local.set 0
+    local.get 0 i64.eqz i32.eqz br_if $again) local.get 0))`;
+
 const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
 const report = {node: process.version, binaryen: execFileSync('wasm-opt', ['--version'], {encoding:'utf8'}).trim(),
   engineSourceSha256: createHash('sha256').update(await readFile(new URL('../build/wiw.wat', import.meta.url))).digest('hex'),
