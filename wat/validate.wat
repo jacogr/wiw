@@ -80,17 +80,20 @@
 				(i32.add (global.get $type-stack-base) (i32.mul (global.get $depth) (i32.const 4)))
 			)
 		)
-		;; Known values remain typed after unreachable; unknown values satisfy either width.
+		;; Equal types and unconstrained/polymorphic operands need no subtype query.
 		(if
 			(i32.and
+				(i32.ne (local.get $expected) (i32.const 0))
 				(i32.and
-					(i32.ne (local.get $expected) (i32.const 0))
 					(i32.ne (local.get $type) (i32.const 0))
+					(i32.ne (local.get $type) (local.get $expected))
 				)
-				(i32.eqz (call $type-compatible (local.get $type) (local.get $expected)))
 			)
 			(then
-				(call $fail (i32.const M4_ERR_OPERAND_STACK))
+				;; Known unequal values still require full reference subtyping, including in unreachable code.
+				(if (i32.eqz (call $type-compatible (local.get $type) (local.get $expected)))
+					(then (call $fail (i32.const M4_ERR_OPERAND_STACK)))
+				)
 			)
 		)
 		(local.get $type)

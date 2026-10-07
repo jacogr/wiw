@@ -107,6 +107,20 @@ for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: lexer preser
     assert.equal(call('error_code'),0);
     assert.equal(call('scan_pos'),65536);
   }
+  // Partial uniform words and mixed whitespace must leave the first token byte untouched.
+  for(const length of [...Array.from({length:18},(_,index)=>index),63,64,65]) {
+    for(const byte of [' ','\t','\r','\n']) for(const suffix of ['',' \t\r\n']) {
+      const trivia=byte.repeat(length)+suffix;
+      const pointer=init(trivia+'token)');
+      assert.equal(call('scan_next'),3,`whitespace prefix ${length}/${JSON.stringify(byte+suffix)}`);
+      assert.equal(call('error_code'),0);
+      assert.equal(call('scan_tok')-pointer,trivia.length);
+      assert.equal(call('scan_len'),5);
+      assert.equal(call('scan_pos')-pointer,trivia.length+5);
+      assert.equal(call('scan_next'),2);
+      assert.equal(call('scan_pos'),65536);
+    }
+  }
   // Every byte in every word lane checks conservative control detection, including high-bit bytes.
   for(let byte=0;byte<256;byte++) for(let lane=0;lane<8;lane++) {
     const payload=Buffer.alloc(24,97);payload[8+lane]=byte;
@@ -135,6 +149,30 @@ for(const runtime of ['bootstrap','interpreted']) test(`${runtime}: lexer preser
       const delimiter=[9,10,13,32,40,41].includes(byte);
       assert.equal(call('scan_len'),delimiter ? 8+lane : 24);
       assert.equal(call('scan_pos')-pointer,delimiter ? 8+lane : 24);
+    }
+  }
+  // The earliest boundary wins over later delimiters and errors in the same loaded word.
+  // Low-control false positives remain ordinary atom bytes until an exact delimiter appears.
+  for(const base of [0,8]) for(let lane=1;lane<7;lane++) {
+    for(const boundary of [9,10,13,32,40,41]) for(const later of [0,1,9,34,40,41,59,128,255]) {
+      const bytes=Buffer.alloc(24,97);
+      bytes[base+lane]=boundary;
+      bytes[base+lane+1]=later;
+      const pointer=init(bytes);
+      assert.equal(call('scan_next'),3);
+      assert.equal(call('error_code'),0,`first atom boundary ${base}/${lane}/${boundary}/${later}`);
+      assert.equal(call('scan_len'),base+lane);
+      assert.equal(call('scan_pos')-pointer,base+lane);
+    }
+    for(const control of [1,11,12,31]) {
+      const bytes=Buffer.alloc(24,97);
+      bytes[base+lane]=control;
+      bytes[base+lane+1]=32;
+      const pointer=init(bytes);
+      assert.equal(call('scan_next'),3);
+      assert.equal(call('error_code'),0);
+      assert.equal(call('scan_len'),base+lane+1);
+      assert.equal(call('scan_pos')-pointer,base+lane+1);
     }
   }
   for(const length of [7,8,9,15,16,17,31,32,33,63,64,65]) {

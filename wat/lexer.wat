@@ -369,9 +369,18 @@
 						)
 					)
 				)
-				;; Borrow false positives only select the original byte scanner; no boundary may be skipped.
-				(br_if $atom-words-done
-					(i64.ne (i64.and (local.get $boundary) (i64.const M4_BYTE_LANES_HIGH_BIT)) (i64.const 0))
+				(local.set $boundary (i64.and (local.get $boundary) (i64.const M4_BYTE_LANES_HIGH_BIT)))
+				;; Consume the safe prefix before the first flagged lane, then check its boundary byte exactly.
+				;; Borrow false positives can shorten this prefix but cannot hide an earlier boundary.
+				(if (i64.ne (local.get $boundary) (i64.const 0))
+					(then
+						(local.set $cursor
+							(i32.add (local.get $cursor)
+								(i32.shr_u (i32.wrap_i64 (i64.ctz (local.get $boundary))) (i32.const M4_BYTE_BIT_SHIFT))
+							)
+						)
+						(br $atom-words-done)
+					)
 				)
 				(local.set $cursor (i32.add (local.get $cursor) (i32.const M4_DOUBLEWORD_BYTES)))
 				(br $atom-words)

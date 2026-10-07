@@ -301,6 +301,68 @@
 		(local $wide i64)
 
 		(global.set $immediate-length (i32.const 0))
+		;; Constants use the existing signed/unsigned i32 literal decoder.
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I32_CONST))
+			(then
+				(return (call $integer))
+			)
+		)
+		;; Local accesses and direct calls carry an unsigned index or a named reference.
+		(if
+			(i32.or
+				(i32.eq (local.get $op) (i32.const M4_OP_RETURN_CALL))
+				(i32.and
+					(i32.ge_u (local.get $op) (i32.const M4_OP_LOCAL_GET))
+					(i32.le_u (local.get $op) (i32.const M4_OP_CALL))
+				)
+			)
+			(then
+				;; Named calls retain their source span until module-wide resolution.
+				(if (call $named)
+					(then
+						(local.set $value (global.get $tok))
+						(local.set $length (global.get $len))
+						(global.set $immediate-length (local.get $length))
+						;; Local names resolve after inherited type parameters have shifted their final slots.
+						(call $next)
+						(return (local.get $value))
+					)
+				)
+				(return (call $index))
+			)
+		)
+		;; Common integer arithmetic and simple stack instructions have no textual immediate.
+		(if
+			(i32.or
+				(i32.le_u (i32.sub (local.get $op) (i32.const M4_OP_I32_ADD)) (i32.const m4_eval(M4_OP_NOP-M4_OP_I32_ADD)))
+				(i32.le_u (i32.sub (local.get $op) (i32.const M4_OP_I64_ADD)) (i32.const m4_eval(M4_OP_I64_EXTEND_I32_U-M4_OP_I64_ADD)))
+			)
+			(then (return (i32.const 0)))
+		)
+		;; Wide constants preserve low and high halves in the instruction's existing immediate fields.
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_CONST))
+			(then
+				(local.set $wide (call $integer64))
+				(global.set $immediate-length (i32.wrap_i64 (i64.shr_u (local.get $wide) (i64.const 32))))
+				(return (i32.wrap_i64 (local.get $wide)))
+			)
+		)
+		;; Global immediates retain named references for module-wide resolution.
+		(if
+			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_GET)) (i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_SET)))
+			(then
+				;; Preserve a global name span instead of confusing it with a local index.
+				(if (call $named)
+					(then
+						(local.set $value (global.get $tok))
+						(global.set $immediate-length (global.get $len))
+						(call $next)
+						(return (local.get $value))
+					)
+				)
+				(return (call $index))
+			)
+		)
 		;; Memory selectors precede folded operands and retain forward references until validation.
 		(if
 			(i32.or
@@ -441,12 +503,6 @@
 				(return (call $vector-immediate (local.get $op)))
 			)
 		)
-		;; Constants use the existing signed/unsigned i32 literal decoder.
-		(if (i32.eq (local.get $op) (i32.const M4_OP_I32_CONST))
-			(then
-				(return (call $integer))
-			)
-		)
 		;; Float constants store their exact IEEE representation in the two immediate halves.
 		(if
 			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_F32_CONST)) (i32.eq (local.get $op) (i32.const M4_OP_F64_CONST)))
@@ -460,59 +516,11 @@
 				(return (i32.wrap_i64 (local.get $wide)))
 			)
 		)
-		;; Local accesses and direct calls carry an unsigned index or a named reference.
-		(if
-			(i32.or
-				(i32.eq (local.get $op) (i32.const M4_OP_RETURN_CALL))
-				(i32.and
-					(i32.ge_u (local.get $op) (i32.const M4_OP_LOCAL_GET))
-					(i32.le_u (local.get $op) (i32.const M4_OP_CALL))
-				)
-			)
-			(then
-				;; Named calls retain their source span until module-wide resolution.
-				(if (call $named)
-					(then
-						(local.set $value (global.get $tok))
-						(local.set $length (global.get $len))
-						(global.set $immediate-length (local.get $length))
-						;; Local names resolve after inherited type parameters have shifted their final slots.
-						(call $next)
-						(return (local.get $value))
-					)
-				)
-				(return (call $index))
-			)
-		)
 		;; Indirect calls retain a complete deferred signature without consuming their folded arguments.
 		(if
 			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_CALL_INDIRECT)) (i32.eq (local.get $op) (i32.const M4_OP_RETURN_CALL_INDIRECT)))
 			(then
 				(return (call $indirect-signature))
-			)
-		)
-		;; Wide constants preserve low and high halves in the instruction's existing immediate fields.
-		(if (i32.eq (local.get $op) (i32.const M4_OP_I64_CONST))
-			(then
-				(local.set $wide (call $integer64))
-				(global.set $immediate-length (i32.wrap_i64 (i64.shr_u (local.get $wide) (i64.const 32))))
-				(return (i32.wrap_i64 (local.get $wide)))
-			)
-		)
-		;; Global immediates retain named references for module-wide resolution.
-		(if
-			(i32.or (i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_GET)) (i32.eq (local.get $op) (i32.const M4_OP_GLOBAL_SET)))
-			(then
-				;; Preserve a global name span instead of confusing it with a local index.
-				(if (call $named)
-					(then
-						(local.set $value (global.get $tok))
-						(global.set $immediate-length (global.get $len))
-						(call $next)
-						(return (local.get $value))
-					)
-				)
-				(return (call $index))
 			)
 		)
 		;; Data instructions accept a deferred segment index or name, including forward references.

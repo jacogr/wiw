@@ -204,3 +204,6 @@ m4_dnl Completed implicit type index plus one; zero requires the ordinary struct
 m4_define(<!M4_FUNCTION_INTERNED_TYPE_OFFSET!>,<!24!>)m4_dnl
 m4_dnl A validated local.get reuses its consumed name-length field for the adjacent binary opcode.
 m4_define(<!M4_FUSION_OPERATOR_OFFSET!>,<!M4_INSTRUCTION_EXTRA_OFFSET!>)m4_dnl
+
+m4_dnl Convert a bit position into its byte lane within a word.
+m4_define(<!M4_BYTE_BIT_SHIFT!>,<!3!>)m4_dnl

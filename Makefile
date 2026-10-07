@@ -20,7 +20,7 @@ endif
 
 .DELETE_ON_ERROR:
 
-.PHONY: all check check-spec audit-spec audit-selfhost bench bench-load bench-create clean FORCE
+.PHONY: all check check-spec audit-spec audit-selfhost bench bench-load bench-create bench-create-phases clean FORCE
 all: build/wiw-opt.wasm
 
 build:
@@ -69,6 +69,9 @@ bench-load: build/wiw-opt.wasm
 
 bench-create: build/wiw-opt.wasm
 	$(NODE) $(FLAGS_NODE) scripts/bench-create.js
+
+bench-create-phases: build/wiw-opt.wasm
+	$(NODE) $(FLAGS_NODE) scripts/bench-create-phases.js
 
 clean:
 	rm -rf build

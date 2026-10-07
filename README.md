@@ -195,9 +195,9 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 243 tests in 163,505.961 ms
-(2m43.51s). The isolated hosted spec audit passes all 65,199 commands in
-161,215.314 ms (2m41.22s), with zero failures or skips.
+The latest complete `make check` run passes all 243 tests in 152,767.956 ms
+(2m32.77s). The hosted audit within that run passes all 65,199 commands in
+146,574.180 ms (2m26.57s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -317,7 +317,23 @@ Both audit commands now print exclusive construction, loading, execution and
 other timings, with per-file and cumulative values in their JSON reports.
 Construction includes the fresh self-hosted interpreter copy; loading includes
 initialization/start functions. Failed attempts are counted, and forwarded
-callbacks stay in their enclosing phase. The latest hosted run spends 77.93s
-constructing, 25.56s loading, 55.10s executing and 2.62s on other harness work:
-construction and loading account for 64% of its total. These are API wall times,
+callbacks stay in their enclosing phase. The latest hosted run spends 68.57s
+constructing, 23.25s loading, 52.45s executing and 2.31s on other harness work:
+construction and loading account for 63% of its total. These are API wall times,
 not pure guest instruction CPU times, and profiling is not a speedup claim.
+
+The detailed fresh-construction follow-up retains safe atom-word prefixes,
+common immediate handlers before uncommon families, and subtype queries only
+for known unequal constrained operands. Alternating public construction improves
+about 8%; selected hosted loader cases improve 7–23%. A matched complete audit
+falls from 2m31.83s to 2m24.49s, with construction down 8.5% and execution slightly
+faster. Four other experiments were reverted after flat or negative construction
+results; their measurements remain in performance history.
+
+`make bench-create-phases` reports preparation, parsing, type/signature resolution,
+linking, validation and resource setup using temporary native-parent callbacks.
+It leaves the readable hosted source and release binary unchanged and records
+raw samples and hashes in `build/bench-create-phases.json`. Callbacks can affect
+optimization, so use this to locate hotspots and `make bench-create` for complete
+factory timings. `BENCH_CREATE_PHASE_SAMPLES` controls its measured sample count
+(default 50, after ten warmup constructions).

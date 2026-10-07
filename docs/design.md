@@ -2659,3 +2659,92 @@ instances and performs 57,984 script actions. Setup accounts for 64.2% of this
 run. Source and optimized binary hashes match the engine validated in the prior
 round; this diagnostic change makes no engine performance improvement claim.
 Complete phase summaries and raw reports are retained alongside prior timings.
+
+### Fresh construction profiling and parser/validation follow-up
+
+`make bench-create-phases` builds a temporary optimized native parent with ten
+phase callbacks, then loads the unchanged readable expanded engine source into
+a fresh instance for every sample. It separates preparation, parsing, data
+resolution, heap types, signatures/resources, instruction call resolution,
+exports, validation and resource instantiation, plus native instantiation,
+source writes, initialization and interpreter backing. Bytes are preloaded and
+callbacks can affect optimization, so this diagnostic identifies hotspots;
+`make bench-create` and alternating public factories measure complete cost.
+The temporary WAT/binary is removed after the run, the release files are not
+rewritten, and source/binary hashes and raw samples appear in
+`build/bench-create-phases.json`. Every phase anchor must be unique and the
+callback sequence must match the expected loader order.
+
+The refreshed baseline identifies source parsing as the dominant construction
+phase (5.12 ms), followed by function validation (1.10 ms) and instruction call
+resolution (0.44 ms). Reference-type resolution, implicit signature interning,
+exports and resource initialization are already small. A separate function
+probe counts 262,988 lexer calls, 65,457 mnemonic lookups and 65,926 emitted
+instructions while parsing the engine itself. That probe wraps functions and
+inhibits inlining, so its instrumented wall times are not speedup measurements.
+
+The atom scanner now retains the safe prefix of a boundary-containing word.
+Its existing conservative lane mask still detects whitespace, NUL, quotes,
+parentheses and semicolons; trailing-zero count identifies the first flagged
+lane, and the original byte path handles that byte and the remainder exactly.
+Borrow false positives can shorten a skip but cannot hide an earlier boundary.
+All full-word loads remain bounded, and the shift from bit position to byte
+lane uses `M4_BYTE_BIT_SHIFT`. Additional regressions check competing boundaries
+and errors in both the first and following word, conservative low-control-byte
+flags, and mixed/uniform whitespace ending at physical memory's final byte.
+
+Immediate parsing handles common integer constants, local/call references,
+wide constants and global references before uncommon instruction families.
+The two ordinary integer/stack ranges return their existing zero immediate
+directly. The same decoders, deferred name spans, validation, instruction
+records and diagnostic offsets remain authoritative; no guest compilation or
+additional lookup arena is introduced.
+
+Operand validation now queries subtyping only for known unequal constrained
+types. Equal types, unknown unreachable operands and unconstrained pops retain
+their existing result without the helper call. Known unequal types still use
+full reference subtyping, and reachable underflow, control floors and abstract
+stack limits retain their existing checks.
+
+Four additional experiments were reverted: completed folded instructions
+without syntax-frame writes improve folded hosted loading but leave fresh
+construction flat and regress native loading; adjacent-parenthesis shortcuts
+are flat/slower; partial indentation skips improve some hosted loads but regress
+construction; indexing local names from eight declarations instead of thirty-two
+is effectively flat. Neither a prepared interpreter/cache nor an optimized
+hosted representation is part of this change.
+
+Alternating public fresh factories (15 samples, 11 constructions each, with
+state-isolation and guest-execution checks outside timing) improve from
+9.52 ms to 8.77 ms, a 7.8% reduction. Seven-sample hosted loader pairs improve
+integer and many-function inputs by 23%, floats by 11%, vectors by 10%, wide
+integers by 13%, local-heavy inputs by 14%, and named/type-heavy inputs by
+13–16%. Trivia controls improve 7–11%. Execution pairs fluctuate, including
+occasional 5–6% regressions; the matched full-audit execution phase is slightly
+faster, so no general execution microbenchmark speedup is claimed.
+
+The matched complete hosted audit falls from 151,829.679 ms (2m31.83s) to
+144,487.308 ms (2m24.49s), a 4.8% reduction. Its phases are:
+
+| Phase | Before | After |
+| --- | ---: | ---: |
+| Construction | 72.46s | 66.32s |
+| Loading | 24.21s | 23.64s |
+| Execution | 52.94s | 52.15s |
+| Other | 2.22s | 2.37s |
+
+Both optimized audits pass all 65,199 frozen commands across 258 files with zero
+failures and zero skips. All 243 tests pass in 152,767.956 ms (2m32.77s).
+The final diagnostic probe still identifies parsing (4.29 ms) as the largest
+native-parent phase, followed by validation (0.99 ms) and calls (0.43 ms).
+These individual diagnostic medians are not additive or paired speedup claims.
+The public factory benchmark and full audit retain their own complete costs.
+Performance history records source/binary/frontend/tool hashes, raw paired
+samples, complete audit phases and rejected experiments.
+
+The subsequent complete `make check` also runs the full hosted audit and replaces
+its shared build report. That run passes the same inventory in 146,574.180 ms
+(2m26.57s); its phases are 68.57s construction, 23.25s loading, 52.45s execution
+and 2.31s other. The self-host manifest records this latest report. Performance
+history distinguishes it from the standalone pair above, whose exact phase
+totals and per-file command outcomes were captured before the report replacement.
