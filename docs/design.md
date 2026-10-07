@@ -2404,3 +2404,38 @@ run (0.6% less time). Both standalone audits pass 65,199 commands across 258
 files with zero failures/skips. The isolated hosted audit takes 160,892.911 ms
 (2m40.89s), 4.3% less time than the preceding 168,122.896 ms run. Targeted and
 whole-suite measurements remain separate, with original stress inputs unchanged.
+
+
+### Rejected cursor, prepared operand and scalar frame experiments
+
+Three further rounds were implemented and measured in order, then reverted.
+A local operand-stack cursor improved selected invocation loops but required
+publication around helpers, imports, traps and exits. The compact version passed
+226 tests and both complete pinned audits, but isolated hosted coverage took
+173,787.042 ms versus 160,892.911 ms before the experiment (8.0% more time).
+The existing global cursor remains simpler and faster for complete coverage.
+
+Preparing local byte offsets and direct-call descriptor addresses in existing
+instruction fields produced no clear benefit. Seven alternating samples compared
+the original engine, combined preparation and local-offset-only preparation;
+results remained essentially flat. Both variants were discarded after targeted
+validation rather than extending the instruction metadata contract.
+
+The third round classified modules that could produce vectors and skipped
+private high-half frame work for scalar modules while retaining canonical zero
+high halves on the operand stack. Foreign function installation conservatively
+enabled vector handling and cleared suspended scalar frame high halves. All
+32 targeted tests passed, but seven alternating samples showed only a 1.2%
+scalar memory gain and roughly 1–3% regressions elsewhere. The classification
+and guards were discarded; the uniform scalar/vector path remains unchanged.
+
+Raw benchmark samples and rejected variants are recorded in performance history.
+Two additional bootstrap/hosted regressions remain: caller values survive direct
+calls, imports and branches; host failures and exact fuel exhaustion recover
+without corrupting the next invocation. No cursor, operand preparation or
+scalar-mode production change is retained from these rounds.
+
+Final restored-engine validation passes all 226 tests in 178,465.648 ms
+(2m58.47s). Both standalone audits pass 65,199 commands across 258 files with
+zero failures or skips; hosted coverage takes 171,399.829 ms. Expanded
+source and optimized binary hashes exactly match the pre-experiment baseline.

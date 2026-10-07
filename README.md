@@ -195,9 +195,9 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 224 tests in 172,202.548 ms
-(2m52.20s). The isolated hosted spec audit passes all 65,199 commands in
-160,892.911 ms (2m40.89s), with zero failures or skips.
+The latest complete `make check` run passes all 226 tests in 178,465.648 ms
+(2m58.47s). The isolated hosted spec audit passes all 65,199 commands in
+171,399.829 ms (2m51.40s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -211,7 +211,7 @@ timing remains roughly flat; the targeted gains are retained separately.
 The subsequent float-helper tree and precomputed access widths improve targeted
 hosted conversion and memory samples by 18% and 7%. Fresh hosted metadata
 snapshots improve short mixed multivalue calls by 30%; native adapters keep
-direct queries. The latest standalone hosted audit improves by 4.3%, with
+direct queries. That round’s standalone hosted audit improved by 4.3%, with
 bootstrap microbenchmark tradeoffs retained in the performance record.
 Guarded keyword/name matching and bounded word equality improve the hosted
 shared-prefix and mixed-length name loaders by 70% and 85%, respectively.
@@ -271,3 +271,10 @@ remain in the performance history.
 `make bench-create` measures fresh construction with preloaded engine source, checks each
 instance with a guest, and records first-use and warm median timings in
 `build/bench-create.json`. It uses no cached interpreter state.
+
+Three subsequent rounds tested a local operand-stack cursor, prepared local/call
+operands, and scalar-module high-half elision. All were reverted: the cursor
+regressed complete hosted coverage, operand preparation was essentially flat,
+and high-half elision regressed several alternating workloads. Their raw samples
+remain in performance history. Two recovery and exact-fuel regressions remain;
+no production optimization is retained from these rounds.
