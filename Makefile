@@ -8,7 +8,7 @@ NODE = node
 DEBUG ?= 0
 
 FLAGS_NODE = --disable-warning=ExperimentalWarning
-FLAGS_OPT_BASE = --enable-bulk-memory --enable-sign-ext --enable-nontrapping-float-to-int
+FLAGS_OPT_BASE = --enable-simd --enable-bulk-memory --enable-sign-ext --enable-nontrapping-float-to-int
 
 ifeq ($(DEBUG),1)
 FLAGS_M4 = -P -DDEBUG

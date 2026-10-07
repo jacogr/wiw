@@ -176,7 +176,7 @@ for (const binary of ['wiw-opt.wasm']) {
       (func (export "identity") (param i32) (result i32) i32.const 42 local.get 0 if (param i32) (result i32) end))`);
     assert.deepEqual(deepest.invoke('pair'), [42,7n]);
     assert.equal(deepest.invoke('identity', 0), 42); assert.equal(deepest.invoke('identity', 1), 42);
-    // Scalar WAT SIMD semantics still execute when the engine is interpreted twice.
+    // SIMD semantics, including native SIMD inside the interpreter, work through two interpreted layers.
     deepest.load(`(module (memory 1)
       (func $id (param v128) (result v128) local.get 0)
       (func (export "pair") (param v128) (result v128 v128)
@@ -186,12 +186,18 @@ for (const binary of ['wiw-opt.wasm']) {
       (func (export "lane") (result i64)
         i32.const 0 v128.const i64x2 1 0x123456789abcdef0 v128.store
         i32.const 8 v128.const i64x2 0 0 v128.load64_lane 1 i64x2.extract_lane 1)
+      (func (export "packed") (result i32)
+        v128.const i8x16 127 -128 -1 0 1 2 3 4 5 6 7 8 9 10 11 12
+        v128.const i8x16 1 -1 1 0 1 2 3 4 5 6 7 8 9 10 11 12 i8x16.add
+        v128.const i8x16 -128 127 0 0 2 4 6 8 10 12 14 16 18 20 22 24
+        i8x16.eq i8x16.all_true)
       (func (export "sat") (result i32)
         v128.const f32x4 1 -2 inf nan i32x4.trunc_sat_f32x4_s i32x4.extract_lane 2))`);
     assert.deepEqual(deepest.invoke('pair',(1n<<127n)|42n),[(1n<<127n)|42n,1n<<100n]);
     assert.equal(deepest.invoke('sum'),15);
     assert.equal(deepest.invoke('lane'),0x123456789abcdef0n);
     assert.equal(deepest.invoke('sat'),2147483647);
+    assert.equal(deepest.invoke('packed'),1);
     deepest.loadBinary(Uint8Array.from([
       0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,
       7,10,1,6,97,110,115,119,101,114,0,0,

@@ -121,6 +121,8 @@ m4_define(<!M4_DECIMAL_CHUNK_DIGITS!>,<!9!>)m4_dnl
 m4_define(<!M4_DECIMAL_CHUNK_RADIX!>,<!1000000000!>)m4_dnl
 m4_dnl Fixed-width SIMD lane addressing and masks.
 m4_define(<!M4_VECTOR_HALF_BITS!>,<!64!>)m4_dnl
+m4_define(<!M4_VECTOR_LOW_LANE!>,<!0!>)m4_dnl
+m4_define(<!M4_VECTOR_HIGH_LANE!>,<!1!>)m4_dnl
 m4_define(<!M4_LANE8_SHIFT!>,<!3!>)m4_dnl
 m4_define(<!M4_LANE16_SHIFT!>,<!4!>)m4_dnl
 m4_define(<!M4_LANE32_SHIFT!>,<!5!>)m4_dnl

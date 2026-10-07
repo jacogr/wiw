@@ -178,8 +178,12 @@ Multivalue functions and controls support ordered result vectors, block paramete
 loop inputs and explicit type uses. Node invocations and synchronous callbacks
 return arrays for multiple results; raw arrays preserve individual numeric bits
 and reference identity. SIMD supports all pinned lane, arithmetic, comparison, shuffle, conversion and
-memory instructions. Its runtime uses scalar WAT operations and parallel 64-bit
-halves, so vector execution also works when wiw interprets itself.
+memory instructions. Storage and the public ABI retain parallel 64-bit halves.
+Selected integer arithmetic, equality and lane reductions use SIMD instructions
+inside the WAT implementation; other families retain scalar WAT operations.
+Those same SIMD instructions are interpreted when wiw runs itself, including
+through two interpreted layers. The native bootstrap therefore requires SIMD
+support from its WebAssembly host.
 
 `createInterpreter()` creates the default self-hosted runtime.
 `createInterpretedInterpreter()` remains an explicit equivalent, while
@@ -215,11 +219,11 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` / `check-wat` run passes all 192 tests in 140,601.392 ms
-(2m20.60s). `check-wasm` passes the same 192 registered tests in
-11,742.642 ms (0m11.74s). Each executes all 65,199 spec commands:
-WAT takes 132,989.995 ms (2m12.99s), and WASM takes
-6,372.377 ms (0m06.37s), with zero failures or skips.
+The latest complete `make check` / `check-wat` run passes all 193 tests in 131,939.735 ms
+(2m11.94s). `check-wasm` passes the same 193 registered tests in
+10,483.502 ms (0m10.48s). Each executes all 65,199 spec commands:
+WAT takes 125,440.842 ms (2m05.44s), and WASM takes
+5,715.558 ms (0m05.72s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -339,9 +343,9 @@ Both audit commands now print exclusive construction, loading, execution and
 other timings, with per-file and cumulative values in their JSON reports.
 Construction includes the fresh self-hosted interpreter copy; loading includes
 initialization/start functions. Failed attempts are counted, and forwarded
-callbacks stay in their enclosing phase. The latest hosted run spends 48.12s
-constructing, 30.97s loading, 51.85s executing and 2.06s on other harness work:
-construction and loading account for 59% of its total. These are API wall times,
+callbacks stay in their enclosing phase. The latest hosted run spends 47.80s
+constructing, 30.49s loading, 45.13s executing and 2.01s on other harness work:
+construction and loading account for 62% of its total. These are API wall times,
 not pure guest instruction CPU times, and profiling is not a speedup claim.
 
 The detailed fresh-construction follow-up retains safe atom-word prefixes,
@@ -381,3 +385,10 @@ Adjacent integer arithmetic now also fuses `local.get`, `local.get` and a
 non-trapping binary operation, with optional following `local.set`. Matching
 loops improve about 29–31% natively and 36% when hosted; construction is flat.
 Both runtime targets retain exact fuel, trap offsets and operand-capacity checks.
+
+Selected wrapping integer SIMD arithmetic, equality and all-true reductions now
+use SIMD instructions inside the interpreter. Checked vector benchmarks improve
+14–25% natively and 22–34% hosted; scalar controls remain roughly flat. These
+workloads include result checks, so the comparison/reduction gains also help
+benchmarks whose main vector operation is unchanged. Both artifacts shrink and
+the two-layer self-hosting regression exercises the new primitive path.

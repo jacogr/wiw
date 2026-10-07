@@ -33,7 +33,7 @@ async function adapter(runtime,directory) {
     const wat=join(directory,'engine.wat'),wasm=join(directory,'engine.wasm');
     await writeFile(wat,source);
     execFileSync('wat2wasm',[wat,'-o',wasm]);
-    execFileSync('wasm-opt',['--enable-bulk-memory','--enable-sign-ext','--enable-nontrapping-float-to-int','-O4','--converge','--strip-debug','--strip-producers',wasm,'-o',wasm]);
+    execFileSync('wasm-opt',['--enable-simd','--enable-bulk-memory','--enable-sign-ext','--enable-nontrapping-float-to-int','-O4','--converge','--strip-debug','--strip-producers',wasm,'-o',wasm]);
     const {instance:{exports:e}}=await WebAssembly.instantiate(await readFile(wasm));
     e.memory.grow(17);
     return {call:(name,...args)=>e[name](...args),

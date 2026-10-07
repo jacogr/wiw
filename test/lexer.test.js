@@ -32,7 +32,7 @@ before(async () => {
   const wat=join(directory,'probe.wat');binary=join(directory,'probe-opt.wasm');
   await writeFile(wat,source);
   execFileSync('wat2wasm',[wat,'-o',binary]);
-  execFileSync('wasm-opt',['--enable-bulk-memory','--enable-sign-ext','--enable-nontrapping-float-to-int','-O4','--converge','--strip-debug','--strip-producers',binary,'-o',binary]);
+  execFileSync('wasm-opt',['--enable-simd','--enable-bulk-memory','--enable-sign-ext','--enable-nontrapping-float-to-int','-O4','--converge','--strip-debug','--strip-producers',binary,'-o',binary]);
 });
 after(async () => {if(directory) await rm(directory,{recursive:true,force:true});});
 

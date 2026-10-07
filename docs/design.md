@@ -478,11 +478,15 @@ WAT syntax. Normalized memory-lane instructions store their offset at field 4
 and lane index at field 12; field 8 retains the source offset.
 
 `vector-lane`, `vector-signed`, `vector-insert` and `vector-clamp` implement
-packing, signed extraction and narrow saturation. Runtime SIMD instructions use
-scalar i64/f32/f64 operations. Widening, narrowing, pairwise sums, dot products,
+packing, signed extraction and narrow saturation. Most runtime SIMD families use
+scalar i64/f32/f64 operations. Selected wrapping integer arithmetic, equality and
+all-true reductions use SIMD instructions internally, with scalar halves
+reconstructed and extracted at their existing ABI boundaries. Widening, narrowing, pairwise sums, dot products,
 shuffles and conversions preserve lane order. Vector memory accesses validate
 the complete unsigned range before any native read or write, including lane
-stores. No native SIMD instruction or guest compilation is needed for execution.
+stores. The native bootstrap requires SIMD support; self-hosted execution
+interprets its SIMD instructions through the same WAT runtime. Guest programs
+are never compiled or handed to a native guest execution path.
 
 
 ## Self-hosted conformance adapter
@@ -2999,3 +3003,44 @@ Both execute every command with zero failures/skips. The fresh baseline also
 runs slower than the historical suite, so that historical difference is not
 claimed as a patch regression. The public benchmark script also completes a
 bounded smoke run with all cases, including the newly added local/local loops.
+
+
+### Native SIMD inside integer helpers
+
+Eighteen exact integer primitives replace scalar lane loops: i8x16 add/sub,
+i16x8 and i32x4 add/sub/mul, eq/ne for those three widths, and all_true for
+8/16/32/64-bit lanes. Helpers reconstruct inputs using i64x2.splat and
+replace_lane, then extract the two result halves into the existing globals
+and scalar return. No vector argument/result enters the public native JS ABI.
+Other integer families and all floating-point math retain their scalar
+implementation; this avoids changing permitted floating NaN behavior.
+
+The compiled bootstrap uses native SIMD instructions. When its WAT is hosted,
+those instructions execute through the parent's SIMD interpreter, ending at
+the native bootstrap. This remains valid through two interpreted layers; the
+regression checks overflowing byte addition followed by eq/all_true at that
+depth. There is no guest compilation, host dispatch shortcut, per-mode helper
+implementation or new public ABI. The bootstrap now requires a SIMD-capable
+WebAssembly host. Makefile feature flags and all optimized diagnostic probe
+compilers explicitly enable SIMD, including the WAT printer and pass trace.
+
+The arithmetic-only trial improves checked byte/short workloads 6% native and
+7–13% hosted. Equality increases that to 8–17% native and 15–26% hosted across
+checked vector workloads. Adding the all_true reductions yields 14–25% native
+and 22–34% hosted. These benchmarks include equality/reduction result checks,
+so improvements in untouched floating, extended multiply and memory workloads
+come from those checks. Scalar loop, float and direct-call controls stay
+roughly flat. Construction medians are 6.434/6.307 ms before/after (~2% lower).
+WASM shrinks from 132,861 to 131,826 bytes and optimized WAT from 854,992 to
+847,323 bytes. Baseline, intermediate and final samples are retained in history.
+
+The independent lane model covers wrapping overflow, all comparison mask bits,
+all four reductions, distinct high/low halves and exact guest fuel. Existing
+every-SIMD-opcode tests still compare text and binary decoding against native
+guest Wasm, with boundary/lane and callback storage checks. Final validation
+passes 193 tests in each target: 2m11.94s WAT and 0m10.48s
+WASM. Both execute all 65,199 spec commands across 258 files, zero failures or
+skips. Spec times are 2m05.44s hosted and
+0m05.72s native. Suite baselines are historical, so no paired
+full-suite speedup is claimed. Pass inspection and a bounded phase diagnostic
+also succeed with SIMD enabled. Parser work remains untouched and pending.
