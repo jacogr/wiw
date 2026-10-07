@@ -3266,3 +3266,55 @@ across 258 files; spec times are 2m10.03s WAT and
 full-suite speedup is claimed. Raw initial/confirmation/rejected samples, hashes
 and complete matrix reports remain in performance history. This completes the
 third requested optimization round.
+
+
+### Native integer SIMD min/max and products
+
+Thirty-three more scalar lane loops become exact SIMD instructions: 12
+signed/unsigned min/max across 8/16/32-bit lanes, two rounded unsigned averages,
+one byte population count, 12 low/high signed/unsigned widening multiplies,
+four pairwise widening sums, one signed i16-to-i32 dot product and one Q15
+rounded saturating multiply. Helpers reconstruct inputs from the existing raw
+i64 pairs and extract results back into the same globals/return value. Dispatch,
+instruction layout, validation, source locations and guest fuel are unchanged.
+The existing relaxed Q15 alias still selects its permitted strict operation.
+No additional host feature or guest compilation is introduced.
+
+The BigInt lane model covers all 33 new primitives and retains the preceding
+56-operation model. Patterns include distinct halves, all bits set, signed
+minima/maxima, mixed positive/negative lanes and differing low/high products.
+Tests check unsigned averages' upward rounding, byte populations, pairwise
+ordering, signed widening, full unsigned 64-bit products, modulo dot-product
+overflow and the Q15 min*min saturation exception and rounding boundaries.
+Each operation retains exact fuel failure locations and recovery. Existing
+native-oracle tests compare every strict SIMD opcode through text and binary
+loading. Two hosted levels additionally check high signed widening products,
+dot overflow and Q15 saturation. Seven new public benchmark cases check
+representative result bits on every iteration.
+
+Paired immutable before/after source and binary use an identical frontend.
+Construction uses nine alternating rounds of ten fresh hosted factories, with
+guest result checks outside timing. Execution uses three independent instances
+per variant/runtime/group, three 1000-iteration warmups and five alternating
+1000-iteration samples; the report takes the median of instance medians. Checked
+groups cover all 33 operations using the independent model; result comparisons,
+reductions and scalar loop overhead remain in measured execution. No timed
+benchmark overlaps tests or audits.
+
+Most checked groups improve 3–11% native and 4–18% hosted. Byte min/max, averages
+and population counts show the largest gains; 64-bit widening multiplication is
+effectively flat (under 1% in both modes), retained for smaller implementation
+and construction savings. Native scalar loop/direct controls stay flat; the
+float control is 2.6% slower. Hosted loop/float controls stay roughly flat, direct
+is 4% faster and is not claimed as a targeted gain. Construction falls from
+6.236 to 6.059 ms (~2.8%). WASM shrinks from 127,985 to 125,312 bytes and optimized
+WAT from 819,139 to 799,701 bytes.
+
+Both complete targets pass all 198 tests with zero failures/skips: 2m10.95s
+WAT and 0m11.61s WASM. Each passes all 65,199 wg-3.0 commands across
+258 files; spec times are 2m04.72s hosted and
+0m06.41s native. Full-suite comparisons are historical, so
+no matched whole-suite speedup is claimed. Public benchmark smoke and two-level
+self-hosting pass. Raw samples, hashes and matrix reports remain in performance
+history. Only this first requested round is complete; GC data-segment
+initialization and simple local moves remain for separate rounds.

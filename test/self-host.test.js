@@ -197,6 +197,17 @@ for (const binary of ['wiw-opt.wasm']) {
         i32.const 9 i8x16.shr_s
         v128.const i8x16 -1 -1 -1 0 0 63 63 63 -1 -1 1 63 63 63 63 -1
         i8x16.ge_s i8x16.bitmask)
+      (func (export "products") (result i32)
+        v128.const i32x4 -1 2 -3 4 v128.const i32x4 5 -6 7 -8 i64x2.extmul_high_i32x4_s
+        v128.const i64x2 -21 -32 i8x16.eq i8x16.all_true)
+      (func (export "dot") (result i32)
+        v128.const i16x8 -32768 -32768 -32768 -32768 -32768 -32768 -32768 -32768
+        v128.const i16x8 -32768 -32768 -32768 -32768 -32768 -32768 -32768 -32768
+        i32x4.dot_i16x8_s i32x4.extract_lane 3)
+      (func (export "q15") (result i32)
+        v128.const i16x8 -32768 -32768 -32768 -32768 -32768 -32768 -32768 -32768
+        v128.const i16x8 -32768 -32768 -32768 -32768 -32768 -32768 -32768 -32768
+        i16x8.q15mulr_sat_s i16x8.extract_lane_s 3)
       (func (export "sat") (result i32)
         v128.const f32x4 1 -2 inf nan i32x4.trunc_sat_f32x4_s i32x4.extract_lane 2))`);
     assert.deepEqual(deepest.invoke('pair',(1n<<127n)|42n),[(1n<<127n)|42n,1n<<100n]);
@@ -205,6 +216,9 @@ for (const binary of ['wiw-opt.wasm']) {
     assert.equal(deepest.invoke('sat'),2147483647);
     assert.equal(deepest.invoke('packed'),1);
     assert.equal(deepest.invoke('integer'),0x7efc);
+    assert.equal(deepest.invoke('products'),1);
+    assert.equal(deepest.invoke('dot'),-2147483648);
+    assert.equal(deepest.invoke('q15'),32767);
     // Repeated raw GC slots and bounded partial fills also work through two hosted layers.
     deepest.load(`(module (type $A (array (mut v128)))
       (global $a (mut (ref null $A)) (ref.null $A))

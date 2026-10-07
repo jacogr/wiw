@@ -219,11 +219,11 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` / `check-wat` run passes all 197 tests in 136,758.666 ms
-(2m16.76s). `check-wasm` passes the same 197 registered tests in
-11,671.701 ms (0m11.67s). Each executes all 65,199 spec commands:
-WAT takes 130,031.827 ms (2m10.03s), and WASM takes
-6,405.030 ms (0m06.41s), with zero failures or skips.
+The latest complete `make check` / `check-wat` run passes all 198 tests in 130,947.807 ms
+(2m10.95s). `check-wasm` passes the same 198 registered tests in
+11,610.434 ms (0m11.61s). Each executes all 65,199 spec commands:
+WAT takes 124,723.880 ms (2m04.72s), and WASM takes
+6,407.349 ms (0m06.41s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -343,9 +343,9 @@ Both audit commands now print exclusive construction, loading, execution and
 other timings, with per-file and cumulative values in their JSON reports.
 Construction includes the fresh self-hosted interpreter copy; loading includes
 initialization/start functions. Failed attempts are counted, and forwarded
-callbacks stay in their enclosing phase. The latest hosted run spends 47.02s
-constructing, 30.96s loading, 50.04s executing and 2.00s on other harness work:
-construction and loading account for 60% of its total. These are API wall times,
+callbacks stay in their enclosing phase. The latest hosted run spends 46.74s
+constructing, 31.09s loading, 44.86s executing and 2.04s on other harness work:
+construction and loading account for 62% of its total. These are API wall times,
 not pure guest instruction CPU times, and profiling is not a speedup claim.
 
 The detailed fresh-construction follow-up retains safe atom-word prefixes,
@@ -417,3 +417,11 @@ is nearly flat (+0.2%); WASM/WAT grow only 24/152 bytes. Memory selectors and
 widths, operand typing, lane/shuffle bounds and unreachable-code checks retain
 their existing handling. These are paired loading measurements, not isolated
 validator CPU times or a full-suite speedup claim.
+
+A further 33 exact integer SIMD helpers now use vector instructions: min/max,
+rounded averages, byte population counts, widening products, pairwise widening
+sums, signed dot products and Q15 rounded saturating multiplication. Most checked
+groups improve 3–11% native and 4–18% hosted; 64-bit widening multiplication is
+roughly flat. Construction improves 2.8%, while WASM/WAT shrink by 2,673/19,438
+bytes. The lane model and two-level self-hosting checks cover signed/unsigned
+boundaries, high/low ordering, dot overflow and Q15 saturation.
