@@ -3153,3 +3153,63 @@ hosted improvement. Matrix and standalone-pair results are recorded separately.
 
 Only the first requested optimization round is complete. GC array filling and
 validation dispatch remain for separate rounds after the next go.
+
+
+### Bulk GC array filling and default construction
+
+`gc-fill` normalizes one element through the existing `gc-store`, preserving
+packed integer truncation and both raw i64 halves. It then copies the initialized
+prefix into the immediately following slots, doubling the written count until
+the last bounded partial copy completes. Source bytes are always initialized,
+and each copy is no larger than the existing prefix or remaining destination.
+`M4_GC_SLOT_BYTES` names the complete raw slot width. A zero count returns before
+any memory access, including at an array's end pointer.
+
+`array.new` uses the helper only after successful allocation; `array.fill` calls
+it only after null and complete range checks. Rejected ranges cannot partially
+change an object. Slot-count arithmetic is bounded by the existing 16 MiB object
+arena and allocated array length. `array.new_default` needs no per-element stores:
+allocation already zeros the complete object. `array.new_fixed` retains reverse
+operand popping and one store per distinct operand. Object layout, packed field
+representation, reference identities, fuel and original diagnostic offsets are
+unchanged. No guest compilation, retained instance state or new arena is added.
+
+Regressions cover i8/i16 signed and unsigned reads, i32/i64, f32/f64 signed zero,
+both vector halves, reference identity and mutation through aliases. Counts cover
+empty/single arrays, powers of two and partial tails through 257 elements; partial
+fills preserve surrounding sentinels. Tests check default/fixed constructor
+values, empty end ranges, wrapped/negative/oversized ranges, null precedence,
+resource failure, exact fuel boundaries, no partial writes on traps and recovery.
+A two-level self-hosted guest exercises repeated vector slots and a 31-element
+partial fill surrounded by untouched slots. Both full audits retain binary and
+text spec coverage. Three new public benchmarks retain one packed/scalar/vector
+array and repeatedly fill it without exhausting the object arena.
+
+The paired benchmark uses immutable preceding SIMD/current source and binary
+with identical frontend, fifteen alternating rounds of ten fresh factories, and
+three independent instances per variant/runtime/case. Execution has three
+16-iteration warmups and five alternating 64-iteration samples, reporting the
+median of instance medians. Reload before each timed sample resets the object
+arena outside timing; constructor samples allocate at most about 4 MiB. Length
+and first/last value checks remain inside timed loops, including full vector
+halves and reference identity. No tests/audits overlap timing.
+
+Large 4096-element fills, repeated constructors and default constructors improve
+68–91% natively and 95–97% hosted. A 512-element reference fill improves 67% native
+and 77% hosted. Packed 256-element fill/new cases improve 41–58% native and about
+67% hosted. Tiny native cases vary: three-/17-element fills and two-element
+construction are 9–12% slower, at roughly 16–19 microseconds per 64 checked
+iterations. Hosted small cases are mostly flat or faster; one-element fill is
+3% slower. Fixed/scalar controls fluctuate and are not claimed as targeted wins.
+Construction medians are 6.161/6.199 ms (+0.6%). WASM grows from 127,878 to 127,961
+bytes, optimized WAT from 818,423 to 818,987 bytes. These modest costs are retained
+for the substantial large-array gains.
+
+Both complete targets pass all 196 tests, zero failures/skips: 2m16.94s
+hosted and 0m11.74s native. Each executes all 65,199 wg-3.0 commands
+across 258 files; spec times are 2m10.21s WAT and
+0m06.37s WASM. Complete test times are roughly flat against
+historical measurements; no paired full-suite speedup is claimed. Public
+benchmark smoke and the two-level regression pass. Raw samples, hashes and
+matrix reports remain in performance history. Only this second requested round
+is complete; validation dispatch remains for the next go.

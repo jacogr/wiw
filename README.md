@@ -219,11 +219,11 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` / `check-wat` run passes all 194 tests in 136,174.144 ms
-(2m16.17s). `check-wasm` passes the same 194 registered tests in
-11,468.917 ms (0m11.47s). Each executes all 65,199 spec commands:
-WAT takes 129,825.760 ms (2m09.83s), and WASM takes
-6,254.741 ms (0m06.25s), with zero failures or skips.
+The latest complete `make check` / `check-wat` run passes all 196 tests in 136,941.463 ms
+(2m16.94s). `check-wasm` passes the same 196 registered tests in
+11,741.451 ms (0m11.74s). Each executes all 65,199 spec commands:
+WAT takes 130,212.856 ms (2m10.21s), and WASM takes
+6,367.399 ms (0m06.37s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -343,8 +343,8 @@ Both audit commands now print exclusive construction, loading, execution and
 other timings, with per-file and cumulative values in their JSON reports.
 Construction includes the fresh self-hosted interpreter copy; loading includes
 initialization/start functions. Failed attempts are counted, and forwarded
-callbacks stay in their enclosing phase. The latest hosted run spends 46.64s
-constructing, 31.18s loading, 49.99s executing and 2.03s on other harness work:
+callbacks stay in their enclosing phase. The latest hosted run spends 46.95s
+constructing, 31.14s loading, 50.06s executing and 2.06s on other harness work:
 construction and loading account for 60% of its total. These are API wall times,
 not pure guest instruction CPU times, and profiling is not a speedup claim.
 
@@ -402,3 +402,10 @@ hosted; 64-bit comparisons/shifts improve around 2%. Fresh construction improves
 mostly harness time, with execution varying less than 1%. Matrix times describe
 separate complete runs. The independent lane model covers all new operations, sign and
 saturation boundaries, shift-count wrapping, raw halves and exact fuel.
+
+Repeated GC arrays normalize one raw element slot and fill the remaining range
+with bounded prefix copies. Default constructors reuse the allocator's zeroed
+slots. Checked large-array cases improve 68–91% natively and 95–97% hosted;
+small native cases can be around 10% slower, and fresh hosted construction is
+roughly flat (+0.6%). The object layout, reference identity, bounds/fuel behavior
+and fixed constructor operand order remain unchanged.

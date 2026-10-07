@@ -205,6 +205,16 @@ for (const binary of ['wiw-opt.wasm']) {
     assert.equal(deepest.invoke('sat'),2147483647);
     assert.equal(deepest.invoke('packed'),1);
     assert.equal(deepest.invoke('integer'),0x7efc);
+    // Repeated raw GC slots and bounded partial fills also work through two hosted layers.
+    deepest.load(`(module (type $A (array (mut v128)))
+      (global $a (mut (ref null $A)) (ref.null $A))
+      (func (export "build") v128.const i64x2 1 2 i32.const 33 array.new $A global.set $a
+        global.get $a i32.const 1 v128.const i64x2 -1 0x8000000000000000 i32.const 31 array.fill $A)
+      (func (export "get") (param i32) (result v128) global.get $a local.get 0 array.get $A))`);
+    deepest.invoke('build');
+    assert.equal(deepest.invoke('get',0),(2n<<64n)|1n);
+    assert.equal(deepest.invoke('get',16),(1n<<127n)|((1n<<64n)-1n));
+    assert.equal(deepest.invoke('get',32),(2n<<64n)|1n);
     deepest.loadBinary(Uint8Array.from([
       0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,
       7,10,1,6,97,110,115,119,101,114,0,0,

@@ -477,6 +477,39 @@
 		(i64.store offset=8 (local.get $slot) (local.get $high))
 	)
 
+	;; Repeat one normalized raw field slot across an already checked array range.
+	(func $gc-fill
+		(param $slot i32)
+		(param $count i32)
+		(param $type i32)
+		(param $value i64)
+		(param $high i64)
+		(local $written i32)
+		(local $remaining i32)
+		(local $copy i32)
+
+		;; Empty ranges must not read or write their end pointer.
+		(if (i32.eqz (local.get $count)) (then (return)))
+		(call $gc-store (local.get $slot) (local.get $type) (local.get $value) (local.get $high))
+		(local.set $written (i32.const 1))
+		;; Finish once all slots contain the first slot's complete normalized representation.
+		(block $done
+			;; Each copy doubles the initialized prefix, with a bounded final partial copy.
+			(loop $repeat
+				(local.set $remaining (i32.sub (local.get $count) (local.get $written)))
+				(br_if $done (i32.eqz (local.get $remaining)))
+				(local.set $copy (select (local.get $written) (local.get $remaining)
+					(i32.lt_u (local.get $written) (local.get $remaining))))
+				(memory.copy
+					(i32.add (local.get $slot) (i32.mul (local.get $written) (i32.const M4_GC_SLOT_BYTES)))
+					(local.get $slot)
+					(i32.mul (local.get $copy) (i32.const M4_GC_SLOT_BYTES)))
+				(local.set $written (i32.add (local.get $written) (local.get $copy)))
+				(br $repeat)
+			)
+		)
+	)
+
 	;; Validate field-dependent aggregate instructions against their declared composite types.
 	(func $validate-gc-aggregate
 		(param $op i32)
@@ -849,27 +882,30 @@
 						(return (i64.const 0))
 					)
 				)
-				(local.set $i (local.get $count))
-				;; Populate exactly the allocation's dynamic number of element slots.
-				(block $done
-					;; Reverse iteration preserves the source order of fixed constructor operands.
-					(loop $elements
-						(br_if $done (i32.eqz (local.get $i)))
-						(local.set $i (i32.sub (local.get $i) (i32.const 1)))
-						;; Fixed arrays consume one distinct operand for each slot.
-						(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_FIXED))
-							(then
+				;; Repeated constructors normalize once, then copy complete initialized slots.
+				(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW))
+					(then
+						(call $gc-fill (call $gc-slot (local.get $object) (i32.const 0))
+							(local.get $count) (local.get $type) (local.get $value) (local.get $high))
+					)
+				)
+				;; Default constructors already have zeroed slots from allocation; fixed values remain distinct.
+				(if (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_FIXED))
+					(then
+						(local.set $i (local.get $count))
+						;; Stop after the first fixed element has received its operand.
+						(block $done
+							;; Reverse iteration preserves the fixed constructor's operand order.
+							(loop $elements
+								(br_if $done (i32.eqz (local.get $i)))
+								(local.set $i (i32.sub (local.get $i) (i32.const 1)))
 								(local.set $value (call $gc-pop))
 								(local.set $high (global.get $gc-high))
+								(call $gc-store (call $gc-slot (local.get $object) (local.get $i))
+									(local.get $type) (local.get $value) (local.get $high))
+								(br $elements)
 							)
 						)
-						(call $gc-store
-							(call $gc-slot (local.get $object) (local.get $i))
-							(local.get $type)
-							(local.get $value)
-							(local.get $high)
-						)
-						(br $elements)
 					)
 				)
 				(global.set $gc-high (i64.const 0))
@@ -1277,21 +1313,9 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Complete after exactly count mutable elements have been assigned.
-				(block $done
-					;; Packed fields truncate every repeated assignment to their declared width.
-					(loop $fill
-						(br_if $done (i32.eq (local.get $i) (local.get $count)))
-						(call $gc-store
-							(call $gc-slot (local.get $dest) (i32.add (local.get $dest-index) (local.get $i)))
-							(local.get $type)
-							(local.get $value)
-							(local.get $high)
-						)
-						(local.set $i (i32.add (local.get $i) (i32.const 1)))
-						(br $fill)
-					)
-				)
+				;; Normalize the repeated value only after the entire destination range passes.
+				(call $gc-fill (call $gc-slot (local.get $dest) (local.get $dest-index))
+					(local.get $count) (local.get $type) (local.get $value) (local.get $high))
 				(return (i64.const 0))
 			)
 		)
