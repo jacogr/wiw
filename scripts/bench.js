@@ -115,6 +115,10 @@ for (const [name,delta,expected] of [['growZero',0,1],['growFailure',1,-1]]) {
 const vectorWorkloads = {
   vectorByteArithmetic: ['v128.const i64x2 0x0101010101010101 0x0101010101010101 v128.const i64x2 0x0202020202020202 0x0202020202020202 i8x16.add', '0x0303030303030303 0x0303030303030303'],
   vectorShortArithmetic: ['v128.const i64x2 0x0002000200020002 0x0002000200020002 v128.const i64x2 0x0003000300030003 0x0003000300030003 i16x8.mul', '0x0006000600060006 0x0006000600060006'],
+  vectorOrderedComparison: ['v128.const i64x2 0 -1 v128.const i64x2 1 0 i8x16.lt_s', '0xff -1'],
+  vectorShift: ['v128.const i16x8 -32768 -1 0 1 2 3 4 5 i32.const 17 i16x8.shr_s', '0x00000000ffffc000 0x0002000200010001'],
+  vectorSaturation: ['v128.const i64x2 0x7f7f7f7f7f7f7f7f 0x8080808080808080 v128.const i64x2 0x0101010101010101 -1 i8x16.add_sat_s', '0x7f7f7f7f7f7f7f7f 0x8080808080808080'],
+  vectorNarrowing: ['v128.const i16x8 -129 -128 -1 0 1 127 128 32767 v128.const i16x8 -32768 -2 2 126 255 256 1024 -256 i8x16.narrow_i16x8_s', '0x7f7f7f0100ff8080 0x807f7f7f7e02fe80'],
   vectorFloatArithmetic: ['v128.const f32x4 1.5 1.5 1.5 1.5 v128.const f32x4 2.5 2.5 2.5 2.5 f32x4.add', '0x4080000040800000 0x4080000040800000'],
   vectorArithmetic: ['v128.const i64x2 1 2 v128.const i64x2 3 4 i64x2.extmul_low_i32x4_u', '3 0'],
   vectorMixed: ['v128.const i64x2 1 2 i64.const 9 i64x2.replace_lane 1', '1 9'],
@@ -129,6 +133,14 @@ for (const [name,[operation,expected]] of Object.entries(vectorWorkloads)) {
       (br_if $again (i64.ne (local.get 0) (i64.const 0)))) (local.get 0)))`;
 }
 
+
+// Sign-mask reduction includes nonzero and sign-bit bytes in both vector halves.
+cases.vectorBitmask = `(module (func (export "run") (param i64) (result i64)
+  (loop $again
+    v128.const i64x2 0x8000000000000001 0x8000800080008000 i8x16.bitmask
+    i32.const 0xaa80 i32.ne if unreachable end
+    local.get 0 i64.const 1 i64.sub local.set 0
+    local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
 
 // Scalar float arithmetic and trapping conversions exercise their independent dispatch paths.
 cases.floatArithmetic = `(module (func (export "run") (param i64) (result i64)

@@ -51,7 +51,7 @@ for (const binary of ['wiw-opt.wasm']) {
 }
 
 // Exercise every SIMD wire opcode through both text and binary loading. Native SIMD
-// serves only as the independent test oracle; wiw executes scalar WAT lane operations.
+// serves only as the independent test oracle; wiw executes its own WAT lane helpers.
 for (const binary of ['wiw-opt.wasm']) {
   test(`${binary}: every SIMD opcode matches native memory results through text and binary decoding`, async () => {
     const rows = (await readFile(new URL('../scripts/opcodes.tsv',import.meta.url),'utf8')).trim().split('\n')

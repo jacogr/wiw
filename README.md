@@ -219,11 +219,11 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` / `check-wat` run passes all 193 tests in 131,939.735 ms
-(2m11.94s). `check-wasm` passes the same 193 registered tests in
-10,483.502 ms (0m10.48s). Each executes all 65,199 spec commands:
-WAT takes 125,440.842 ms (2m05.44s), and WASM takes
-5,715.558 ms (0m05.72s), with zero failures or skips.
+The latest complete `make check` / `check-wat` run passes all 194 tests in 136,174.144 ms
+(2m16.17s). `check-wasm` passes the same 194 registered tests in
+11,468.917 ms (0m11.47s). Each executes all 65,199 spec commands:
+WAT takes 129,825.760 ms (2m09.83s), and WASM takes
+6,254.741 ms (0m06.25s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -343,9 +343,9 @@ Both audit commands now print exclusive construction, loading, execution and
 other timings, with per-file and cumulative values in their JSON reports.
 Construction includes the fresh self-hosted interpreter copy; loading includes
 initialization/start functions. Failed attempts are counted, and forwarded
-callbacks stay in their enclosing phase. The latest hosted run spends 47.80s
-constructing, 30.49s loading, 45.13s executing and 2.01s on other harness work:
-construction and loading account for 62% of its total. These are API wall times,
+callbacks stay in their enclosing phase. The latest hosted run spends 46.64s
+constructing, 31.18s loading, 49.99s executing and 2.03s on other harness work:
+construction and loading account for 60% of its total. These are API wall times,
 not pure guest instruction CPU times, and profiling is not a speedup claim.
 
 The detailed fresh-construction follow-up retains safe atom-word prefixes,
@@ -392,3 +392,13 @@ use SIMD instructions inside the interpreter. Checked vector benchmarks improve
 workloads include result checks, so the comparison/reduction gains also help
 benchmarks whose main vector operation is unchanged. Both artifacts shrink and
 the two-layer self-hosting regression exercises the new primitive path.
+
+A further 56 integer SIMD helpers now use native vector instructions: ordered
+comparisons, masked shifts, saturating add/subtract, narrowing and sign-bit
+masks. Checked 8/16/32-bit workload groups improve 3–14% natively and 5–23%
+hosted; 64-bit comparisons/shifts improve around 2%. Fresh construction improves
+4.3%, and the release artifacts shrink by 3,948 bytes (WASM) and 28,900 bytes
+(WAT). A matched full hosted audit improves 2.3%; the native audit is 1.2% slower,
+mostly harness time, with execution varying less than 1%. Matrix times describe
+separate complete runs. The independent lane model covers all new operations, sign and
+saturation boundaries, shift-count wrapping, raw halves and exact fuel.

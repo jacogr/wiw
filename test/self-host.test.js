@@ -191,6 +191,12 @@ for (const binary of ['wiw-opt.wasm']) {
         v128.const i8x16 1 -1 1 0 1 2 3 4 5 6 7 8 9 10 11 12 i8x16.add
         v128.const i8x16 -128 127 0 0 2 4 6 8 10 12 14 16 18 20 22 24
         i8x16.eq i8x16.all_true)
+      (func (export "integer") (result i32)
+        v128.const i16x8 -129 -128 -1 0 1 127 128 32767
+        v128.const i16x8 -32768 -2 2 126 255 256 1024 -256 i8x16.narrow_i16x8_s
+        i32.const 9 i8x16.shr_s
+        v128.const i8x16 -1 -1 -1 0 0 63 63 63 -1 -1 1 63 63 63 63 -1
+        i8x16.ge_s i8x16.bitmask)
       (func (export "sat") (result i32)
         v128.const f32x4 1 -2 inf nan i32x4.trunc_sat_f32x4_s i32x4.extract_lane 2))`);
     assert.deepEqual(deepest.invoke('pair',(1n<<127n)|42n),[(1n<<127n)|42n,1n<<100n]);
@@ -198,6 +204,7 @@ for (const binary of ['wiw-opt.wasm']) {
     assert.equal(deepest.invoke('lane'),0x123456789abcdef0n);
     assert.equal(deepest.invoke('sat'),2147483647);
     assert.equal(deepest.invoke('packed'),1);
+    assert.equal(deepest.invoke('integer'),0x7efc);
     deepest.loadBinary(Uint8Array.from([
       0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,
       7,10,1,6,97,110,115,119,101,114,0,0,

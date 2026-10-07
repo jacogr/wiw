@@ -3085,3 +3085,71 @@ optimized WAT, with their recorded SHA-256 hashes unchanged. Full suites are
 not repeated for identical artifacts; the retained baseline remains 193 tests
 and 65,199 spec commands per target, zero failures or skips. No new runtime
 branch, configuration, snapshot or guest compilation is introduced.
+
+
+### More native integer SIMD primitives
+
+A further 56 scalar lane loops become exact vector instructions: 28 ordered
+comparisons (signed/unsigned at 8/16/32 bits and signed at 64 bits), 12 shifts,
+eight saturating add/subtract operations, four signed/unsigned narrow conversions
+and four sign-bit masks. Inputs still arrive as two i64 halves and vector results
+are extracted back into those halves. Scalar masks retain their existing i32
+result path. Opcode selection, instruction records, validation, source offsets,
+guest fuel and the public ABI are unchanged. Comments describe each operation.
+Floating-point and relaxed-result policies retain their existing handling.
+
+Shift instructions mask the i32 count to lane width, including negative host
+counts. Narrow instructions interpret the wider input lanes as signed values
+before signed or unsigned destination saturation, and concatenate the first
+operand's lanes before the second operand's lanes. Ordered comparisons produce
+full-lane masks; bitmasks preserve lane ordering across both halves. The independent
+BigInt model tests every new primitive, distinct raw halves, signed endpoints,
+unsigned overflow/underflow, narrow clamp boundaries, negative/large counts,
+exact fuel failure offsets and recovery. Existing native-oracle tests cover every
+SIMD opcode through text and binary decoding. A new two-level hosted check chains
+narrowing, a wrapped signed shift, ordered comparison and bitmask reduction.
+
+Paired immutable source/binary benchmarks cover all 56 new operations through
+checked groups, using three independent instances per variant/runtime/group,
+three 1000-iteration warmups and five alternating 1000-iteration samples. They
+report the median of instance medians. The result checks and scalar loop overhead
+remain in the timed workloads. Construction uses nine alternating rounds of ten
+fresh hosted factories, with guest checks outside timing. No benchmarks overlap
+tests or audits. Raw samples, hashes and complete reports remain in history.
+
+Checked 8/16/32-bit groups improve 3–14% natively and 5–23% hosted; 64-bit groups
+improve around 2%. The combined bitmask group improves 7% native and 14% hosted.
+Scalar controls vary: native loop/float/direct cases are 1–3% slower, hosted cases
+2–4% faster. Construction falls from 6.413 to 6.135 ms (~4.3%). WASM shrinks from
+131,826 to 127,878 bytes and optimized WAT from 847,323 to 818,423 bytes.
+
+Both complete targets pass 194 tests, zero failures/skips: 2m16.17s
+WAT and 0m11.47s WASM. Each passes all 65,199 wg-3.0 commands across
+258 files; spec times are 2m09.83s hosted and
+0m06.25s native. These full-suite comparisons are historical,
+so no paired full-suite speedup is claimed. A bounded public benchmark smoke run
+passes every case, including new comparison, shift, saturation, narrowing and
+bitmask workloads. Its initial comparison example had an incorrect expected
+mask, corrected before the successful run; the native oracle and independent
+lane-model checks already passed for the actual operation.
+
+A matched full-audit follow-up checks the slower matrix time against today's
+baseline. Both variants use the current frontend, runner and frozen inventory,
+with immutable preceding/current optimized binary and WAT. Runs are sequential,
+before then after, and each passes all commands with zero failures or skips.
+Hosted total falls from 130,499.399 to 127,445.213 ms (2.34% faster):
+
+| Hosted phase | Before | After |
+| --- | ---: | ---: |
+| Construction | 46.94s | 45.82s |
+| Loading | 30.27s | 30.09s |
+| Execution | 51.36s | 49.63s |
+| Other | 1.93s | 1.91s |
+
+Native total rises from 5,296.190 to 5,360.478 ms (+1.21%), mostly other harness
+work (1.833/1.876s); native execution is 0.877/0.882s (+0.47%). The change is
+retained for targeted integer SIMD gains, smaller artifacts and the measured
+hosted improvement. Matrix and standalone-pair results are recorded separately.
+
+Only the first requested optimization round is complete. GC array filling and
+validation dispatch remain for separate rounds after the next go.
