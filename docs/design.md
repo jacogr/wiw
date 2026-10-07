@@ -3350,3 +3350,42 @@ across 258 files; spec times are 2m08.65s WAT and
 0m06.18s WASM. Samples, hashes and reports are recorded in
 performance history. This completes the second requested round; simple local
 moves remain for a separate round.
+
+
+### Adjacent raw local moves, tees and drops
+
+The existing validated local.get marker additionally recognizes an adjacent
+local.set, local.tee or drop within the same function. Ordinary validation still
+resolves names, checks assignment types and tracks non-defaultable local
+initialization. Runtime copies both low and high raw halves before writing the
+destination, preserving aliases, floating encodings, vectors and references.
+Set has no net operand effect; tee publishes one complete value; drop omits its
+unused value read. No opcode or record format is added.
+
+The fast path requires one remaining fuel unit after local.get and room for its
+original intermediate operand. Partial fuel and a full stack use ordinary
+dispatch, retaining exact source offsets and failure precedence. Both original
+records remain intact. Tests compare scalar text/binary results against native
+Wasm, including signed zero and quiet/signaling NaN payloads via integer
+reinterpretation. Vector patterns check both halves. Named/aliased locals,
+external identities, typed function calls, GC reference equality and
+non-defaultable local initialization are covered. Additional regressions cover
+every fuel offset, state writes preceding traps, recovery, function boundaries,
+caller vector operands and 4095/4096-slot capacity boundaries. Existing integer
+fusion tests remain. Two hosted levels exercise vector moves and GC references;
+six public benchmark cases check scalar/vector set, tee and drop.
+
+Immutable preceding GC-data optimized artifacts and selected release use the same frontend. Initial and confirmation measurements each use 15 alternating construction rounds of ten fresh factories, checks outside timing. Execution uses three independent instances per variant/runtime/case, three 1000-iteration warmups and five alternating 2000-iteration samples; median of instance medians. Eight checked moves/drops per loop iteration retain result comparisons and vector reductions in timing. Modules reload outside samples; no tests/audits overlap benchmarks. Complete WAT then WASM targets run sequentially. Full-suite comparisons are historical, not a controlled speedup.
+
+Reuse the existing validated local.get marker for adjacent local.set, local.tee or drop. Copy both raw halves directly between locals; tee publishes one complete operand and drop skips the unused read. One remaining fuel unit and space for the original local.get are required; otherwise use ordinary dispatch. Original records, source offsets, types, guest fuel and reference identity remain unchanged. Confirmation scalar groups improve 8-11% native and 10-11% hosted; vector groups improve 2-4% in both modes. Construction is roughly flat (initial +0.2%, confirmation -1.1%). Native scalar/float controls are flat; hosted scalar is 3.7% slower and float 1.5% slower (initial 3.4/2.3%). WASM grows 212 bytes and optimized WAT 1456 bytes. Retained for repeatable targeted gains despite modest hosted miss overhead. No guest compilation, instruction rewriting, new record layout or persistent state.
+
+An initial overly broad move-selector comparison also matched integer binary
+opcodes. Focused hosted tests exposed it; the selected explicit drop/set/tee
+predicate preserves existing integer fusion. Both subsequent paired runs and
+all regression/matrix checks use the corrected implementation.
+
+Both complete targets pass all 203 tests with zero failures/skips: 2m17.09s
+hosted and 0m12.04s native. Each passes all 65,199 wg-3.0 commands
+across 258 files; spec times are 2m09.60s WAT and
+0m06.26s WASM. Samples, hashes and reports remain in performance
+history. This completes the third requested optimization round.

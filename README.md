@@ -219,11 +219,11 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` / `check-wat` run passes all 200 tests in 135,574.714 ms
-(2m15.57s). `check-wasm` passes the same 200 registered tests in
-12,432.643 ms (0m12.43s). Each executes all 65,199 spec commands:
-WAT takes 128,647.633 ms (2m08.65s), and WASM takes
-6,177.794 ms (0m06.18s), with zero failures or skips.
+The latest complete `make check` / `check-wat` run passes all 203 tests in 137,085.642 ms
+(2m17.09s). `check-wasm` passes the same 203 registered tests in
+12,040.170 ms (0m12.04s). Each executes all 65,199 spec commands:
+WAT takes 129,598.277 ms (2m09.60s), and WASM takes
+6,255.445 ms (0m06.26s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -343,8 +343,8 @@ Both audit commands now print exclusive construction, loading, execution and
 other timings, with per-file and cumulative values in their JSON reports.
 Construction includes the fresh self-hosted interpreter copy; loading includes
 initialization/start functions. Failed attempts are counted, and forwarded
-callbacks stay in their enclosing phase. The latest hosted run spends 45.83s
-constructing, 31.04s loading, 49.72s executing and 2.06s on other harness work:
+callbacks stay in their enclosing phase. The latest hosted run spends 46.23s
+constructing, 31.20s loading, 50.17s executing and 2.00s on other harness work:
 construction and loading account for 60% of its total. These are API wall times,
 not pure guest instruction CPU times, and profiling is not a speedup claim.
 
@@ -432,3 +432,10 @@ numeric benchmarks improve 91–95% native and 34–53% hosted; vector cases imp
 95–97% in both modes. Construction stays roughly flat; WASM/WAT grow 90/750 bytes.
 Tests cover raw floating bits, poisoned padding, unaligned memory-end reads,
 partial initialization, segment lifetime, traps, fuel and two hosted levels.
+
+Adjacent local.get/set, local.get/tee and local.get/drop pairs now avoid temporary
+operand traffic while retaining raw vector/reference values and original fuel
+and capacity boundaries. Checked scalar workloads improve 8–11% native and
+10–11% hosted; vector workloads improve 2–4%. Construction is roughly flat;
+hosted scalar/float controls are 3.7%/1.5% slower. WASM/WAT grow 212/1,456 bytes.
+Initial and confirmation samples, regressions and full matrices are recorded.

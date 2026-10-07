@@ -250,6 +250,21 @@ for(const [name,field,width] of [['gcDataPacked','i8',1],['gcDataScalar','i64',8
         local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
 }
 
+// Check local moves and drops while keeping raw high vector halves observable.
+for(const [name,type,constant,check] of [
+  ['Scalar','i64','i64.const -81985529216486896','i64.const -81985529216486896 i64.ne'],
+  ['Vector','v128','v128.const i64x2 81985529216486895 -81985529216486896',
+    'v128.const i64x2 81985529216486895 -81985529216486896 i8x16.eq i8x16.all_true i32.eqz']
+]) for(const kind of ['set','tee','drop']) {
+  const move=kind==='set'?'local.get $a local.set $b local.get $b':
+    kind==='tee'?'local.get $a local.tee $b':'local.get $a drop local.get $a';
+  cases[`localMove${name}${kind}`]=`(module (func (export "run") (param i64) (result i64)
+    (local $a ${type}) (local $b ${type}) ${constant} local.set $a
+    (loop $again ${move} ${check} if unreachable end
+      local.get 0 i64.const 1 i64.sub local.set 0
+      local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
+}
+
 const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
 const report = {node: process.version, binaryen: execFileSync('wasm-opt', ['--version'], {encoding:'utf8'}).trim(),
   engineSourceSha256: createHash('sha256').update(await readFile(new URL('../build/wiw-opt.wat', import.meta.url))).digest('hex'),

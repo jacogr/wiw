@@ -1,5 +1,5 @@
-	;; Recognize a same-function integer local-or-constant/binary successor pair during local validation.
-	;; Return its non-trapping binary opcode, or zero when ordinary execution must remain available.
+	;; Recognize a same-function local move/drop or integer operand/binary sequence during local validation.
+	;; Return the move/drop or non-trapping binary opcode, or zero for ordinary execution.
 	(func $fusion-operator
 		(param $record i32)
 		(param $finish i32)
@@ -7,11 +7,20 @@
 		(local $operand i32)
 		(local $op i32)
 
-		;; Both successor records must lie in the current function before either is read.
-		(if (i32.lt_u (i32.sub (local.get $finish) (local.get $record)) (i32.const M4_FUSION_BYTES))
+		;; A simple move/drop needs only one successor within the current function.
+		(if (i32.lt_u (i32.sub (local.get $finish) (local.get $record)) (i32.const M4_FUSION_TAIL_BYTES))
 			(then (return (i32.const 0)))
 		)
 		(local.set $operand (i32.load offset=M4_INSTRUCTION_BYTES (local.get $record)))
+		;; All value types can move between locals or be discarded without arithmetic.
+		(if (i32.or (i32.eq (local.get $operand) (i32.const M4_OP_DROP))
+			(i32.le_u (i32.sub (local.get $operand) (i32.const M4_OP_LOCAL_SET)) (i32.const 1)))
+			(then (return (local.get $operand)))
+		)
+		;; Integer fusion additionally requires its binary operation in the same function.
+		(if (i32.lt_u (i32.sub (local.get $finish) (local.get $record)) (i32.const M4_FUSION_BYTES))
+			(then (return (i32.const 0)))
+		)
 		;; Only an adjacent local read or integer constant can supply this binary pattern.
 		(if (i32.eqz (i32.or (i32.eq (local.get $operand) (i32.const M4_OP_LOCAL_GET))
 			(i32.or (i32.eq (local.get $operand) (i32.const M4_OP_I32_CONST))

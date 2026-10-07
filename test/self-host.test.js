@@ -239,6 +239,16 @@ for (const binary of ['wiw-opt.wasm']) {
         local.get $a i32.const 0 array.get $A))`);
     assert.equal(deepest.invoke('new'),(2n<<64n)|1n);
     assert.equal(deepest.invoke('init'),(2n<<64n)|1n);
+    // Local moves retain both vector halves and non-null GC references through two hosted levels.
+    deepest.load(`(module (type $S (struct (field i32)))
+      (func (export "move") (param v128) (result v128) (local v128)
+        local.get 0 local.set 1 local.get 1 local.tee 0 drop local.get 0)
+      (func (export "reference") (result i32) (local $a (ref $S)) (local $b (ref $S))
+        i32.const 42 struct.new $S local.set $a
+        local.get $a local.set $b local.get $b local.tee $a drop local.get $a struct.get $S 0))`);
+    const moved=0xfedcba98765432100123456789abcdefn;
+    assert.equal(deepest.invoke('move',moved),moved);
+    assert.equal(deepest.invoke('reference'),42);
     deepest.loadBinary(Uint8Array.from([
       0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,
       7,10,1,6,97,110,115,119,101,114,0,0,

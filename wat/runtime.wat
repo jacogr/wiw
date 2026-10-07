@@ -399,11 +399,44 @@
 					;; Local get is the common read path and preserves the complete raw value.
 					(if (i32.eq (local.get $op) (i32.const M4_OP_LOCAL_GET))
 						(then
-							;; Fuse marked scalar reads, local/constant operands and non-trapping binary operations while preserving source records.
+							;; Fuse marked local moves or scalar binary sequences while preserving source records.
 							(block $fusion-miss
 								;; Non-matching local reads need one marker load rather than repeated successor classification.
 								(local.set $selector (i32.load offset=M4_FUSION_OPERATOR_OFFSET (local.get $record)))
 								(br_if $fusion-miss (i32.eqz (local.get $selector)))
+								;; Simple moves preserve both raw halves and the intermediate local.get capacity boundary.
+								(if (i32.or (i32.eq (local.get $selector) (i32.const M4_OP_DROP))
+									(i32.le_u (i32.sub (local.get $selector) (i32.const M4_OP_LOCAL_SET)) (i32.const 1)))
+									(then
+										;; Partial fuel or a full operand stack uses the original instruction paths.
+										(br_if $fusion-miss (i32.or (i64.eqz (local.get $fuel))
+											(i32.ge_u (global.get $sp) (i32.const M4_CAP_OPERANDS))))
+										;; Drop has no observable value access; writes first read both halves before any alias can change.
+										(if (i32.ne (local.get $selector) (i32.const M4_OP_DROP))
+											(then
+												(local.set $meta (i32.mul (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $record)) (i32.const M4_SLOT_BYTES)))
+												(local.set $value (i64.load offset=M4_CALL_LOCALS_OFFSET (i32.add (local.get $frame) (local.get $meta))))
+												(local.set $value-high (i64.load (i32.add (local.get $frame-high) (local.get $meta))))
+												(local.set $meta (i32.mul (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $next)) (i32.const M4_SLOT_BYTES)))
+												(i64.store offset=M4_CALL_LOCALS_OFFSET (i32.add (local.get $frame) (local.get $meta)) (local.get $value))
+												(i64.store (i32.add (local.get $frame-high) (local.get $meta)) (local.get $value-high))
+												;; Tee retains one complete value above the unchanged caller operands.
+												(if (i32.eq (local.get $selector) (i32.const M4_OP_LOCAL_TEE))
+													(then
+														(local.set $meta (i32.mul (global.get $sp) (i32.const M4_SLOT_BYTES)))
+														(i64.store (i32.add (global.get $stack-base) (local.get $meta)) (local.get $value))
+														(i64.store (i32.add (global.get $stack-high-base) (local.get $meta)) (local.get $value-high))
+														(global.set $sp (i32.add (global.get $sp) (i32.const 1)))
+													)
+												)
+											)
+										)
+										(global.set $tok (i32.load offset=M4_INSTRUCTION_SOURCE_OFFSET (local.get $next)))
+										(local.set $fuel (i64.sub (local.get $fuel) (i64.const 1)))
+										(local.set $next (i32.add (local.get $next) (i32.const M4_INSTRUCTION_BYTES)))
+										(br $dispatch)
+									)
+								)
 								;; Partial fuel and near-capacity execution preserve every original intermediate boundary.
 								(br_if $fusion-miss
 									(i32.or (i64.lt_u (local.get $fuel) (i64.const 2))

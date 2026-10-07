@@ -176,7 +176,7 @@
 	;; Append an instruction record: opcode, immediate, source offset and opcode-specific extra data.
 	;; Offsets 0/4/8/12: opcode, immediate, source offset, reference length/table size/alignment.
 	;; Calls are resolved and all stack effects validated after every function signature is known.
-	;; A validated local.get reuses its consumed name-length field for an eligible fused binary opcode.
+	;; A validated local.get reuses its consumed name-length field for an eligible move/drop or fused binary opcode.
 	(func $emit
 		(param $op i32)
 		(param $immediate i32)
