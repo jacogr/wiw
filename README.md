@@ -179,6 +179,12 @@ execution and trap handling run inside the interpreted WAT copy; the shared
 Node frontend continues to handle synchronous callbacks and resource bindings.
 The handwritten WAT and readable m4 expansion remain available for development
 and private probes. `options.source` still allows an explicit interpreter source.
+All three factories also accept a caller-owned `WebAssembly.Module` as their
+first argument. Compile the bootstrap bytes once with `WebAssembly.compile`,
+then pass that module when creating engines. Each call creates a fresh native
+instance; hosted calls also load a fresh WAT interpreter. Only immutable compiled
+code is reused. There is no global cache or interpreter snapshot. The spec runner
+shares one compiled bootstrap module within each suite run.
 
 
 `make bench` measures ordinary recursive calls, direct, indirect and typed-reference tail calls,
@@ -198,9 +204,9 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` run passes all 244 tests in 140,787.401 ms
-(2m20.79s). The hosted audit within that run passes all 65,199 commands in
-133,175.671 ms (2m13.18s), with zero failures or skips.
+The latest complete `make check` run passes all 246 tests in 138,017.353 ms
+(2m18.02s). The hosted audit within that run passes all 65,199 commands in
+130,753.257 ms (2m10.75s), with zero failures or skips.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short
@@ -320,9 +326,9 @@ Both audit commands now print exclusive construction, loading, execution and
 other timings, with per-file and cumulative values in their JSON reports.
 Construction includes the fresh self-hosted interpreter copy; loading includes
 initialization/start functions. Failed attempts are counted, and forwarded
-callbacks stay in their enclosing phase. The latest hosted run spends 60.34s
-constructing, 23.96s loading, 46.41s executing and 2.47s on other harness work:
-construction and loading account for 63% of its total. These are API wall times,
+callbacks stay in their enclosing phase. The latest hosted run spends 47.15s
+constructing, 29.93s loading, 51.81s executing and 1.86s on other harness work:
+construction and loading account for 59% of its total. These are API wall times,
 not pure guest instruction CPU times, and profiling is not a speedup claim.
 
 The detailed fresh-construction follow-up retains safe atom-word prefixes,

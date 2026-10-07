@@ -2836,3 +2836,30 @@ The phase probe now measures 3.66 ms parsing, 1.00 ms validation and 0.37 ms cal
 resolution in its temporary native parent. These are diagnostic medians, not
 paired speedup claims. Final source, binary, frontend and harness hashes match
 the verified release artifacts; no false-debug timings are claimed as release.
+
+
+Compiled bootstrap module reuse shares immutable native code while keeping every
+interpreter instance fresh. The existing factory binary argument accepts a
+caller-owned `WebAssembly.Module`, or continues to read a path/URL as before.
+The spec runner compiles once inside each suite run and creates a new instance
+for every engine; the hosted interpreter still parses and loads optimized WAT
+for each creation. No global path cache, guest state cache or snapshot is added.
+The module remains valid independently of later changes to its source file;
+callers choose when to compile replacement bytes.
+
+Alternating construction samples (nine rounds of twenty creations) measure
+native path/module medians of 0.995/0.156 ms and hosted
+path/module medians of 7.367/6.182 ms. One-time preparation costs
+0.540 ms in that process. This avoids repeated reads and byte-based
+instantiation; Node's own compilation cache means it is not purely a compile
+speedup. Complete paired audits take 2m16.29s before and
+2m11.01s after, with preparation included in total/other.
+Both pass all 65,199 commands across 258 files with zero failures or skips.
+Construction takes 57.20s before and
+46.56s after. Loading rises from
+24.21s to 30.07s, offsetting part of that saving;
+execution stays essentially flat. The paired overall improvement is about 4%.
+The final full suite passes 246 tests in 2m18.02s; its hosted audit takes
+2m10.75s. The native audit also passes the full inventory.
+New concurrent-creation tests verify isolated globals, memory/growth, fuel,
+reloads, validation failures and exported functions for both runtime levels.

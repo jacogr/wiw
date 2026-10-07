@@ -18,9 +18,12 @@ const maxInvocationDepth = 128;
 // Backing memory and address origins stay private to the host adapters.
 const engineBackends = new WeakMap();
 
-/** Load the native interpreter. Guest source is never handed to WebAssembly. */
+/** Create a fresh native interpreter from a binary path or a caller-owned compiled bootstrap module. */
+/** Guest source is never handed to WebAssembly; compiled modules share code, not instance state. */
 export async function createBootstrapInterpreter(binary = new URL('./build/wiw-opt.wasm', import.meta.url)) {
-  const { instance } = await WebAssembly.instantiate(await readFile(binary));
+  const instance = binary instanceof WebAssembly.Module
+    ? new WebAssembly.Instance(binary)
+    : (await WebAssembly.instantiate(await readFile(binary))).instance;
   return wrapInterpreter(instance.exports);
 }
 

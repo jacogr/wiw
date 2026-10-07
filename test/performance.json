@@ -65404,6 +65404,207 @@
       },
       "buildModeFix": "Compare the serialized flags when make reads the Makefile, and force every derived stage on a mode/configuration change. This fixes stale debug artifacts after rapid release switches on coarse-timestamp make versions. No tool rebuild occurs when flags are unchanged.",
       "tradeoffs": "Compact source improves paired construction 19%; most loader/execution controls are close, with 4-6% memory/vector execution gains. Matched complete audit improves 10%, including 17% lower construction time. Ordinary formatted optimized WAT regresses construction 24% and is not used. Accidental stale-debug artifacts were diagnosed, excluded from release performance claims, and release-only verification was rerun after the build fix. No compiled bootstrap module reuse or hosted state cache."
+    },
+    {
+      "label": "Reuse caller-owned compiled bootstrap modules",
+      "retained": true,
+      "node": "v24.11.1",
+      "binaryen": "wasm-opt version 133",
+      "tag": "wg-3.0",
+      "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
+      "runtime": "interpreted",
+      "interpreterDepth": 1,
+      "engineSource": "wiw-opt.wat",
+      "engineSourceSha256": "f2d104a1eae64b4fbfc9244bb4bbd5d47a957903452b2649c7cdbabd682ce59f",
+      "binarySha256": "ee7dd296258089f6cdf5cff559d697608ad541679f8de3a118e3d1f21f2c07ba",
+      "frontendSha256": "174f96ef880f306238aa3e9ff277b369658f02dca9b495fbc01e8196cc6bc8e9",
+      "harnessSha256": "35a60c50e29c63c833f3e829b7442c3d5b17ebd476e4a544d3faeb0416ab1223",
+      "benchmarkToolSha256": "1cd73e0ac9d21674b29c3bd250d0b34d1951f8cd93a30da815254cd3a290f913",
+      "construction": {
+        "node": "v24.11.1",
+        "binaryen": "wasm-opt version 133",
+        "engineSourceSha256": "f2d104a1eae64b4fbfc9244bb4bbd5d47a957903452b2649c7cdbabd682ce59f",
+        "binarySha256": "ee7dd296258089f6cdf5cff559d697608ad541679f8de3a118e3d1f21f2c07ba",
+        "phase": "construction",
+        "repeats": 20,
+        "samples": 9,
+        "cases": [
+          {
+            "name": "bootstrap",
+            "firstMs": 0.6730840000000029,
+            "medianMs": 0.9945999499999516,
+            "elapsedMs": [
+              1.1794582499999997,
+              1.0472750000000075,
+              1.0683414999999967,
+              1.0030353999999988,
+              0.982910449999963,
+              0.9945999499999516,
+              0.9756522500000073,
+              0.978100100000006,
+              0.9775249999999914
+            ]
+          },
+          {
+            "name": "bootstrap-module",
+            "firstMs": 0.11141700000000299,
+            "medianMs": 0.15602715000000558,
+            "elapsedMs": [
+              0.12411664999999986,
+              0.15602715000000558,
+              0.22911874999998644,
+              0.15821879999997462,
+              0.1635102499999789,
+              0.1457168000000138,
+              0.1739166999999952,
+              0.14884789999996428,
+              0.14182079999998223
+            ]
+          },
+          {
+            "name": "interpreted",
+            "firstMs": 11.831959000000005,
+            "medianMs": 7.36684574999997,
+            "elapsedMs": [
+              7.674929200000003,
+              7.434260500000017,
+              7.501345850000007,
+              7.2606502000000095,
+              7.454139699999985,
+              7.247927100000038,
+              7.36684574999997,
+              7.329518800000028,
+              7.307652000000052
+            ]
+          },
+          {
+            "name": "interpreted-module",
+            "firstMs": 7.588707999999997,
+            "medianMs": 6.182318700000087,
+            "elapsedMs": [
+              6.232593749999995,
+              6.261110399999995,
+              6.17630415000001,
+              6.220099899999991,
+              6.14037500000004,
+              6.149077199999942,
+              6.182318700000087,
+              6.101606149999975,
+              7.654731050000009
+            ]
+          }
+        ],
+        "modulePreparationMs": 0.5400829999999956
+      },
+      "pairedStandaloneAudit": {
+        "before": {
+          "elapsedMs": 136290.574583,
+          "passed": 65199,
+          "failed": 0,
+          "skipped": 0,
+          "phases": {
+            "construction": {
+              "elapsedMs": 57203.41956400015,
+              "count": 7393
+            },
+            "loading": {
+              "elapsedMs": 24209.777640000313,
+              "count": 7393
+            },
+            "execution": {
+              "elapsedMs": 52320.482043000244,
+              "count": 57984
+            },
+            "other": {
+              "elapsedMs": 2556.8953359992884
+            }
+          },
+          "fileCount": 258
+        },
+        "after": {
+          "elapsedMs": 131013.879125,
+          "passed": 65199,
+          "failed": 0,
+          "skipped": 0,
+          "phases": {
+            "construction": {
+              "elapsedMs": 46559.06960600018,
+              "count": 7393
+            },
+            "loading": {
+              "elapsedMs": 30067.098567999652,
+              "count": 7393
+            },
+            "execution": {
+              "elapsedMs": 52337.49661200112,
+              "count": 57984
+            },
+            "other": {
+              "elapsedMs": 2050.2143389990524
+            }
+          },
+          "fileCount": 258
+        },
+        "method": "Same release binary and optimized interpreter WAT. Baseline reads/instantiates bootstrap bytes per engine; after compiles once per suite and instantiates fresh state. One-time preparation is included in total/other. Runs are sequential on the same machine."
+      },
+      "fullSpec": {
+        "elapsedMs": 130753.25725000001,
+        "passed": 65199,
+        "failed": 0,
+        "skipped": 0,
+        "phases": {
+          "construction": {
+            "elapsedMs": 47150.54694899969,
+            "count": 7393
+          },
+          "loading": {
+            "elapsedMs": 29933.010093000237,
+            "count": 7393
+          },
+          "execution": {
+            "elapsedMs": 51808.496976998606,
+            "count": 57984
+          },
+          "other": {
+            "elapsedMs": 1861.2032310014765
+          }
+        },
+        "fileCount": 258
+      },
+      "bootstrapAudit": {
+        "elapsedMs": 5086.18725,
+        "passed": 65199,
+        "failed": 0,
+        "skipped": 0,
+        "phases": {
+          "construction": {
+            "elapsedMs": 980.8947729999904,
+            "count": 7393
+          },
+          "loading": {
+            "elapsedMs": 1488.5949970000115,
+            "count": 7393
+          },
+          "execution": {
+            "elapsedMs": 849.4160210000134,
+            "count": 57984
+          },
+          "other": {
+            "elapsedMs": 1767.2814589999844
+          }
+        },
+        "fileCount": 258
+      },
+      "validation": {
+        "tests": 246,
+        "failed": 0,
+        "skipped": 0,
+        "moduleInstanceIsolation": true
+      },
+      "completeTestSuite": {
+        "elapsedMs": 138017.353
+      },
+      "tradeoffs": "Explicit caller-owned WebAssembly.Module only. No global path cache or interpreter snapshot. Fresh native instance, hosted WAT parse/load, guest state and frontend adapters per factory call. Avoids repeated file IO and byte-based instantiation; Node can already cache compiled byte input, so the measured saving is not attributed solely to compilation. The paired audit saves 10.64s of construction, offset by 5.86s slower loading; execution is flat. Overall gain is about 4%, and phase changes may include scheduling/GC effects."
     }
   ],
   "experiments": [

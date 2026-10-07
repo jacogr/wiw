@@ -15,22 +15,33 @@ const guest='(module (global (export "g") (mut i32) (i32.const 41)) (func (expor
 const report={node:process.version,binaryen:execFileSync('wasm-opt',['--version'],{encoding:'utf8'}).trim(),
   engineSourceSha256:createHash('sha256').update(source).digest('hex'),
   binarySha256:createHash('sha256').update(await readFile(binary)).digest('hex'),phase:'construction',repeats,samples,cases:[]};
-for (const [name,create] of [
+// Caller-owned compiled code is reused; each factory still creates fresh state.
+const preparationStart=performance.now();
+const module=await WebAssembly.compile(await readFile(binary));
+report.modulePreparationMs=performance.now()-preparationStart;
+const cases=[
   ['bootstrap',()=>createBootstrapInterpreter(binary)],
-  ['interpreted',()=>createInterpreter(binary,{source})]
-]) {
-  const firstStart=performance.now(),first=await create(),firstMs=performance.now()-firstStart;
-  first.load(guest);assert.equal(first.invoke('run'),42);first.setGlobal('g',-1);
-  const elapsedMs=[];
-  for(let sample=0;sample<samples;sample++) {
+  ['bootstrap-module',()=>createBootstrapInterpreter(module)],
+  ['interpreted',()=>createInterpreter(binary,{source})],
+  ['interpreted-module',()=>createInterpreter(module,{source})]
+].map(([name,create])=>({name,create,elapsedMs:[]}));
+for(const entry of cases) {
+  const start=performance.now();entry.first=await entry.create();entry.firstMs=performance.now()-start;
+  entry.first.load(guest);assert.equal(entry.first.invoke('run'),42);entry.first.setGlobal('g',-1);
+}
+// Reverse the case order on alternate rounds to limit warmup/order bias.
+for(let sample=0;sample<samples;sample++) {
+  for(const entry of sample%2?[...cases].reverse():cases) {
     let elapsed=0;
     for(let repeat=0;repeat<repeats;repeat++) {
-      const start=performance.now(),engine=await create();elapsed+=performance.now()-start;
+      const start=performance.now(),engine=await entry.create();elapsed+=performance.now()-start;
       engine.load(guest);assert.equal(engine.invoke('run'),42);
-      engine.setGlobal('g',repeat);assert.equal(first.getGlobal('g'),-1);
+      engine.setGlobal('g',repeat);assert.equal(entry.first.getGlobal('g'),-1);
     }
-    elapsedMs.push(elapsed/repeats);
+    entry.elapsedMs.push(elapsed/repeats);
   }
+}
+for(const {name,firstMs,elapsedMs} of cases) {
   const medianMs=[...elapsedMs].sort((a,b)=>a-b)[Math.floor(samples/2)];
   report.cases.push({name,firstMs,medianMs,elapsedMs});
   console.log(`${name}: ${medianMs.toFixed(2)} ms per construction; first ${firstMs.toFixed(2)} ms`);
