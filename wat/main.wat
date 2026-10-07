@@ -18,6 +18,7 @@ m4_include(<!m4/constants.m4!>)m4_dnl
 	m4_include(<!results.wat!>)
 	m4_include(<!vectors.wat!>)
 	m4_include(<!float.wat!>)
+	m4_include(<!type-index.wat!>)
 	m4_include(<!signatures.wat!>)
 	m4_include(<!tables.wat!>)
 	m4_include(<!imports.wat!>)

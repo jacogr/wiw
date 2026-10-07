@@ -69,3 +69,11 @@ m4_define(<!M4_NAME_HASH_PRIME!>,<!16777619!>)m4_dnl
 m4_define(<!M4_NAME_INDEX_LENGTH_OFFSET!>,<!4!>)m4_dnl
 m4_define(<!M4_NAME_INDEX_VALUE_OFFSET!>,<!8!>)m4_dnl
 m4_define(<!M4_NAME_INDEX_GENERATION_OFFSET!>,<!12!>)m4_dnl
+m4_dnl Temporary signature buckets reuse floating scratch after parsing all literals.
+m4_define(<!M4_SIGNATURE_HASH_OFFSET!>,<!36!>)m4_dnl
+m4_define(<!M4_SIGNATURE_LINK_OFFSET!>,<!40!>)m4_dnl
+m4_define(<!M4_SIGNATURE_BUCKET_MASK!>,<!1023!>)m4_dnl
+m4_define(<!M4_SIGNATURE_BUCKET_BYTES!>,<!4096!>)m4_dnl
+m4_define(<!M4_SIGNATURE_MIN_TYPES!>,<!16!>)m4_dnl
+m4_define(<!M4_SIGNATURE_MIN_FUNCTIONS!>,<!32!>)m4_dnl
+m4_define(<!M4_SIGNATURE_REFERENCE_TOKEN!>,<!8!>)m4_dnl

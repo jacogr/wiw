@@ -2486,3 +2486,52 @@ or skips; isolated hosted coverage takes 167,904.056 ms (2m47.90s). Whole-suite
 timing remains roughly flat compared with the preceding 178,465.648 ms run.
 Raw loading/construction/invocation samples and source/binary hashes are retained
 separately; no CI performance threshold or spec input is changed.
+
+### Hash-filtered implicit function signature interning
+
+Larger type/function namespaces use temporary hash buckets when expanding inline
+function types. Small modules retain the existing scan. Ordered parameter/result
+counts, numeric widths and vector codes contribute to the hash. All reference
+codes share a coarse token, so equivalent concrete or recursive references never
+fail the hash filter merely because their descriptor IDs differ. Every surviving
+candidate still passes the original recursive-aware structural equality check.
+
+Only the existing canonical implicit-type candidates enter the buckets: final
+singleton function declarations without a declared parent. Reverse insertion of
+explicit declarations preserves source order. Newly appended implicit signatures
+join their buckets only after no prior candidate matched; type index assignment
+and type capacity errors keep their original semantics. Explicit type uses,
+recursive-group equality, declared subtyping and runtime call checks retain
+their existing handling.
+
+The 1,024 bucket heads reuse the 4 KiB floating-point temporary region after all
+source literals have been parsed. Hashes and chain links use spare heap descriptor
+fields at offsets 36 and 40. No new arena, host cache or public ABI is added.
+Each indexed interning pass clears and rebuilds its buckets; later literal parsing
+may reuse the same scratch independently. The hash and link fields have no role
+in heap equality, foreign type descriptions or runtime function execution.
+
+Bootstrap/hosted ABI regressions check earliest reusable indices, new implicit
+type ordering, coarse reference hash collisions, exclusion of recursive groups
+and declared subtypes, equal concrete references with different descriptor IDs,
+reuse at complete type capacity and reloads. Crowded repeated signatures and
+many distinct inline signatures join the bounded loading benchmarks.
+
+A same-layout reload regression also parses an exact decimal float after signature
+buckets have occupied the identical floating scratch addresses, then verifies
+its raw result bits in both runtimes.
+
+Seven alternating samples of three loads each improve hosted crowded repeated
+signatures and many distinct inline signatures by 16.0% and 18.6%. Integer and
+ordinary many-function controls are roughly flat; the declared-type control is
+2.6% slower. Fresh construction is 0.9% slower in its alternating pair. Separate
+invocation samples range from 1.5% faster to 1.8% slower, with no execution speedup
+claimed. These targeted gains and tradeoffs are recorded separately.
+
+The optimized engine passes all 234 tests in 174,580.904 ms (2m54.58s), versus
+179,347.656 ms in the preceding run. Both standalone audits pass 65,199 commands
+across 258 files with zero failures/skips. Hosted coverage takes 167,314.469 ms
+(2m47.31s), roughly flat against the preceding 167,904.056 ms audit. Final focused
+capacity and floating-scratch checks also pass after the complete audits.
+All timed comparisons run without overlapping compilation, tests or audits;
+raw samples and source/binary/frontend hashes remain in performance history.

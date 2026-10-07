@@ -440,6 +440,14 @@
 		(local $k i32)
 		(local $f i32)
 		(local $s i32)
+		(local $use-index i32)
+		(local $ready i32)
+		(local $hash i32)
+		(local $link i32)
+
+		(local.set $use-index
+			(i32.or (i32.ge_u (global.get $signature-count) (i32.const M4_SIGNATURE_MIN_TYPES))
+				(i32.ge_u (global.get $function-count) (i32.const M4_SIGNATURE_MIN_FUNCTIONS))))
 
 		;; Visit functions in source order so numeric references see the prescribed implicit type indices.
 		(block $done
@@ -449,20 +457,57 @@
 				;; Only an absent type use adds an implicit declaration.
 				(if (i32.eqz (i32.load offset=12 (call $function-type (local.get $i))))
 					(then
-						(local.set $j (i32.const 0))
-						;; Stop at an existing structural match or the end of the current type namespace.
-						(block $found
-							;; Include previously expanded types when deduplicating later functions.
-							(loop $types
-								(br_if $found (i32.eq (local.get $j) (global.get $signature-count)))
-								(br_if $found
-									(i32.and
-										(call $implicit-heap-type (local.get $j))
-										(call $function-matches (local.get $i) (call $signature (local.get $j)))
+						;; Larger namespaces filter structural comparisons through temporary hash buckets.
+						(if (local.get $use-index)
+							(then
+								;; Literal scratch becomes available only after parsing has completed.
+								(if (i32.eqz (local.get $ready))
+									(then (call $index-declared-signatures) (local.set $ready (i32.const 1)))
+								)
+								(local.set $f (call $function (local.get $i)))
+								(local.set $hash (call $signature-hash (call $local-type (local.get $i) (i32.const 0))
+									(i32.load offset=16 (local.get $f)) (i32.load offset=24 (local.get $f))))
+								(local.set $link (i32.load (i32.add (global.get $fp-t-base)
+									(i32.mul (i32.and (local.get $hash) (i32.const M4_SIGNATURE_BUCKET_MASK)) (i32.const M4_U32_BYTES)))))
+								(local.set $j (global.get $signature-count))
+								;; A bucket miss retains the original append-at-end behavior.
+								(block $found
+									;; Hash equality is only a filter; collisions still require complete structural equality.
+									(loop $candidates
+										(br_if $found (i32.eqz (local.get $link)))
+										(local.set $s (call $heap-record (i32.sub (local.get $link) (i32.const 1))))
+										;; Differing hashes cannot represent equal ordered signatures.
+										(if (i32.eq (i32.load offset=M4_SIGNATURE_HASH_OFFSET (local.get $s)) (local.get $hash))
+											(then
+												;; References retain the existing recursive-aware equality checks.
+												(if (call $function-matches (local.get $i) (call $signature (i32.sub (local.get $link) (i32.const 1))))
+													(then (local.set $j (i32.sub (local.get $link) (i32.const 1))) (br $found))
+												)
+											)
+										)
+										(local.set $link (i32.load offset=M4_SIGNATURE_LINK_OFFSET (local.get $s)))
+										(br $candidates)
 									)
 								)
-								(local.set $j (i32.add (local.get $j) (i32.const 1)))
-								(br $types)
+							)
+							;; Tiny modules retain the original scan without hashing or bucket setup.
+							(else
+								(local.set $j (i32.const 0))
+								;; Stop at an existing structural match or the end of the current type namespace.
+								(block $found
+									;; Include previously expanded types when deduplicating later functions.
+									(loop $types
+										(br_if $found (i32.eq (local.get $j) (global.get $signature-count)))
+										(br_if $found
+											(i32.and
+												(call $implicit-heap-type (local.get $j))
+												(call $function-matches (local.get $i) (call $signature (local.get $j)))
+											)
+										)
+										(local.set $j (i32.add (local.get $j) (i32.const 1)))
+										(br $types)
+									)
+								)
 							)
 						)
 						;; A new signature has anonymous identity and copies the function's scalar vector.
@@ -494,6 +539,11 @@
 										(br $params)
 									)
 								)
+								;; A newly appended type could not equal an earlier candidate; add it for subsequent functions.
+								(if (local.get $use-index)
+									(then (call $index-signature (local.get $j) (local.get $hash)))
+								)
+
 								(global.set $signature-count (i32.add (global.get $signature-count) (i32.const 1)))
 							)
 						)

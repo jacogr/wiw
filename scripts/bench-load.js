@@ -76,6 +76,15 @@ cases.types=`(module
   ${Array.from({length:128},(_,index)=>`(func $fn_${index} (type $type_${index}) i32.const 0)`).join(' ')}
   (func (export "run") (result i32) call $fn_127))`;
 
+// Crowded implicit signatures measure structural type reuse separately from named lookup.
+cases.repeatedSignatures=`(module
+  ${Array.from({length:128},(_,index)=>`(type (func (param ${'i32 '.repeat(index)}) (result i32)))`).join(' ')}
+  ${Array.from({length:256},()=>`(func (param ${'i32 '.repeat(127)}) (result i32) i32.const 0)`).join(' ')}
+  (func (export "run") (result i32) i32.const 0))`;
+cases.mixedSignatures=`(module
+  ${Array.from({length:256},(_,index)=>`(func (param ${'i32 '.repeat(index%128)}) (result i32) i32.const 0)`).join(' ')}
+  (func (export "run") (result i32) i32.const 0))`;
+
 // Hand-encode binary equivalents so the benchmark never compiles guest modules.
 const uleb=value=>{
   const bytes=[];
