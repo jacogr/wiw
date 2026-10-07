@@ -3,7 +3,7 @@
   "revision": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
   "runtime": "interpreted",
   "interpreterDepth": 1,
-  "engineSourceSha256": "6c5c4fe5f55059adc98b7f06126b64f756877810097d84b90512f7d116b4cdd5",
+  "engineSourceSha256": "5171a6bd475b016eb1d814a0fbe266877467ea099b9da82d48821a65a8c3d4d5",
   "passed": 65199,
   "skipped": 0,
   "failed": 0,
@@ -13,129 +13,129 @@
     {
       "binary": "wiw-opt.wasm",
       "optimization": "-O4 --converge --strip-debug --strip-producers",
-      "elapsedMs": 124723.88025,
+      "elapsedMs": 128647.633458,
       "slowestFiles": [
         {
           "file": "return_call_ref.wast",
-          "elapsedMs": 16277.473209000003,
+          "elapsedMs": 18196.307834000007,
           "phases": {
             "construction": {
-              "elapsedMs": 103.13454299996374,
+              "elapsedMs": 104.33387799996126,
               "count": 17
             },
             "loading": {
-              "elapsedMs": 76.40700000000652,
+              "elapsedMs": 78.31604200003494,
               "count": 17
             },
             "execution": {
-              "elapsedMs": 16094.155331999995,
+              "elapsedMs": 18008.908916000015,
               "count": 35
             },
             "other": {
-              "elapsedMs": 3.7763340000383323
+              "elapsedMs": 4.748997999995481
             }
           }
         },
         {
           "file": "return_call.wast",
-          "elapsedMs": 13652.711542000005,
+          "elapsedMs": 15177.363042000004,
           "phases": {
             "construction": {
-              "elapsedMs": 92.2872500000085,
+              "elapsedMs": 91.37270800001716,
               "count": 15
             },
             "loading": {
-              "elapsedMs": 65.89433299997472,
+              "elapsedMs": 65.64470800002164,
               "count": 15
             },
             "execution": {
-              "elapsedMs": 13491.632248000024,
+              "elapsedMs": 15016.930289999997,
               "count": 33
             },
             "other": {
-              "elapsedMs": 2.8977109999977984
+              "elapsedMs": 3.415335999969102
             }
           }
         },
         {
           "file": "simd/simd_const.wast",
-          "elapsedMs": 5302.753624999998,
+          "elapsedMs": 5286.3865420000075,
           "phases": {
             "construction": {
-              "elapsedMs": 3030.336707999988,
+              "elapsedMs": 3012.568292999931,
               "count": 494
             },
             "loading": {
-              "elapsedMs": 2224.2280910000845,
+              "elapsedMs": 2222.9091259996785,
               "count": 494
             },
             "execution": {
-              "elapsedMs": 10.538121000121464,
+              "elapsedMs": 11.058166000031633,
               "count": 265
             },
             "other": {
-              "elapsedMs": 37.650704999803565
+              "elapsedMs": 39.85095700036618
             }
           }
         },
         {
           "file": "const.wast",
-          "elapsedMs": 5183.812375000001,
+          "elapsedMs": 5198.0348330000015,
           "phases": {
             "construction": {
-              "elapsedMs": 2968.7511339999837,
+              "elapsedMs": 2952.725886999964,
               "count": 479
             },
             "loading": {
-              "elapsedMs": 2152.8889140000574,
+              "elapsedMs": 2183.5542829999613,
               "count": 479
             },
             "execution": {
-              "elapsedMs": 11.791379000009329,
+              "elapsedMs": 11.831833000007464,
               "count": 300
             },
             "other": {
-              "elapsedMs": 50.38094799995088
+              "elapsedMs": 49.92283000006864
             }
           }
         },
         {
           "file": "return_call_indirect.wast",
-          "elapsedMs": 3171.406209000008,
+          "elapsedMs": 3473.3700420000096,
           "phases": {
             "construction": {
-              "elapsedMs": 188.30404400000407,
+              "elapsedMs": 187.73779199995624,
               "count": 31
             },
             "loading": {
-              "elapsedMs": 133.23512199998368,
+              "elapsedMs": 135.43224800002645,
               "count": 31
             },
             "execution": {
-              "elapsedMs": 2845.234335000001,
+              "elapsedMs": 3144.5078770000255,
               "count": 49
             },
             "other": {
-              "elapsedMs": 4.632708000019193
+              "elapsedMs": 5.692125000001397
             }
           }
         }
       ],
       "phases": {
         "construction": {
-          "elapsedMs": 46737.37007500001,
+          "elapsedMs": 45830.41582599979,
           "count": 7393
         },
         "loading": {
-          "elapsedMs": 31093.58076700017,
+          "elapsedMs": 31035.222293999577,
           "count": 7393
         },
         "execution": {
-          "elapsedMs": 44857.377339001614,
+          "elapsedMs": 49724.15114199981,
           "count": 57984
         },
         "other": {
-          "elapsedMs": 2035.5520689982077
+          "elapsedMs": 2057.844196000806
         }
       }
     }

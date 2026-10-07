@@ -229,6 +229,16 @@ for (const binary of ['wiw-opt.wasm']) {
     assert.equal(deepest.invoke('get',0),(2n<<64n)|1n);
     assert.equal(deepest.invoke('get',16),(1n<<127n)|((1n<<64n)-1n));
     assert.equal(deepest.invoke('get',32),(2n<<64n)|1n);
+    // Unaligned segment bytes reach complete vector slots through two hosted levels.
+    deepest.load(`(module (type $A (array (mut v128)))
+      (data $d "x\\01\\00\\00\\00\\00\\00\\00\\00\\02\\00\\00\\00\\00\\00\\00\\00")
+      (func (export "new") (result v128) i32.const 1 i32.const 1 array.new_data $A $d i32.const 0 array.get $A)
+      (func (export "init") (result v128) (local $a (ref null $A))
+        i32.const 1 array.new_default $A local.set $a
+        local.get $a i32.const 0 i32.const 1 i32.const 1 array.init_data $A $d
+        local.get $a i32.const 0 array.get $A))`);
+    assert.equal(deepest.invoke('new'),(2n<<64n)|1n);
+    assert.equal(deepest.invoke('init'),(2n<<64n)|1n);
     deepest.loadBinary(Uint8Array.from([
       0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,
       7,10,1,6,97,110,115,119,101,114,0,0,

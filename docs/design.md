@@ -3318,3 +3318,35 @@ no matched whole-suite speedup is claimed. Public benchmark smoke and two-level
 self-hosting pass. Raw samples, hashes and matrix reports remain in performance
 history. Only this first requested round is complete; GC data-segment
 initialization and simple local moves remain for separate rounds.
+
+
+### GC numeric data-segment initialization
+
+After the existing full source and destination bounds checks, array.new_data
+and array.init_data use a shared numeric transfer helper. Contiguous v128 slots
+use one memory.copy. Widths 1/2/4/8 use exact-width integer loads followed by two
+full i64 stores per 16-byte slot: low bits retain the original representation,
+including floating NaN payloads and signed zero, and all padding is cleared.
+Empty copies return before accessing memory. Checked allocation/ranges bound
+slot-size arithmetic. Reference element segments keep their live decoding and
+identity path. Guest fuel and trap ordering remain unchanged.
+
+Regression tests cover all seven numeric field types, unaligned sources, empty
+and tail counts, partial destinations, dropped and active segment behavior,
+null precedence, wrapped/range failures without mutation, and exact fuel failure
+and recovery. A temporary optimized test export checks every byte of poisoned
+slots and surrounding sentinels with sources ending exactly at physical memory
+end. Quiet and signaling NaN payloads are checked using integer reinterpretation.
+Two hosted layers exercise both vector construction and initialization. Existing
+GC text/binary native oracles and three public benchmark smoke cases pass.
+
+Immutable before/after optimized artifacts use the same frontend. Construction uses 15 alternating rounds of ten fresh hosted factories, checks outside timing. Execution uses three independent instances per variant/runtime/case, three 16-iteration warmups and five alternating 64-iteration samples; median of instance medians. Guest modules reload outside each sample to reset allocation, and length/first/last result checks remain timed. Large scalar cases use 4096 elements; vectors use 4095 to keep the one-byte-offset payload within the fixed 64KiB data limit. No tests overlap timed benchmarks. Complete WAT then WASM targets run sequentially. Full-suite comparisons are historical, not a controlled speedup.
+
+Vector segment elements use one contiguous memory.copy. Smaller fields use exact-width integer loads and two full i64 stores per 16-byte slot, preserving floating bits and clearing padding. Existing source and destination bounds checks precede mutation; reference-segment decoding remains unchanged. Large numeric workloads improve 91-95% native and 34-53% hosted; vectors improve 95-97% in both. Empty/one/tail cases are flat or faster; hosted one-element changes +0.2%. Construction is roughly flat (6.097 to 6.018ms). WASM grows 90 bytes and WAT 750 bytes. No new feature flags, guest compilation, cached state or layout changes.
+
+Both complete targets pass all 200 tests with zero failures/skips: 2m15.57s
+hosted and 0m12.43s native. Each passes all 65,199 wg-3.0 commands
+across 258 files; spec times are 2m08.65s WAT and
+0m06.18s WASM. Samples, hashes and reports are recorded in
+performance history. This completes the second requested round; simple local
+moves remain for a separate round.

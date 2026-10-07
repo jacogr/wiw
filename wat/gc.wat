@@ -1235,6 +1235,59 @@
 		)
 	)
 
+	;; Copy checked numeric segment bytes into complete raw array slots without altering their bits.
+	(func $gc-data
+		(param $dest i32)
+		(param $source i32)
+		(param $count i32)
+		(param $width i32)
+		(local $value i64)
+
+		;; Empty source/destination end pointers require no memory access.
+		(if (i32.eqz (local.get $count)) (then (return)))
+		;; Vector elements already have exactly the complete raw slot's contiguous layout.
+		(if (i32.eq (local.get $width) (i32.const M4_GC_SLOT_BYTES))
+			(then
+				(memory.copy (local.get $dest) (local.get $source)
+					(i32.mul (local.get $count) (i32.const M4_GC_SLOT_BYTES)))
+				(return)
+			)
+		)
+		;; Read only each element's checked source width; full stores also clear all slot padding.
+		(loop $elements
+			(local.set $value
+				;; Eight-byte elements retain their raw integer or floating-point representation.
+				(if (result i64) (i32.eq (local.get $width) (i32.const M4_DOUBLEWORD_BYTES))
+					(then (i64.load (local.get $source)))
+					;; Smaller elements widen their bytes with zero padding, never reading a following element.
+					(else
+						(i64.extend_i32_u
+							;; Four-byte scalar bits use a full word load.
+							(if (result i32) (i32.eq (local.get $width) (i32.const M4_WORD_BYTES))
+								(then (i32.load (local.get $source)))
+								;; Packed fields load exactly one or two bytes.
+								(else
+									;; Halfwords keep both packed bytes.
+									(if (result i32) (i32.eq (local.get $width) (i32.const M4_HALFWORD_BYTES))
+										(then (i32.load16_u (local.get $source)))
+										;; The remaining validated numeric width is one byte.
+										(else (i32.load8_u (local.get $source)))
+									)
+								)
+							)
+						)
+					)
+				)
+			)
+			(i64.store (local.get $dest) (local.get $value))
+			(i64.store offset=M4_VECTOR_HIGH_OFFSET (local.get $dest) (i64.const 0))
+			(local.set $dest (i32.add (local.get $dest) (i32.const M4_GC_SLOT_BYTES)))
+			(local.set $source (i32.add (local.get $source) (local.get $width)))
+			(local.set $count (i32.sub (local.get $count) (i32.const 1)))
+			(br_if $elements (local.get $count))
+		)
+	)
+
 	;; Execute segment-backed array creation, initialization, fill and overlapping copy.
 	(func $gc-array-bulk
 		(param $op i32)
@@ -1384,29 +1437,22 @@
 				(return (i64.const 0))
 			)
 		)
-		;; Transfer each source element into its complete raw destination slot.
-		(block $done
-			;; Numeric data is copied at its packed width; element entries decode their live reference value.
-			(loop $elements
-				(br_if $done (i32.eq (local.get $i) (local.get $count)))
-				(local.set $slot
-					(call $gc-slot (local.get $dest) (i32.add (local.get $dest-index) (local.get $i)))
-				)
-				;; Nonzero data widths distinguish byte data from reference element segments.
-				(if (local.get $width)
-					(then
-						(call $zero-bytes (local.get $slot) (i32.const 16))
-						(memory.copy
-							(local.get $slot)
-							(i32.add
-								(local.get $source)
-								(i32.add (local.get $source-index) (i32.mul (local.get $i) (local.get $width)))
-							)
-							(local.get $width)
-						)
-					)
-					;; Element initialization preserves existing object and function identities.
-					(else
+		;; Numeric segment bytes use exact-width loads or one contiguous vector copy.
+		(if (local.get $width)
+			(then
+				(call $gc-data (call $gc-slot (local.get $dest) (local.get $dest-index))
+					(i32.add (local.get $source) (local.get $source-index))
+					(local.get $count) (local.get $width))
+			)
+			;; Element segments retain their live reference decoding and identity.
+			(else
+				;; Finish once every reference has reached its destination slot.
+				(block $done
+					;; Each entry resolves its current function or object reference independently.
+					(loop $elements
+						(br_if $done (i32.eq (local.get $i) (local.get $count)))
+						(local.set $slot (call $gc-slot (local.get $dest)
+							(i32.add (local.get $dest-index) (local.get $i))))
 						(i64.store
 							(local.get $slot)
 							(i64.extend_i32_u
@@ -1421,10 +1467,10 @@
 								)
 							)
 						)
+						(local.set $i (i32.add (local.get $i) (i32.const 1)))
+						(br $elements)
 					)
 				)
-				(local.set $i (i32.add (local.get $i) (i32.const 1)))
-				(br $elements)
 			)
 		)
 		(global.set $gc-high (i64.const 0))

@@ -235,6 +235,21 @@ for(const [name,field,value,check] of [
         local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
 }
 
+// Reinitialize live GC arrays from passive data without repeated allocations in timed samples.
+for(const [name,field,width] of [['gcDataPacked','i8',1],['gcDataScalar','i64',8],['gcDataVector','v128',16]]) {
+  const count=1024,bytes=Array.from({length:count*width+1},()=> '\\ff').join('');
+  const check=field==='i8'?'array.get_u $A i32.const 255 i32.ne':field==='i64'?
+    'array.get $A i64.const -1 i64.ne':'array.get $A v128.const i64x2 -1 -1 i8x16.eq i8x16.all_true i32.eqz';
+  cases[name]=`(module (type $A (array (mut ${field}))) (data $d "${bytes}")
+    (global $a (mut (ref null $A)) (ref.null $A))
+    (func $setup i32.const ${count} array.new_default $A global.set $a) (start $setup)
+    (func (export "run") (param i64) (result i64)
+      (loop $again global.get $a i32.const 0 i32.const 1 i32.const ${count} array.init_data $A $d
+        global.get $a i32.const ${count-1} ${check} if unreachable end
+        local.get 0 i64.const 1 i64.sub local.set 0
+        local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
+}
+
 const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
 const report = {node: process.version, binaryen: execFileSync('wasm-opt', ['--version'], {encoding:'utf8'}).trim(),
   engineSourceSha256: createHash('sha256').update(await readFile(new URL('../build/wiw-opt.wat', import.meta.url))).digest('hex'),
