@@ -77,12 +77,23 @@ WAT, elaborates them to bounded WAT text, and uses the same parser and validator
 No guest binary is passed to native WebAssembly compilation.
 
 The Node API exposes `load(source, imports = {})`, `loadBinary(bytes, imports = {})`,
-`invoke(name, ...args)`, `signature(name)` and `setFuel(limit)`. Source can be a
+`invoke(name, ...args)`, `signature(name)`, `setFuel(limit)` and `setFuel64(limit)`. Source can be a
 string or UTF-8 byte array. i32 uses Number, i64 uses BigInt, and floats use
 Number; v128 uses a BigInt holding its 128 raw bits. Void returns `undefined`,
 and multiple results return an array. `invokeRaw(name, ...{type, bits})` accepts
 numeric type names and BigInt bits, returning `{type, bits}` (null type for void).
 Use it when exact NaN bits matter; JavaScript Number transport can quiet NaNs.
+
+Fuel is an instruction budget renewed for each invocation, including its called
+functions and import resumptions. `setFuel` accepts an unsigned 32-bit Number;
+`setFuel64` accepts an unsigned 64-bit BigInt (`0n` through `(1n << 64n) - 1n`).
+Exhaustion traps at the next instruction; a larger budget does not change speed.
+Changing fuel in a host callback affects subsequent invocations, not the active
+one. Invalid setters leave the previous budget intact.
+
+For local WASI integration tests, [the test host adapter](docs/wasi.md) provides
+Preview 1 imports and process-exit handling without a guest-specific target or
+repository dependency.
 
 `getGlobal`/`setGlobal`, `readMemory`/`writeMemory`, and `growMemory` provide
 checked resource access. Memory reads return copies and do not require a memory
@@ -221,11 +232,11 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` / `check-wat` run passes all 219 tests in 131,906.149 ms
-(2m11.91s). `check-wasm` passes the same 219 registered tests in
-11,206.767 ms (0m11.21s). Each executes all 65,199 spec commands across 258 files:
-WAT takes 124,992.938 ms (2m04.99s), and WASM takes
-5,358.863 ms (0m05.36s), with zero failures or skips.
+The latest complete `make check` / `check-wat` run passes all 222 tests in 127,436.416 ms
+(2m07.44s). `check-wasm` passes the same 222 registered tests in
+11,026.588 ms (0m11.03s). Each executes all 65,199 spec commands across 258 files:
+WAT takes 120,467.034 ms (2m00.47s), and WASM takes
+5,510.750 ms (0m05.51s), with zero failures or skips.
 The latest optimization sweep adds native SIMD operations, bulk table handling,
 bounded string/data decoding, linked local-initialization rollback, wider tail
 frame reuse and initialization of records on allocation. Paired hosted samples
