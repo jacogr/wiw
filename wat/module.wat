@@ -714,6 +714,8 @@
 		(local $i i32)
 		(local $record i32)
 
+		(local $op i32)
+
 		(call $resolve-reference-types)
 		(call $validate-heap-types)
 		(call $intern-function-types)
@@ -735,14 +737,15 @@
 				(local.set $record
 					(i32.add (global.get $code-base) (i32.mul (local.get $i) (i32.const 16)))
 				)
+				(local.set $op (i32.load (local.get $record)))
 				;; Direct calls resolve against the completed function namespace.
 				(if
 					(i32.or
 						(i32.or
-							(i32.eq (i32.load (local.get $record)) (i32.const 36))
-							(i32.eq (i32.load (local.get $record)) (i32.const 438))
+							(i32.eq (local.get $op) (i32.const M4_OP_CALL))
+							(i32.eq (local.get $op) (i32.const M4_OP_RETURN_CALL))
 						)
-						(i32.eq (i32.load (local.get $record)) (i32.const 195))
+						(i32.eq (local.get $op) (i32.const M4_OP_REF_FUNC))
 					)
 					(then
 						(i32.store offset=4
@@ -757,9 +760,9 @@
 				)
 				;; Global names resolve only after the entire module namespace is available.
 				(if
-					(i32.and
-						(i32.ge_u (i32.load (local.get $record)) (i32.const 49))
-						(i32.le_u (i32.load (local.get $record)) (i32.const 50))
+					(i32.le_u
+						(i32.sub (local.get $op) (i32.const M4_OP_GLOBAL_GET))
+						(i32.const m4_eval(M4_OP_GLOBAL_SET-M4_OP_GLOBAL_GET))
 					)
 					(then
 						(i32.store offset=4

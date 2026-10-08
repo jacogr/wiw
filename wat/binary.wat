@@ -13,7 +13,7 @@
 	(global $bin-type-map (mut i32) (i32.const 0))
 	(global $bin-constant-base (mut i32) (i32.const 0))
 	(global $bin-function-map (mut i32) (i32.const 0))
-	(data (i32.const 3877) "0123456789abcdef")
+	(data (i32.const M4_BINARY_HEX_DIGITS_BASE) "0123456789abcdef")
 	;; Read one byte without crossing the current section or function-body boundary.
 	(func $binary-read
 		(result i32)
@@ -182,7 +182,7 @@
 			)
 		)
 		;; Text expansion has a separate capacity from guest code and data arenas.
-		(if (i32.ge_u (global.get $bin-used) (i32.const 1048576))
+		(if (i32.ge_u (global.get $bin-used) (i32.const M4_BINARY_TEXT_BYTES))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
@@ -205,7 +205,7 @@
 			)
 		)
 		;; A complete fragment must fit before any byte in it is written.
-		(if (i32.gt_u (global.get $bin-used) (i32.sub (i32.const 1048576) (local.get $width)))
+		(if (i32.gt_u (global.get $bin-used) (i32.sub (i32.const M4_BINARY_TEXT_BYTES) (local.get $width)))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
@@ -249,8 +249,8 @@
 		;; Include the trailing space in the output bound and reject oversized spans without overflow.
 		(if
 			(i32.or
-				(i32.gt_u (local.get $n) (i32.const 1048575))
-				(i32.gt_u (global.get $bin-used) (i32.sub (i32.const 1048575) (local.get $n)))
+				(i32.gt_u (local.get $n) (i32.const m4_eval(M4_BINARY_TEXT_BYTES - 1)))
+				(i32.gt_u (global.get $bin-used) (i32.sub (i32.const m4_eval(M4_BINARY_TEXT_BYTES - 1)) (local.get $n)))
 			)
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
@@ -282,7 +282,7 @@
 	(func $binary-digit
 		(param $digit i32)
 
-		(call $binary-byte (i32.load8_u (i32.add (i32.const 3877) (local.get $digit))))
+		(call $binary-byte (i32.load8_u (i32.add (i32.const M4_BINARY_HEX_DIGITS_BASE) (local.get $digit))))
 	)
 
 	;; Emit an unsigned slot as a hexadecimal integer token with no precision loss.
@@ -565,6 +565,11 @@
 		(local $end i32)
 		(local $cursor i32)
 		(local $byte i32)
+		(local $output i32)
+		(local $padding i32)
+		(local $plain v128)
+		(local $mask i32)
+		(local $width i32)
 
 		(local.set $end (call $binary-range (call $binary-u32)))
 		(local.set $cursor (global.get $bin-pos))
@@ -593,21 +598,89 @@
 			)
 		)
 		(call $binary-byte (i32.const 34))
-		;; Copy every payload byte as an escaped pair to keep the output source ASCII and exact.
+		;; Emit an ASCII string with bounded escaping while preserving its original expanded length.
 		(block $done
+			(br_if $done (global.get $error))
+			;; A fully reserved payload and closing quote need no per-byte cursor or capacity checks.
+			(if (i32.le_u (global.get $bin-used) (i32.const m4_eval(M4_BINARY_TEXT_BYTES - M4_BINARY_STRING_SUFFIX_BYTES)))
+				(then
+					(local.set $cursor (global.get $bin-pos))
+					;; Divide remaining output space before comparing, avoiding a wrapped three-byte size.
+					(if (i32.le_u (i32.sub (local.get $end) (local.get $cursor))
+						(i32.div_u (i32.sub (i32.const m4_eval(M4_BINARY_TEXT_BYTES - M4_BINARY_STRING_SUFFIX_BYTES)) (global.get $bin-used)) (i32.const M4_BINARY_ESCAPE_BYTES)))
+						(then
+							(local.set $output (i32.add (global.get $bin-out) (global.get $bin-used)))
+							(local.set $padding (i32.add (global.get $bin-used)
+								(i32.mul (i32.sub (local.get $end) (local.get $cursor)) (i32.const M4_BINARY_ESCAPE_BYTES))))
+							;; Only the initial printable run uses vector copying; an escape or Unicode byte ends probing once.
+							(block $plain-done
+								;; Copy complete vectors or their safe prefix without reading beyond the input boundary.
+								(loop $plain-prefix
+									(br_if $plain-done (i32.lt_u (i32.sub (local.get $end) (local.get $cursor)) (i32.const M4_VECTOR_BYTES)))
+									(local.set $plain (v128.load (local.get $cursor)))
+									(local.set $mask (i8x16.bitmask (v128.or
+										(v128.or
+											(i8x16.lt_u (local.get $plain) (i8x16.splat (i32.const M4_BYTE_SPACE)))
+											(i8x16.ge_u (local.get $plain) (i8x16.splat (i32.const M4_BYTE_DEL))))
+										(v128.or
+											(i8x16.eq (local.get $plain) (i8x16.splat (i32.const M4_BYTE_QUOTE)))
+											(i8x16.eq (local.get $plain) (i8x16.splat (i32.const M4_BYTE_BACKSLASH)))))))
+									(local.set $width (select (i32.ctz (local.get $mask)) (i32.const M4_VECTOR_BYTES) (local.get $mask)))
+									(br_if $plain-done (i32.eqz (local.get $width)))
+									(memory.copy (local.get $output) (local.get $cursor) (local.get $width))
+									(local.set $cursor (i32.add (local.get $cursor) (local.get $width)))
+									(local.set $output (i32.add (local.get $output) (local.get $width)))
+									(br_if $plain-done (i32.lt_u (local.get $width) (i32.const M4_VECTOR_BYTES)))
+									(br $plain-prefix)
+								)
+							)
+							;; Escape the remaining validated bytes, then publish both cursors at completion.
+							(block $reserved-done
+								;; Empty payloads return without reading their input or writing an escape.
+								(loop $reserved
+									(br_if $reserved-done (i32.eq (local.get $cursor) (local.get $end)))
+									(local.set $byte (i32.load8_u (local.get $cursor)))
+									(i32.store16 (local.get $output)
+										(i32.or (i32.const M4_BYTE_BACKSLASH)
+											(i32.shl
+												(i32.load8_u (i32.add (i32.const M4_BINARY_HEX_DIGITS_BASE) (i32.shr_u (local.get $byte) (i32.const M4_NIBBLE_SHIFT))))
+												(i32.const M4_BYTE_BITS))))
+									(i32.store8 offset=2 (local.get $output)
+										(i32.load8_u (i32.add (i32.const M4_BINARY_HEX_DIGITS_BASE) (i32.and (local.get $byte) (i32.const M4_NIBBLE_MASK)))))
+									(local.set $cursor (i32.add (local.get $cursor) (i32.const 1)))
+									(local.set $output (i32.add (local.get $output) (i32.const M4_BINARY_ESCAPE_BYTES)))
+									(br $reserved)
+								)
+							)
+							(global.set $bin-pos (local.get $end))
+							(global.set $bin-used (i32.sub (local.get $output) (global.get $bin-out)))
+							(local.set $padding (i32.sub (local.get $padding) (global.get $bin-used)))
+							(br $done)
+						)
+					)
+				)
+			)
 			;; Binary names and data strings cannot accidentally introduce WAT delimiters.
 			(loop $bytes
 				(br_if $done (global.get $error))
 				(br_if $done (i32.eq (global.get $bin-pos) (local.get $end)))
 				(local.set $byte (call $binary-read))
-				(call $binary-byte (i32.const 92))
-				(call $binary-digit (i32.shr_u (local.get $byte) (i32.const 4)))
-				(call $binary-digit (i32.and (local.get $byte) (i32.const 15)))
+				;; Capacity tails retain bytewise writes, preserving the exact partial prefix and first error.
+				(call $binary-byte (i32.const M4_BYTE_BACKSLASH))
+				(call $binary-digit (i32.shr_u (local.get $byte) (i32.const M4_NIBBLE_SHIFT)))
+				(call $binary-digit (i32.and (local.get $byte) (i32.const M4_NIBBLE_MASK)))
 				(br $bytes)
 			)
 		)
 		(call $binary-byte (i32.const 34))
-		(call $binary-byte (i32.const 32))
+		(call $binary-byte (i32.const M4_BYTE_SPACE))
+		;; Fill omitted escape characters with exterior whitespace so all subsequent source offsets and capacity accounting match.
+		(if (local.get $padding)
+			(then
+				(memory.fill (i32.add (global.get $bin-out) (global.get $bin-used)) (i32.const M4_BYTE_SPACE) (local.get $padding))
+				(global.set $bin-used (i32.add (global.get $bin-used) (local.get $padding)))
+			)
+		)
 	)
 
 	;; Decode MVP resource limits, rejecting unsupported flag bytes before reading either bound.
@@ -3039,7 +3112,7 @@
 				(return (global.get $error))
 			)
 		)
-		(global.set $bin-function-map (i32.add (global.get $bin-out) (i32.const 1048576)))
+		(global.set $bin-function-map (i32.add (global.get $bin-out) (i32.const M4_BINARY_TEXT_BYTES)))
 		(global.set $bin-type-map (i32.add (global.get $bin-function-map) (i32.const 2048)))
 		(global.set $bin-constant-base (i32.add (global.get $bin-type-map) (i32.const 3072)))
 		(global.set $bin-type-count (i32.const 0))

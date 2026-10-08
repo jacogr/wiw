@@ -268,6 +268,8 @@
 		)
 		(local.set $index (global.get $memory-present))
 		(local.set $record (call $memory-record (local.get $index)))
+		;; Reset aliases, limits and names before early selection and duplicate-name checks can read this record.
+		(call $zero-bytes (local.get $record) (i32.const M4_MEMORY_DESCRIPTOR_BYTES))
 		(call $use-memory (local.get $index))
 		(global.set $memory-offset (global.get $tok))
 		(global.set $memory-present (i32.add (local.get $index) (i32.const 1)))
@@ -484,6 +486,8 @@
 		)
 		(call $expect (i32.const 2))
 		(local.set $record (call $global-record (global.get $global-count)))
+		;; All value/header fields are rewritten below; a reused record must not retain an import alias.
+		(i32.store offset=M4_GLOBAL_ALIAS_OFFSET (local.get $record) (i32.const 0))
 		(i32.store (local.get $record) (local.get $p))
 		(i32.store offset=4 (local.get $record) (local.get $n))
 		(i32.store offset=8 (local.get $record) (local.get $mutable))
@@ -950,7 +954,7 @@
 		;; Follow the bounded import alias chain until reaching its canonical value record.
 		(loop $aliases
 			(local.set $record (call $global-record (local.get $index)))
-			(local.set $alias (i32.load offset=60 (local.get $record)))
+			(local.set $alias (i32.load offset=M4_GLOBAL_ALIAS_OFFSET (local.get $record)))
 			;; A zero alias marker denotes the owning storage record.
 			(if (i32.eqz (local.get $alias))
 				(then
@@ -968,7 +972,7 @@
 		(param $index i32)
 		(param $canonical i32)
 
-		(i32.store offset=60
+		(i32.store offset=M4_GLOBAL_ALIAS_OFFSET
 			(call $global-record (local.get $index))
 			(i32.add (local.get $canonical) (i32.const 1))
 		)

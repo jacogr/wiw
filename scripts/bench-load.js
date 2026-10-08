@@ -85,6 +85,24 @@ cases.mixedSignatures=`(module
   ${Array.from({length:256},(_,index)=>`(func (param ${'i32 '.repeat(index%128)}) (result i32) i32.const 0)`).join(' ')}
   (func (export "run") (result i32) i32.const 0))`;
 
+// Large plain and mixed UTF-8 payloads expose bulk decoding separately from byte escapes.
+const dataPayloads={plainData:'abcdefghijklmnop'.repeat(1024),
+  unicodeData:'λ中😀'.repeat(1536),mixedData:'abcdefghijklmnopλ中😀'.repeat(512)};
+for(const [name,payload] of Object.entries(dataPayloads)) cases[name]=`(module (memory 1)
+  (data (i32.const 0) "${payload}") (func (export "run") (result i32) i32.const 0))`;
+cases.longBlock=`(module (;${'ordinary comment text '.repeat(512)};) (func (export "run") (result i32) i32.const 0))`;
+const checkData=(name,engine)=>{
+  const expected=['dataBytes','dataBytesBinary'].includes(name)?dataBytes:dataPayloads[name]===undefined?undefined:new TextEncoder().encode(dataPayloads[name]);
+  if(expected) assert.deepEqual(engine.readMemory(0,expected.length),expected);
+};
+
+// Scope exits should scale with changed non-null locals rather than unrelated numeric slots.
+cases.scopeLocals=`(module (func (export "run") (result i32) (local ${'i32 '.repeat(256)})
+  ${'block i32.const 0 drop end '.repeat(512)} i32.const 0))`;
+cases.scopeSparse=`(module (type $S (struct)) (func (export "run") (result i32)
+  (local ${'i32 '.repeat(256)}) (local $a (ref $S))
+  ${'block struct.new $S local.set $a local.get $a drop end '.repeat(256)} i32.const 0))`;
+
 // Hand-encode binary equivalents so the benchmark never compiles guest modules.
 const uleb=value=>{
   const bytes=[];
@@ -112,6 +130,17 @@ cases.floatsBinary=binaryModule(124,[[...repeat([68,...floatBytes(1.5),68,...flo
 cases.vectorsBinary=binaryModule(127,[[...repeat([...vectorBytes(1,2),...vectorBytes(3,4),253,...uleb(222),26],256),65,0]]);
 cases.functionsBinary=binaryModule(127,[...Array.from({length:64},()=>[...repeat([65,1,65,2,115,26],16),65,0]),[16,63]]);
 
+// Hand-encoded data modules compare binary string elaboration with the corresponding text payloads.
+const binaryDataModule=payload=>new Uint8Array([0,97,115,109,1,0,0,0,
+  ...section(1,[1,96,0,1,127]),...section(3,[1,0]),...section(5,[1,0,1]),
+  ...section(7,[1,3,114,117,110,0,0]),...section(10,[1,...body([65,0])]),
+  ...section(11,[1,0,65,0,11,...uleb(payload.length),...payload])]);
+for(const name of ['plainData','unicodeData']) {
+  const binaryName=name.replace('Data','Binary');dataPayloads[binaryName]=dataPayloads[name];
+  cases[binaryName]=binaryDataModule(new TextEncoder().encode(dataPayloads[name]));
+}
+cases.dataBytesBinary=binaryDataModule(dataBytes);
+
 const binary = new URL('../build/wiw-opt.wasm',import.meta.url);
 const source = await readFile(new URL('../build/wiw-opt.wat',import.meta.url),'utf8');
 const report = {
@@ -128,14 +157,14 @@ for (const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['inter
     const load=()=>format==='binary' ? engine.loadBinary(guest) : engine.load(guest);
     load();
     assert.equal(engine.invoke('run'),name.startsWith('integers') ? 0n : 0);
-    if(name==='dataBytes') assert.deepEqual(engine.readMemory(0,dataBytes.length),dataBytes);
+    checkData(name,engine);
     const elapsedMs=[];
     for (let sample=0;sample<samples;sample++) {
       const start=performance.now();
       for (let repeat=0;repeat<repeats;repeat++) load();
       elapsedMs.push((performance.now()-start)/repeats);
       assert.equal(engine.invoke('run'),name.startsWith('integers') ? 0n : 0);
-      if(name==='dataBytes') assert.deepEqual(engine.readMemory(0,dataBytes.length),dataBytes);
+      checkData(name,engine);
     }
     const medianMs=[...elapsedMs].sort((a,b)=>a-b)[Math.floor(samples/2)];
     report.cases.push({runtime,name,format,sourceBytes:Buffer.byteLength(guest),medianMs,elapsedMs});

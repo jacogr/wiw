@@ -7,17 +7,19 @@ import {createBootstrapInterpreter} from './runtime.js';
 const binary=new URL('../build/wiw-opt.wasm',import.meta.url);
 for(const runtime of runtimeNames) {
   test(`${runtime}: implicit signature interning retains earliest indices, exact collisions and recursive identity`,async()=>{
-    let call,write;
+    let call,write,read;
     if(runtime==='bootstrap') {
       const {instance}=await WebAssembly.instantiate(await readFile(binary));
       call=(name,...args)=>instance.exports[name](...args);
       write=(bytes,at=4096)=>new Uint8Array(instance.exports.memory.buffer).set(bytes,at);
+      read=(at,n)=>new Uint8Array(instance.exports.memory.buffer,at,n).slice();
     } else {
       const parent=await createBootstrapInterpreter(binary);
       parent.load(await readFile(new URL('../build/wiw.wat',import.meta.url),'utf8'));
       parent.setFuel(10000000);
       call=(name,...args)=>parent.invoke(name,...args);
       write=(bytes,at=4096)=>parent.writeMemory(at,bytes);
+      read=(at,n)=>parent.readMemory(at,n);
     }
     const load=source=>{
       const bytes=Buffer.from(source);
@@ -72,6 +74,28 @@ for(const runtime of runtimeNames) {
     call('set_fuel',1000);
     const bits=new DataView(new ArrayBuffer(8));bits.setFloat64(0,1e-300,true);
     assert.equal(call('invoke64',4096+float.indexOf('run'),3,0,0),bits.getBigInt64(0,true));
+    // Reload initializes the complete live signature while poisoned unused capacity remains inaccessible.
+    const limits=await readFile(new URL('../wat/m4/limits.m4',import.meta.url),'utf8');
+    const offset=Number(limits.match(/M4_SIGNATURE_OFFSET!>,<!(\d+)!>/)[1]),size=544;
+    const dirty=`(module (type $stale (func (param ${'v128 '.repeat(128)}) (result f64))))`.padEnd(4096);
+    load(dirty);const signatureAt=8192+offset;
+    write(new Uint8Array(size).fill(0xa5),signatureAt+size);
+    const clean='(module (func (param i64) (result i64) local.get 0))'.padEnd(4096);
+    const unusedHeap=call('heap_info',1);
+    write(new Uint8Array(64).fill(0xa5),unusedHeap);
+    load(clean);assert.equal(heap(0),0);
+    const expected=new Uint8Array(size),signature=new DataView(expected.buffer);
+    signature.setUint32(8,1,true);signature.setUint32(12,2,true);signature.setUint32(32,2,true);
+    assert.deepEqual(read(signatureAt,size),expected,'live anonymous headers and unused parameter words are reset');
+    assert.deepEqual(read(signatureAt+size,size),new Uint8Array(size).fill(0xa5),'unused signatures are neither cleared nor consulted');
+    assert.deepEqual(read(unusedHeap,64),new Uint8Array(64).fill(0xa5),'unused heap capacity is never consulted');
+    // A numeric forward reference within a recursive group must wait for its target's initialized descriptor.
+    load('(module (rec (type $F (func (param (ref null 1)))) (type $S (struct (field i32)))) (func (type $F)))'.padEnd(4096));
+    assert.equal(heap(0),0);
+    const parameter=call('heap_param_type',0,0);
+    assert.equal(call('type_heap',parameter),1);assert.equal(call('reference_category',parameter),22);
+    assert.equal(new DataView(read(call('heap_info',1),64).buffer).getUint32(0,true),1);
+
     // Trusted foreign result installation invalidates both the derived reference and retained index.
     load('(module (type (func (result i32))) (type (func (result i64))) (func (result i32) i32.const 42))');
     assert.equal(heap(0),0);

@@ -4,23 +4,8 @@
 		(result i32)
 		(local $digit i32)
 
-		(local.set $digit (i32.sub (local.get $c) (i32.const M4_ASCII_ZERO)))
-		;; One unsigned range check recognizes exactly the decimal digits.
-		(if (i32.le_u (local.get $digit) (i32.const M4_DECIMAL_LAST_DIGIT))
-			(then
-				(return (local.get $digit))
-			)
-		)
-		(local.set $digit
-			(i32.sub (i32.or (local.get $c) (i32.const M4_ASCII_CASE_BIT)) (i32.const M4_ASCII_LOWER_A))
-		)
-		;; Folding ASCII case recognizes A-F and a-f through the same six-byte range.
-		(if (i32.le_u (local.get $digit) (i32.const M4_HEX_LAST_LETTER))
-			(then
-				(return (i32.add (local.get $digit) (i32.const M4_DECIMAL_RADIX)))
-			)
-		)
-		(i32.const -1)
+		M4_HEX_DIGIT(c,digit,2)
+		(local.get $digit)
 	)
 
 	;; Append one decoded data byte without letting the data arena overwrite guest memory.
@@ -99,6 +84,11 @@
 		(local $width i32)
 		(local $j i32)
 
+		(local $dest i32)
+
+		(local $plain v128)
+		(local $plain-mask i32)
+
 		(local.set $p (global.get $tok))
 		(local.set $end (i32.add (local.get $p) (global.get $len)))
 		;; Complete the string when all raw content bytes have been consumed.
@@ -108,6 +98,36 @@
 				(br_if $done (global.get $error))
 				(br_if $done (i32.eq (local.get $p) (local.get $end)))
 				(local.set $c (i32.load8_u (local.get $p)))
+				;; Escapes bypass the vector probe; other bytes can begin a bounded plain ASCII run.
+				(if (i32.ne (local.get $c) (i32.const M4_BYTE_BACKSLASH))
+					(then
+						;; Only plain-byte paths need source/capacity checks for a full vector probe.
+						(if (i32.and
+							(i32.lt_u (local.get $c) (i32.const M4_ASCII_LIMIT))
+							(i32.and
+								(i32.ge_u (i32.sub (local.get $end) (local.get $p)) (i32.const M4_VECTOR_BYTES))
+								(i32.le_u (global.get $data-count) (i32.const m4_eval(M4_DATA_BYTES - M4_VECTOR_BYTES)))))
+							(then
+								(local.set $plain (v128.load (local.get $p)))
+								;; The first Unicode, escape or control byte ends the safe ASCII prefix.
+								(local.set $plain-mask (i8x16.bitmask (v128.or
+									(v128.or (i8x16.ge_u (local.get $plain) (i8x16.splat (i32.const M4_ASCII_LIMIT)))
+										(i8x16.lt_u (local.get $plain) (i8x16.splat (i32.const M4_BYTE_SPACE))))
+									(i8x16.eq (local.get $plain) (i8x16.splat (i32.const M4_BYTE_BACKSLASH))))))
+								(local.set $width (select (i32.ctz (local.get $plain-mask)) (i32.const M4_VECTOR_BYTES) (local.get $plain-mask)))
+								;; A special first byte stays on the exact scalar decoder without changing its cursor.
+								(if (local.get $width)
+									(then
+										(memory.copy (i32.add (global.get $data-base) (global.get $data-count)) (local.get $p) (local.get $width))
+										(global.set $data-count (i32.add (global.get $data-count) (local.get $width)))
+										(local.set $p (i32.add (local.get $p) (local.get $width)))
+										(br $bytes)
+									)
+								)
+							)
+						)
+					)
+				)
 				(local.set $p (i32.add (local.get $p) (i32.const 1)))
 				;; Unescaped source text must be valid UTF-8 before its bytes become guest data.
 				(if (i32.ne (local.get $c) (i32.const 92))
@@ -118,6 +138,33 @@
 						(if (global.get $error)
 							(then
 								(return)
+							)
+						)
+						;; Validated Unicode scalars use exact-width stores when the complete encoding fits.
+						(if (i32.gt_u (local.get $width) (i32.const 1))
+							(then
+								;; Capacity tails retain the original bytewise failure boundary.
+								(if (i32.le_u (global.get $data-count) (i32.sub (i32.const M4_DATA_BYTES) (local.get $width)))
+									(then
+										(local.set $dest (i32.add (global.get $data-base) (global.get $data-count)))
+										;; Four-byte encodings fit one complete unaligned word.
+										(if (i32.eq (local.get $width) (i32.const M4_WORD_BYTES))
+											(then (i32.store (local.get $dest) (i32.load (local.get $p))))
+											;; Two- and three-byte encodings never read or write a fourth byte.
+											(else
+												(i32.store16 (local.get $dest) (i32.load16_u (local.get $p)))
+												;; Only three-byte encodings have one byte beyond the first halfword.
+												(if (i32.gt_u (local.get $width) (i32.const M4_HALFWORD_BYTES))
+													(then (i32.store8 offset=M4_HALFWORD_BYTES (local.get $dest)
+														(i32.load8_u offset=M4_HALFWORD_BYTES (local.get $p))))
+												)
+											)
+										)
+										(global.set $data-count (i32.add (global.get $data-count) (local.get $width)))
+										(local.set $p (i32.add (local.get $p) (local.get $width)))
+										(br $bytes)
+									)
+								)
 							)
 						)
 						(local.set $j (i32.const 0))
@@ -144,7 +191,8 @@
 				)
 				(local.set $c (i32.load8_u (local.get $p)))
 				(local.set $p (i32.add (local.get $p) (i32.const 1)))
-				(local.set $digit (call $hex (local.get $c)))
+				;; Inline the shared digit rules on the frequent byte-escape path.
+				M4_HEX_DIGIT(c,digit,4)
 				;; Two hex digits encode one arbitrary byte, including NUL and non-UTF-8 data.
 				(if (i32.ne (local.get $digit) (i32.const -1))
 					(then
@@ -155,7 +203,8 @@
 								(return)
 							)
 						)
-						(local.set $v (call $hex (i32.load8_u (local.get $p))))
+						(local.set $c (i32.load8_u (local.get $p)))
+						M4_HEX_DIGIT(c,v,6)
 						;; A non-hex second digit makes the byte escape malformed.
 						(if (i32.eq (local.get $v) (i32.const -1))
 							(then

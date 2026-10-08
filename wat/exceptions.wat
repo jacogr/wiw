@@ -375,7 +375,7 @@
 									)
 								)
 								(call $initialize-heap-type (local.get $j))
-								(memory.copy (call $signature (local.get $j)) (local.get $signature) (i32.const 544))
+								(memory.copy (call $signature (local.get $j)) (local.get $signature) (i32.const M4_SIGNATURE_BYTES))
 								(global.set $signature-count (i32.add (local.get $j) (i32.const 1)))
 							)
 						)
@@ -680,7 +680,7 @@
 		)
 		(local.set $count (i32.load offset=8 (local.get $signature)))
 		(local.set $object
-			(call $gc-allocate (i32.const -1) (i32.add (local.get $count) (i32.const 1)))
+			(call $gc-allocate (i32.const -1) (i32.add (local.get $count) (i32.const 1)) (i32.const 1))
 		)
 		(i32.store offset=8 (local.get $object) (local.get $tag))
 		(i64.store
@@ -855,7 +855,7 @@
 		(local $tag i32)
 
 		(local.set $object
-			(call $gc-allocate (i32.const -1) (i32.add (local.get $count) (i32.const 1)))
+			(call $gc-allocate (i32.const -1) (i32.add (local.get $count) (i32.const 1)) (i32.const 1))
 		)
 		(local.set $tag (i32.const -1))
 		;; Find a local alias of the received tag identity for subsequent host payload diagnostics.

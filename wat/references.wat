@@ -1564,25 +1564,23 @@
 		(i32.add (global.get $local-init-base) (i32.mul (local.get $index) (i32.const 4)))
 	)
 
-	;; Discard local assignments introduced by the arm or block that is ending.
+	;; Roll back only newly initialized non-defaultable locals belonging to the ending control scope.
 	(func $reset-local-initialization
-		(local $i i32)
-		(local $count i32)
+		(local $slot i32)
+		(local $flag i32)
 
-		(local.set $count (i32.load offset=20 (call $function (global.get $current-function))))
-		;; Finish after examining every declared local.
+		;; The first enclosing-scope assignment ends this scope's contiguous suffix.
 		(block $done
-			;; Only assignments made at this scope's level are rolled back.
+			;; Each linked local is visited once when its initializing scope ends, regardless of unrelated locals.
 			(loop $locals
-				(br_if $done (i32.eq (local.get $i) (local.get $count)))
-				;; Assignments made only within this control region do not survive its exit.
-				(if
-					(i32.eq (i32.load (call $local-init-slot (local.get $i))) (global.get $control-count))
-					(then
-						(i32.store (call $local-init-slot (local.get $i)) (i32.const 0))
-					)
-				)
-				(local.set $i (i32.add (local.get $i) (i32.const 1)))
+				(br_if $done (i32.eqz (global.get $local-init-head)))
+				(local.set $slot (call $local-init-slot (i32.sub (global.get $local-init-head) (i32.const 1))))
+				(local.set $flag (i32.load (local.get $slot)))
+				(br_if $done (i32.ne
+					(i32.shr_u (local.get $flag) (i32.const M4_LOCAL_INIT_SCOPE_SHIFT))
+					(global.get $control-count)))
+				(global.set $local-init-head (i32.and (local.get $flag) (i32.const M4_LOCAL_INIT_LINK_MASK)))
+				(i32.store (local.get $slot) (i32.const 0))
 				(br $locals)
 			)
 		)

@@ -704,6 +704,42 @@
 		(memory.fill (local.get $p) (i32.const 0) (local.get $n))
 	)
 
+	;; Repeat one raw i32 word across a checked contiguous range.
+	(func $repeat-word
+		(param $dest i32)
+		(param $value i32)
+		(param $count i32)
+		(local $bytes i32)
+		(local $written i32)
+		(local $chunk i32)
+
+		;; Empty end pointers perform no memory access.
+		(if (i32.eqz (local.get $count)) (then (return)))
+		(local.set $bytes (i32.mul (local.get $count) (i32.const M4_WORD_BYTES)))
+		;; Zero and all-one words have uniform byte encodings and need a single fill.
+		(if (i32.or (i32.eqz (local.get $value)) (i32.eq (local.get $value) (i32.const -1)))
+			(then
+				(memory.fill (local.get $dest) (local.get $value) (local.get $bytes))
+				(return)
+			)
+		)
+		(i32.store (local.get $dest) (local.get $value))
+		(local.set $written (i32.const M4_WORD_BYTES))
+		;; Each copy reads only the initialized prefix and stops at a bounded partial tail.
+		(block $done
+			;; Grow the initialized prefix geometrically without changing the repeated word.
+			(loop $copies
+				(br_if $done (i32.eq (local.get $written) (local.get $bytes)))
+				(local.set $chunk (i32.sub (local.get $bytes) (local.get $written)))
+				(local.set $chunk (select (local.get $chunk) (local.get $written) (i32.lt_u (local.get $chunk) (local.get $written))))
+				(memory.copy (i32.add (local.get $dest) (local.get $written)) (local.get $dest) (local.get $chunk))
+				(local.set $written (i32.add (local.get $written) (local.get $chunk)))
+				(br $copies)
+			)
+		)
+	)
+
+
 	;; Locate one memory declaration in its bounded namespace arena.
 	(func $memory-record
 		(param $index i32)

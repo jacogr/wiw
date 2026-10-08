@@ -282,6 +282,8 @@
 	;; Active heap comparison pairs terminate recursive structural comparisons.
 	(global $type-comparison-base (mut i32) (i32.const 0))
 	;; Local initialization levels are validation state, independent from runtime frame values.
+	;; One-based head of non-defaultable locals initialized along the current validation path.
+	(global $local-init-head (mut i32) (i32.const 0))
 	(global $local-init-base (mut i32) (i32.const 0))
 	;; Set a full-width instruction budget for trusted interpreter hosting, preserving bounded guest execution.
 	(func (export "set_fuel64")

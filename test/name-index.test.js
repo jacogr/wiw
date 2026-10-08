@@ -7,7 +7,12 @@ const names=[];
 for(let index=0;names.length<33;index++) {
   const name=`$shared_collision_prefix_${index}`;
   let hash=2166136261;
-  for(const byte of Buffer.from(name)) hash=Math.imul(hash^byte,16777619)>>>0;
+  const bytes=Buffer.from(name);let cursor=0;
+  for(;cursor+4<=bytes.length;cursor+=4) {
+    hash=Math.imul(hash^bytes.readUInt32LE(cursor),16777619)>>>0;
+    hash=(hash^(hash>>>16))>>>0;
+  }
+  for(;cursor<bytes.length;cursor++) hash=Math.imul(hash^bytes[cursor],16777619)>>>0;
   if((hash&4095)===4095) names.push(name);
 }
 const declarations=names.slice(0,32);

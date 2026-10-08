@@ -131,6 +131,17 @@ const vectorWorkloads = {
   vectorMixed: ['v128.const i64x2 1 2 i64.const 9 i64x2.replace_lane 1', '1 9'],
   vectorSelect: ['v128.const i64x2 1 2 v128.const i64x2 3 4 v128.const i64x2 -1 0 v128.bitselect', '1 4']
 };
+// Representative sweep paths retain exact raw result checks in each timed iteration.
+Object.assign(vectorWorkloads, {
+  vectorFloatRound: ['v128.const f32x4 -0.1 -1.5 2.5 inf f32x4.nearest', '0xc000000080000000 0x7f80000040000000'],
+  vectorFloatConvert: ['v128.const f32x4 -1.5 2.5 inf nan i32x4.trunc_sat_f32x4_s', '0x00000002ffffffff 0x000000007fffffff'],
+  vectorByteAbs: ['v128.const i64x2 0x8080808080808080 -1 i8x16.abs', '0x8080808080808080 0x0101010101010101'],
+  vectorByteSplat: ['i32.const 0xa5 i8x16.splat', '0xa5a5a5a5a5a5a5a5 0xa5a5a5a5a5a5a5a5'],
+  vectorByteReplace: ['v128.const i64x2 1 2 i32.const 255 i8x16.replace_lane 15', '1 0xff00000000000002'],
+  vectorShuffle: ['v128.const i64x2 0x0706050403020100 0x0f0e0d0c0b0a0908 v128.const i64x2 0x1716151413121110 0x1f1e1d1c1b1a1918 i8x16.shuffle 31 0 17 2 19 4 21 6 23 8 25 10 27 12 29 14', '0x061504130211001f 0x0e1d0c1b0a190817'],
+  vectorRelaxedMultiplyAdd: ['v128.const f32x4 1.5 1.5 1.5 1.5 v128.const f32x4 2 2 2 2 v128.const f32x4 1 1 1 1 f32x4.relaxed_madd', '0x4080000040800000 0x4080000040800000'],
+  vectorRelaxedDot: ['v128.const i64x2 0x8080808080808080 0x8080808080808080 v128.const i64x2 0x8080808080808080 0x8080808080808080 v128.const i64x2 -1 -1 i32x4.relaxed_dot_i8x16_i7x16_add_s', '0x0000ffff0000ffff 0x0000ffff0000ffff']
+});
 for (const [name,[operation,expected]] of Object.entries(vectorWorkloads)) {
   cases[name] = `(module (func (export "run") (param i64) (result i64)
     (loop $again
@@ -286,6 +297,38 @@ for(const [type,literal,cast,expected,result] of [
       ${result}.const ${expected} ${result}.ne if unreachable end
       local.get 0 i64.const 1 i64.sub local.set 0
       local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
+}
+
+// Exact-width vector loads and nonuniform table words exercise bounded native transfers.
+for(const [name,operation,expected] of [
+  ['vectorLoadExtend','i32.const 0 v128.load8x8_s','0x0004000300020001 0x0008000700060005'],
+  ['vectorLoadSplat','i32.const 7 v128.load8_splat','0x0808080808080808 0x0808080808080808'],
+  ['vectorLoadLane','i32.const 7 v128.const i64x2 1 2 v128.load8_lane 15','1 0x0800000000000002']
+]) cases[name]=`(module (memory 1) (data (i32.const 0) "\\01\\02\\03\\04\\05\\06\\07\\08")
+  (func (export "run") (param i64) (result i64) (loop $again
+    ${operation} v128.const i64x2 ${expected} i8x16.eq i8x16.all_true i32.eqz if unreachable end
+    local.get 0 i64.const 1 i64.sub local.set 0
+    local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
+for(const [name,value,check] of [
+  ['tableBulkNull','ref.null func','i32.const 4095 table.get ref.is_null i32.eqz'],
+  ['tableBulkReference','ref.func $second','i32.const 4095 call_indirect (type $F) i32.const 99 i32.ne']
+]) cases[name]=`(module (type $F (func (result i32))) (table 4096 funcref)
+  (func $first (type $F) i32.const 42) (func $second (type $F) i32.const 99)
+  (elem declare func $first $second)
+  (func (export "run") (param i64) (result i64) (loop $again
+    i32.const 0 ${value} i32.const 4096 table.fill ${check} if unreachable end
+    local.get 0 i64.const 1 i64.sub local.set 0
+    local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
+
+// Multi-parameter tails preserve vector arguments while retaining the existing implicit root.
+for(const count of [2,8]) {
+  const values=Array.from({length:count-1},(_,n)=>`v128.const i64x2 ${n+1} ${n+101}`);
+  const checks=values.map((value,n)=>`local.get ${n+1} ${value} i8x16.eq i8x16.all_true i32.eqz if unreachable end`).join(' ');
+  cases[`tailWide${count}`]=`(module
+    (func $step (param i64 ${'v128 '.repeat(count-1)}) (result i64)
+      local.get 0 i64.eqz if (result i64) ${checks} i64.const 0
+      else local.get 0 i64.const 1 i64.sub ${values.map((_,n)=>`local.get ${n+1}`).join(' ')} return_call $step end)
+    (func (export "run") (param i64) (result i64) local.get 0 ${values.join(' ')} call $step))`;
 }
 
 const binary = new URL('../build/wiw-opt.wasm', import.meta.url);

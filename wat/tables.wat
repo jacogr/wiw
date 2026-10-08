@@ -891,34 +891,20 @@
 		(i32.load (local.get $entry))
 	)
 
-	;; Initialize table entries to null, then apply active segments in source order with unsigned bounds checks.
+	;; Allocate fresh null-filled storage for every declared table.
 	(func $allocate-table
-		(local $i i32)
 		(local $table i32)
-		(local $j i32)
-		(local $record i32)
-		(local $start i32)
-		(local $count i32)
 
-		;; Visit every independent table arena before applying any active segment.
+		;; Visit every independent table arena before applying any initializer.
 		(block $all-done
-			;; Initial allocation null-fills each declared table independently.
+			;; Reload discards earlier contents; packed null references have all bits set.
 			(loop $tables
 				(br_if $all-done (i32.eq (local.get $table) (global.get $guest-table-present)))
 				(call $use-table (local.get $table))
-				(local.set $i (i32.const 0))
-				;; Reload discards earlier table contents and creates a fresh null-filled table.
-				(block $cleared
-					;; Null is represented by -1 and cannot alias a valid function index.
-					(loop $clear
-						(br_if $cleared (i32.eq (local.get $i) (global.get $guest-table-size)))
-						(i32.store
-							(i32.add (global.get $guest-table-base) (i32.mul (local.get $i) (i32.const 4)))
-							(i32.const -1)
-						)
-						(local.set $i (i32.add (local.get $i) (i32.const 1)))
-						(br $clear)
-					)
+				(memory.fill
+					(global.get $guest-table-base)
+					(i32.const -1)
+					(i32.mul (global.get $guest-table-size) (i32.const M4_WORD_BYTES))
 				)
 				(local.set $table (i32.add (local.get $table) (i32.const 1)))
 				(br $tables)
@@ -1015,9 +1001,10 @@
 		)
 	)
 
-	;; Initialize a standalone table and then apply its active element segments.
+	;; Initialize standalone tables before active element segments replace their entries.
 	(func $instantiate-table
 		(call $allocate-table)
+		(call $apply-table-initializers)
 		(call $apply-elements)
 	)
 
@@ -1277,12 +1264,12 @@
 		(i64.const 0)
 	)
 
+
 	;; Fill a complete checked range with one nullable function reference.
 	(func $table-fill
 		(param $start i32)
 		(param $value i64)
 		(param $length i32)
-		(local $i i32)
 
 		;; Validate the whole unsigned range before changing any entry.
 		(if
@@ -1295,22 +1282,11 @@
 				(return)
 			)
 		)
-		;; Empty ranges perform no access, including at the logical end.
-		(block $done
-			;; Write scalar entries so interpreted execution uses the same implementation.
-			(loop $entries
-				(br_if $done (i32.eq (local.get $i) (local.get $length)))
-				(i32.store
-					(i32.add
-						(global.get $guest-table-base)
-						(i32.mul (i32.add (local.get $start) (local.get $i)) (i32.const 4))
-					)
-					(i32.sub (i32.wrap_i64 (local.get $value)) (i32.const 1))
-				)
-				(local.set $i (i32.add (local.get $i) (i32.const 1)))
-				(br $entries)
-			)
-		)
+		;; The raw word is the same normalized reference encoding used by table.get/set.
+		(call $repeat-word
+			(i32.add (global.get $guest-table-base) (i32.mul (local.get $start) (i32.const M4_WORD_BYTES)))
+			(i32.sub (i32.wrap_i64 (local.get $value)) (i32.const 1))
+			(local.get $length))
 	)
 
 	;; Grow within declared and storage limits, returning the old size or -1 without mutation.
@@ -1464,7 +1440,6 @@
 	;; Fill locally initialized tables after immutable globals have received their bound values.
 	(func $apply-table-initializers
 		(local $i i32)
-		(local $j i32)
 		(local $record i32)
 		(local $entry i32)
 		(local $value i32)
@@ -1482,20 +1457,8 @@
 					(then
 						(call $use-table (local.get $i))
 						(local.set $value (call $element-value (local.get $entry)))
-						(local.set $j (i32.const 0))
-						;; Fill exactly the declared initial entries with the resolved reference value.
-						(block $filled
-							;; Persistent table storage encodes null as -1 and functions by their index.
-							(loop $entries
-								(br_if $filled (i32.eq (local.get $j) (global.get $guest-table-size)))
-								(i32.store
-									(i32.add (global.get $guest-table-base) (i32.mul (local.get $j) (i32.const 4)))
-									(local.get $value)
-								)
-								(local.set $j (i32.add (local.get $j) (i32.const 1)))
-								(br $entries)
-							)
-						)
+						;; Repeat exactly the declared entries after resolving their live reference once.
+						(call $repeat-word (global.get $guest-table-base) (local.get $value) (global.get $guest-table-size))
 					)
 				)
 				(local.set $i (i32.add (local.get $i) (i32.const 1)))

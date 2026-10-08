@@ -219,6 +219,26 @@ for (const binary of ['wiw-opt.wasm']) {
     assert.equal(deepest.invoke('products'),1);
     assert.equal(deepest.invoke('dot'),-2147483648);
     assert.equal(deepest.invoke('q15'),32767);
+    // This sweep's exact rounding, direct byte lanes, signed dots and table initialization survive inception.
+    deepest.load(`(module (type $F (func (result i32))) (memory 1)
+      (func $first (type $F) i32.const 42) (func $second (type $F) i32.const 99)
+      (table 33 funcref (ref.func $second)) (elem (i32.const 17) func $first)
+      (data (i32.const 0) "abcdefghijklmnopλ中😀\\ff")
+      (func (export "table") (param i32) (result i32) local.get 0 call_indirect (type $F))
+      (func (export "byteLane") (result v128)
+        i32.const 25 v128.const i64x2 1 2 v128.load8_lane 15)
+      (func (export "round") (result i32)
+        v128.const f32x4 -0.1 -1.5 2.5 inf f32x4.nearest i32x4.extract_lane 0)
+      (func (export "relaxedDot") (result i32)
+        v128.const i64x2 0x8080808080808080 0x8080808080808080
+        v128.const i64x2 0x8080808080808080 0x8080808080808080
+        v128.const i64x2 -1 -1 i32x4.relaxed_dot_i8x16_i7x16_add_s i32x4.extract_lane 3))`);
+    assert.equal(deepest.invoke('table',0),99);assert.equal(deepest.invoke('table',17),42);
+    assert.equal(deepest.invoke('table',32),99);
+    assert.deepEqual(deepest.readMemory(0,26),new Uint8Array([...encode('abcdefghijklmnopλ中😀'),255]));
+    assert.equal(deepest.invoke('byteLane'),(255n<<120n)|(2n<<64n)|1n);
+    assert.equal(deepest.invoke('round'),-2147483648);
+    assert.equal(deepest.invoke('relaxedDot'),65535);
     // Repeated raw GC slots and bounded partial fills also work through two hosted layers.
     deepest.load(`(module (type $A (array (mut v128)))
       (global $a (mut (ref null $A)) (ref.null $A))
@@ -249,6 +269,19 @@ for (const binary of ['wiw-opt.wasm']) {
     const moved=0xfedcba98765432100123456789abcdefn;
     assert.equal(deepest.invoke('move',moved),moved);
     assert.equal(deepest.invoke('reference'),42);
+    // Wide tail frame/root reuse and the initialization rollback chain also run through two copies.
+    deepest.load(`(module (type $S (struct (field i32)))
+      (func $step (param v128 i32) (result v128)
+        local.get 1 i32.eqz if (result v128) local.get 0
+        else block (result v128) local.get 0 local.get 1 i32.const 1 i32.sub return_call $step end end)
+      (func (export "tail") (param v128) (result v128) local.get 0 i32.const 17 call $step)
+      (func (export "scope") (result i32) (local $a (ref $S)) (local $b (ref $S))
+        i32.const 42 struct.new $S local.set $a
+        block i32.const 99 struct.new $S local.set $b local.get $b drop end
+        i32.const 0 if else i32.const 7 struct.new $S local.set $b end
+        local.get $a struct.get $S 0))`);
+    assert.equal(deepest.invoke('tail',moved),moved);
+    assert.equal(deepest.invoke('scope'),42);
     // Arithmetic tees preserve aliased operands and narrow comparison results through two hosted levels.
     deepest.load(`(module
       (func (export "count") (param i64) (result i64)

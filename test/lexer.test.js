@@ -108,6 +108,39 @@ for(const runtime of runtimeNames) test(`${runtime}: lexer preserves spans, deli
     assert.equal(call('error_code'),0);
     assert.equal(call('scan_pos'),65536);
   }
+  // Line endings occupy every vector lane; other controls, Unicode and delimiter bytes remain text.
+  for(let lane=0;lane<32;lane++) for(const ending of ['\r','\n','\r\n']) {
+    const trivia=';;'+'x'.repeat(lane)+'\0\v\f(;"λ'+ending;
+    const pointer=init(trivia+'token');
+    assert.equal(call('scan_next'),3,`line ending ${lane}/${JSON.stringify(ending)}`);
+    assert.equal(call('error_code'),0);
+    assert.equal(call('scan_tok')-pointer,Buffer.byteLength(trivia));
+    assert.equal(call('scan_len'),5);
+    assert.equal(call('scan_pos'),65536);
+  }
+  // Delimiters and nested pairs straddle every vector lane, including the physical input end.
+  for(let lane=0;lane<32;lane++) {
+    for(const payload of [
+      'x'.repeat(lane)+'(; nested ;)'+ 'x'.repeat(33-lane),
+      'x'.repeat(lane)+'(; (; deeper ;) ;)'+ 'x'.repeat(33-lane),
+      'x'.repeat(lane)+'( not a pair ; not a pair'+ 'x'.repeat(33-lane),
+      'x'.repeat(lane)+'"λ\0\xff"'+ 'x'.repeat(33-lane)
+    ]) {
+      const trivia='(;'+payload+';)',pointer=init(trivia+'token');
+      assert.equal(call('scan_next'),3,`block lane ${lane}`);
+      assert.equal(call('error_code'),0);
+      assert.equal(call('scan_tok')-pointer,Buffer.byteLength(trivia));
+      assert.equal(call('scan_len'),5);
+      assert.equal(call('scan_pos'),65536);
+    }
+    for(const tail of ['','(',';','(; nested ;)']) {
+      const pointer=init('(;'+ 'x'.repeat(lane)+tail);
+      assert.equal(call('scan_next'),0);
+      assert.equal(call('error_code'),1);
+      assert.equal(call('error_offset'),pointer);
+      assert.equal(call('scan_pos'),65536);
+    }
+  }
   // Partial uniform words and mixed whitespace must leave the first token byte untouched.
   for(const length of [...Array.from({length:18},(_,index)=>index),63,64,65]) {
     for(const byte of [' ','\t','\r','\n']) for(const suffix of ['',' \t\r\n']) {

@@ -3457,3 +3457,119 @@ hosted and 0m11.48s native. Each passes all 65,199 wg-3.0 commands
 across 258 files; spec times are 2m09.42s WAT and
 0m05.75s WASM. Samples, hashes and reports remain in performance
 history. Whole-suite times are separate complete runs, not a matched speedup.
+
+
+### Bounded optimization sweep
+
+The sweep retains changes across SIMD execution, text/binary loading, resource
+initialization, local validation and tail calls. It keeps the existing release
+flags, WAT interpreter model and separate WAT/WASM test targets.
+
+SIMD float operations, integer unary/widening operations, splats, shuffles and
+exact-width extending/splat loads now use native vector operations where their
+semantics match. Scalar and memory lane replacement write the selected lane
+directly. Six relaxed arithmetic handlers use strict vector sequences, retaining
+unfused floating rounding and the chosen signed dot-product behavior. Scalar/void
+SIMD arms explicitly clear the high result half, allowing removal of the shared
+vector clear. Default GC constructors and exception allocations retain zeroing;
+explicit constructors skip clears only where every payload byte is overwritten.
+Their stage-local native samples improve 23–26%; hosted changes track a scalar
+control and are not claimed as an isolated GC gain.
+
+Text loading caches quoted bytes and cursors, scans bounded ASCII data prefixes
+and block-comment prefixes, gates Unicode decoding on the first byte, and emits
+UTF8 through exact-width stores. Capacity failures retain the bytewise fallback.
+A shared m4 hex-digit macro uses the same rules for both escape digits. Names
+hash bounded word chunks with a fold after each word; exact equality still resolves
+collisions. SIMD probes on escape-heavy strings and ordinary whitespace were
+reverted after regressions.
+
+Binary strings reserve their complete worst-case expansion when possible, then
+emit escapes with exact 16-bit and 8-bit stores. Insufficient capacity uses the
+original incremental path. Initial printable ASCII runs can be copied literally;
+quotes, backslashes, controls, DEL and non-ASCII remain escaped. Exterior whitespace
+padding preserves the original three-byte expansion per input byte and therefore
+following source offsets. Scanning every printable run regressed Unicode cases
+and was narrowed to the initial prefix.
+
+Table defaults and table.fill use bulk initialization. Explicit table initializers
+are applied after allocation and before active element segments. This also fixes
+an original bug where standalone explicit initializers were omitted. A second
+original bug wrote struct fields at address zero after allocation failure,
+corrupting keyword data and later loads; struct allocation now checks failure
+before field writes. Both failures were reproduced against the original artifacts.
+
+Local initialization uses bulk permanent flags for parameters and direct scans
+of declared types. Newly initialized non-defaultable locals form a rollback chain
+inside their existing flag words: depth occupies the high 16 bits and the previous
+one-based local index the low 16 bits. A head global resets for each function.
+Scope exits pop only the matching suffix; outer assignments and permanent
+parameter flags remain unlinked. Configuration guards limit locals and controls
+to the representable ranges. Tests cover nested blocks/else, reassignment,
+reload, sparse and dense sets, the last local slot and deep chains.
+
+Tail root/frame reuse extends to zero through 128 parameters when the callee has
+no declared locals. One-parameter calls retain direct raw-word stores, wider calls
+copy both low/high spans, and zero-parameter calls perform no operand access.
+Mutual calls refresh callee-dependent headers and root metadata. Declared-local
+fallbacks, imports, stack boundaries, raw vector halves and guest fuel remain
+covered by direct, indirect and reference calls and two hosted levels.
+
+Signature, global/import, heap and memory arenas no longer require whole-arena
+clears on every module. Each allocated record initializes every field before use;
+implicit signatures explicitly clear their complete 544-byte record, globals
+clear alias fields, and imports clear their kind/reserved tail. Heap records use
+the existing per-record initializer, including recursive forward references.
+Memory descriptor zero remains a cleared sentinel for empty modules; allocated
+memory records clear before selection or duplicate-name checks. Poisoned-record
+and same-layout resource reload tests cover stale flags, vector high halves and
+import aliases. Smaller shared bitmap/segment resets remain where their cost does
+not justify more conditional state.
+
+Final alternating measurements compare immutable original and selected optimized
+artifacts using the same frontend. Negative percentages mean less time:
+
+| Workload | Hosted WAT time change | Native WASM time change |
+| --- | ---: | ---: |
+| Table reference fill | -96.0% | -83.1% |
+| Plain WAT data | -72.2% | -47.7% |
+| Unicode WAT data | -37.4% | -26.1% |
+| Plain binary data | -84.4% | -64.5% |
+| Scoped local validation | -54.6% | -51.0% |
+| Mixed-length names | -19.1% | -25.1% |
+| SIMD float rounding | -13.4% | -10.5% |
+| Relaxed signed dot | -22.5% | -14.2% |
+
+Fresh hosted construction improves 4.7–5.5% across the final execution/loading
+runs (about 6.0–6.1 ms to 5.74 ms). Hosted wider tail calls improve 12–19% in
+checked two/eight-parameter workloads. WASM shrinks from 125,707 to 120,792 bytes
+and optimized WAT from 802,575 to 767,871 bytes. Removing orphan helpers/unused
+locals and formatting cleanup produced identical optimized artifacts, so those
+cleanups are not counted as speed gains.
+
+Immutable original and final optimized artifacts, identical frontend. Sequential benchmarks without builds/tests competing for CPU. Hosted construction: 15 alternating rounds of ten fresh factories. Execution: three independent instances, three 1000-iteration warmups and five alternating 1000-iteration samples; median of instance medians. Loading: three independent instances, three warm loads and nine alternating three-repeat samples; full final data payload checks outside timing. Native controls: three instances, three 10000-iteration warmups and fifteen alternating 100000-iteration samples. Execution checks remain timed, module reloads are outside samples. Initial stage data checks were less extensive than the final full-payload checks. Full-suite times are separate historical runs, not controlled speedup estimates.
+
+Long native controls show direct/indirect/reference calls 2.9/2.0/1.3% slower,
+byte SIMD and vector memory 1.8/1.9% slower, and scalar memory 0.4% slower.
+Float arithmetic/conversion/SIMD improve 6.4/3.2/6.0%; the deliberately nonmatching
+loop is essentially flat. Short native samples are too sensitive to JIT/GC to
+establish small scalar effects. Lazy memory descriptors have a stage-local
+0.4–1.6 microsecond penalty for 16/512-memory native modules, while their final
+combined measurements improve. These tradeoffs are retained alongside broader
+gains, rather than treating every microbenchmark as improved.
+
+Rejected trials include native vector bit handlers, five quoted SIMD scanners,
+SIMD whitespace/equality/line-comment scans, tiny UTF8 copies, final-only hash
+folding, pointer resolver scans, validation end caching, deferred control shortcuts,
+and a call-count cache. Flat trials were removed; regressions were reverted.
+The call-count cache rebuild matches the artifacts used for final validation.
+An overlapping early ASCII run and incomplete binary trials are excluded from
+measurement evidence. Raw valid stage reports, final paired reports, hashes,
+exclusions and regression coverage are retained in test/performance.json.
+
+Both complete targets pass all 219 tests with zero failures/skips: 2m11.91s WAT
+and 0m11.21s WASM. Each passes all 65,199 wg-3.0 commands across 258 files;
+spec times are 2m04.99s and 0m05.36s. Public execution and loading smoke checks
+pass in both modes. No guest compilation, persistent engine/cache or snapshot
+was introduced. The useful candidates from this sweep are exhausted; speculative
+architecture changes remain separate investigations.

@@ -113,6 +113,33 @@ for (const [runtime, create] of runtimeFactories) {
     }
   });
 
+  test(`${runtime}: zero and wide self/mutual tails retain caller operands, raw halves, roots and fuel`,async()=>{
+    const engine=await create(binary);
+    for(const count of [0,2,3,8,128]) for(const mode of ['direct','indirect','reference']) for(const mutual of [false,true]) {
+      const params=count?`(param i32 ${'v128 '.repeat(count-1)})`:'';
+      const vectors=Array.from({length:Math.max(count-1,0)},(_,n)=>`v128.const i64x2 ${n+1} ${n+101}`);
+      const first=count?'local.get 1':'v128.const i64x2 1 101';
+      const last=count?`local.get ${count-1}`:'v128.const i64x2 2 102';
+      const argumentsForTail=count?`local.get 0 i32.const 1 i32.sub ${vectors.map((_,n)=>`local.get ${n+1}`).join(' ')}`:'';
+      const tail=(target,index)=>`${argumentsForTail} ${mode==='direct'?`return_call ${target}`:mode==='indirect'?`i32.const ${index} return_call_indirect (type $T)`:`ref.func ${target} return_call_ref $T`}`;
+      const body=(target,index,answer)=>`${count?'local.get 0':'global.get $remaining'} i32.eqz
+        if ${first} ${last} i32.const ${answer} return end
+        ${count?'':'global.get $remaining i32.const 1 i32.sub global.set $remaining'}
+        block loop i32.const 777 ${tail(target,index)} end end unreachable`;
+      engine.load(`(module (type $T (func ${params} (result v128 v128 i32)))
+        (global $remaining (mut i32) (i32.const 0)) (table funcref (elem $first $second))
+        (func $first (type $T) ${body(mutual?'$second':'$first',mutual?1:0,42)})
+        (func $second (type $T) nop ${body('$first',0,43)})
+        (func (export "run") (result i32 v128 v128 i32)
+          i32.const 201 global.set $remaining i32.const 123 ${count?'i32.const 201':''} ${vectors.join(' ')} call $first))`);
+      const firstBits=(101n<<64n)|1n,lastBits=count?(BigInt(count+99)<<64n)|BigInt(count-1):(102n<<64n)|2n;
+      const expected=[{type:'i32',bits:123n},{type:'v128',bits:firstBits},{type:'v128',bits:lastBits},{type:'i32',bits:mutual?43n:42n}];
+      engine.setFuel(1000000);assert.deepEqual(engine.invokeRaw('run'),expected,`${count}/${mode}/${mutual}`);
+      engine.setFuel(50);assert.throws(()=>engine.invokeRaw('run'),/exhausted fuel/);
+      engine.setFuel(1000000);assert.deepEqual(engine.invokeRaw('run'),expected);
+    }
+  });
+
   test(`${runtime}: reference dispatch keeps null traps and exact fuel boundaries`, async () => {
     const engine = await create(binary);
     const source = `(module

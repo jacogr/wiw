@@ -373,6 +373,7 @@
 	(func $gc-allocate
 		(param $heap i32)
 		(param $count i32)
+		(param $clear i32)
 		(result i32)
 		(local $size i64)
 		(local $object i32)
@@ -395,7 +396,12 @@
 		(global.set $gc-object-used
 			(i32.add (global.get $gc-object-used) (i32.wrap_i64 (local.get $size)))
 		)
-		(call $zero-bytes (local.get $object) (i32.wrap_i64 (local.get $size)))
+		;; Default constructors require zeroed fields; explicit constructors overwrite every raw slot.
+		(if (local.get $clear)
+			(then (call $zero-bytes (local.get $object) (i32.wrap_i64 (local.get $size))))
+			;; Initialize header padding even when field writes are supplied by the caller.
+			(else (i64.store offset=M4_VECTOR_HIGH_OFFSET (local.get $object) (i64.const 0)))
+		)
 		(i32.store (local.get $object) (local.get $heap))
 		(i32.store offset=4 (local.get $object) (local.get $count))
 		(local.get $object)
@@ -822,7 +828,11 @@
 		;; Struct constructors allocate one raw slot per declared field.
 		(if (i32.le_u (local.get $op) (i32.const M4_OP_STRUCT_NEW_DEFAULT))
 			(then
-				(local.set $object (call $gc-allocate (local.get $heap) (local.get $count)))
+				(local.set $object (call $gc-allocate (local.get $heap) (local.get $count) (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_NEW_DEFAULT))))
+				;; Failed allocation must not write fields at address zero or publish a reference.
+				(if (global.get $error)
+					(then (return (i64.const 0)))
+				)
 				;; Explicit constructors install fields from the operand stack in reverse order.
 				(if (i32.eq (local.get $op) (i32.const M4_OP_STRUCT_NEW))
 					(then
@@ -875,7 +885,7 @@
 						(local.set $high (global.get $gc-high))
 					)
 				)
-				(local.set $object (call $gc-allocate (local.get $heap) (local.get $count)))
+				(local.set $object (call $gc-allocate (local.get $heap) (local.get $count) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_DEFAULT))))
 				;; Allocation failure must not address an unallocated slot range.
 				(if (global.get $error)
 					(then
@@ -1077,7 +1087,7 @@
 				)
 			)
 		)
-		(local.set $object (call $gc-allocate (local.get $heap) (local.get $count)))
+		(local.set $object (call $gc-allocate (local.get $heap) (local.get $count) (i32.const 0)))
 		;; Allocation failure preserves the first resource error.
 		(if (global.get $error)
 			(then
@@ -1428,7 +1438,7 @@
 		;; Constructor variants allocate their destination only after checking the complete source range.
 		(if (i32.lt_u (local.get $op) (i32.const M4_OP_ARRAY_FILL))
 			(then
-				(local.set $dest (call $gc-allocate (local.get $heap) (local.get $count)))
+				(local.set $dest (call $gc-allocate (local.get $heap) (local.get $count) (i32.eq (local.get $op) (i32.const M4_OP_ARRAY_NEW_ELEM))))
 			)
 		)
 		;; A resource failure cannot publish an invalid aggregate handle.

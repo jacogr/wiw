@@ -908,16 +908,33 @@
 					;; Defined tail calls retain this frame and its cached high-half region.
 					(if (local.get $tail)
 						(then
-							;; One-parameter tails without extra locals retain the existing root and frame base.
-							(if
-								(i32.and
-									(i32.eq (i32.load offset=M4_FUNCTION_PARAMETERS_OFFSET (local.get $meta)) (i32.const 1))
-									(i32.eq (i32.load offset=M4_FUNCTION_LOCALS_OFFSET (local.get $meta)) (i32.const 1))
-								)
+							;; Tails without declared locals retain the existing root and frame base at every parameter count.
+							(if (i32.eq
+								(i32.load offset=M4_FUNCTION_PARAMETERS_OFFSET (local.get $meta))
+								(i32.load offset=M4_FUNCTION_LOCALS_OFFSET (local.get $meta)))
 								(then
-									(i64.store offset=M4_CALL_LOCALS_OFFSET (local.get $frame) (i64.load (local.get $target)))
-									(i64.store (local.get $frame-high)
-										(i64.load (i32.add (global.get $stack-high-base) (i32.sub (local.get $target) (global.get $stack-base))))
+									(local.set $count (i32.load offset=M4_FUNCTION_PARAMETERS_OFFSET (local.get $meta)))
+									;; A single argument keeps the direct raw-half stores used by the original fast path.
+									(if (i32.eq (local.get $count) (i32.const 1))
+										(then
+											(i64.store offset=M4_CALL_LOCALS_OFFSET (local.get $frame) (i64.load (local.get $target)))
+											(i64.store (local.get $frame-high)
+												(i64.load (i32.add (global.get $stack-high-base) (i32.sub (local.get $target) (global.get $stack-base))))
+											)
+										)
+										;; Wider signatures copy disjoint low/high operand spans; zero-argument tails touch neither span.
+										(else
+											;; Empty spans need no source address translation or memory transfer.
+											(if (local.get $count)
+												(then
+													(local.set $count (i32.mul (local.get $count) (i32.const M4_SLOT_BYTES)))
+													(memory.copy (i32.add (local.get $frame) (i32.const M4_CALL_LOCALS_OFFSET)) (local.get $target) (local.get $count))
+													(memory.copy (local.get $frame-high)
+														(i32.add (global.get $stack-high-base) (i32.sub (local.get $target) (global.get $stack-base)))
+														(local.get $count))
+												)
+											)
+										)
 									)
 									(global.set $sp (i32.load offset=M4_CALL_STACK_BASE_OFFSET (local.get $frame)))
 									;; Discard nested controls while retaining the allocated implicit root.

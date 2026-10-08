@@ -24,6 +24,15 @@ const source=original.replace(/\)\s*$/,`
     (global.set $tok (i32.const 4096)))
   ;; Publish the test cursor without exposing mutable state in the production ABI.
   (func (export "wire-used") (result i32) (global.get $bin-used))
+  ;; Supply a length-prefixed string in a disjoint test input span.
+  (func (export "wire-string-input") (param $n i32)
+    (global.set $bin-pos (i32.const 2048))
+    (global.set $bin-limit (i32.add (i32.const 2048) (local.get $n))))
+  ;; End input at physical guest memory boundaries independently of the output arena.
+  (func (export "wire-string-span") (param $p i32) (param $n i32)
+    (global.set $bin-pos (local.get $p))
+    (global.set $bin-limit (i32.add (local.get $p) (local.get $n))))
+  (export "wire-string" (func $binary-string))
   (export "wire-opname" (func $binary-opname))
 )`);
 const limit=1048576,out=4096;
@@ -89,6 +98,67 @@ for(const runtime of runtimeNames) {
       assert.equal(engine.call('wire-opname',734),1);
       assert.equal(engine.call('error_code'),8);assert.equal(engine.call('wire-used'),17);
       assert.deepEqual(engine.read(out+17,32),new Uint8Array(32).fill(0xa5));
+      // Escapes retain every byte and their exact partial prefix at each output-capacity tail.
+      const uleb=value=>{const bytes=[];do{const byte=value&127;value>>>=7;bytes.push(byte|(value?128:0));}while(value);return bytes;};
+      const decodeString=text=>{
+        const decoded=[];let at=1;assert.equal(text[0],34);
+        while(text[at]!==34) {
+          if(text[at]===92) {decoded.push(Number.parseInt(String.fromCharCode(text[at+1],text[at+2]),16));at+=3;}
+          else decoded.push(text[at++]);
+          assert.ok(at<text.length);
+        }
+        assert.ok(text.subarray(at+1).every(byte=>byte===32));
+        return Uint8Array.from(decoded);
+      };
+      for(const payload of [new Uint8Array(),Uint8Array.of(0),Uint8Array.of(34,92),
+        Uint8Array.from({length:256},(_,n)=>n),Buffer.from('abc (; ;; ) '+ 'printable text '.repeat(4)),new TextEncoder().encode('λ中😀')]) {
+        const input=new Uint8Array([...uleb(payload.length),...payload]);
+        const expected=Buffer.from('"'+Array.from(payload,b=>'\\'+b.toString(16).padStart(2,'0')).join('')+'" ');
+        for(const capacity of new Set([0,1,2,3,4,5,6,expected.length-1,expected.length,expected.length+1])) {
+          if(capacity<0) continue;
+          const start=limit-capacity;
+          engine.call('wire-reset',start,0);engine.call('wire-string-input',input.length);
+          engine.write(2048,input);engine.write(out+start-1,new Uint8Array(capacity+3).fill(0xa5));
+          engine.call('wire-string',0);
+          const written=Math.min(capacity,expected.length);
+          assert.equal(engine.call('error_code'),capacity<expected.length?6:0);
+          assert.equal(engine.call('wire-used'),start+written);
+          if(capacity<expected.length) assert.deepEqual(Buffer.from(engine.read(out+start,written)),expected.subarray(0,written));
+          else {
+            // Decode the generated string independently; exterior padding preserves following source positions.
+            assert.deepEqual(decodeString(engine.read(out+start,written)),Uint8Array.from(payload));
+          }
+          assert.equal(engine.read(out+start-1,1)[0],0xa5);
+          assert.equal(engine.read(out+limit,1)[0],0xa5);
+        }
+      }
+      // Every tail length and special-byte lane remains bounded when the input ends at physical memory's last byte.
+      const payloads=Array.from({length:34},(_,n)=>new Uint8Array(n).fill(65));
+      for(const length of [63,64,65]) payloads.push(new Uint8Array(length).fill(65));
+      for(let lane=0;lane<32;lane++) for(const byte of [0,34,92,127,128,255]) {
+        const payload=new Uint8Array(65).fill(65);payload[lane]=byte;payloads.push(payload);
+      }
+      for(const payload of payloads) {
+        const input=new Uint8Array([...uleb(payload.length),...payload]),pointer=18*65536-input.length,length=3*payload.length+3;
+        engine.call('wire-reset',0,0);engine.call('wire-string-span',pointer,input.length);
+        engine.write(pointer,input);engine.write(out-1,new Uint8Array(length+2).fill(0xa5));
+        engine.call('wire-string',0);assert.equal(engine.call('error_code'),0);
+        assert.equal(engine.call('wire-used'),length);
+        assert.deepEqual(decodeString(engine.read(out,length)),payload);
+        assert.equal(engine.read(out-1,1)[0],0xa5);assert.equal(engine.read(out+length,1)[0],0xa5);
+      }
+      // Name validation still rejects malformed UTF-8 before emission, and custom names emit nothing.
+      for(const [payload,valid] of [[Buffer.from('λ中😀'),true],[Uint8Array.of(0xff),false],
+        [Uint8Array.of(0xc0,0x80),false],[Uint8Array.of(0xe2,0x82),false]]) {
+        const input=new Uint8Array([...uleb(payload.length),...payload]);
+        for(const mode of [1,2]) {
+          engine.call('wire-reset',0,0);engine.call('wire-string-input',input.length);
+          engine.write(2048,input);engine.write(out,new Uint8Array(64).fill(0xa5));
+          engine.call('wire-string',mode);
+          assert.equal(engine.call('error_code'),valid?0:1);
+          if(!valid||mode===2) {assert.equal(engine.call('wire-used'),0);assert.equal(engine.read(out,1)[0],0xa5);}
+        }
+      }
     } finally {await rm(directory,{recursive:true,force:true});}
   });
 }

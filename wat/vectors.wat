@@ -128,101 +128,8 @@
 
 	(global $vector-high (mut i64) (i64.const 0))
 	(global $vector-low (mut i64) (i64.const 0))
-	;; Extract one unsigned lane from either half of a vector.
-	(func $vector-lane
-		(param $lo i64)
-		(param $hi i64)
-		(param $width i32)
-		(param $index i32)
-		(result i64)
-		(local $shift i32)
 
-		(local.set $shift (i32.mul (local.get $width) (local.get $index)))
-		(i64.and
-			(i64.shr_u
-				(select (local.get $hi) (local.get $lo) (i32.ge_u (local.get $shift) (i32.const M4_VECTOR_HALF_BITS)))
-				(i64.extend_i32_u (local.get $shift))
-			)
-			(i64.shr_u (i64.const -1) (i64.extend_i32_u (i32.sub (i32.const M4_VECTOR_HALF_BITS) (local.get $width))))
-		)
-	)
-
-	;; Sign extend a lane to a full-width integer without losing its original bits.
-	(func $vector-signed
-		(param $value i64)
-		(param $width i32)
-		(result i64)
-
-		(i64.shr_s
-			(i64.shl
-				(local.get $value)
-				(i64.extend_i32_u (i32.sub (i32.const M4_VECTOR_HALF_BITS) (local.get $width)))
-			)
-			(i64.extend_i32_u (i32.sub (i32.const M4_VECTOR_HALF_BITS) (local.get $width)))
-		)
-	)
-
-	;; Pack a masked result lane into the initially empty result vector.
-	(func $vector-insert
-		(param $value i64)
-		(param $width i32)
-		(param $index i32)
-		(local $bits i64)
-		(local $shift i32)
-
-		(local.set $shift (i32.mul (local.get $width) (local.get $index)))
-		(local.set $bits
-			(i64.shl
-				(i64.and
-					(local.get $value)
-					(i64.shr_u (i64.const -1) (i64.extend_i32_u (i32.sub (i32.const M4_VECTOR_HALF_BITS) (local.get $width))))
-				)
-				(i64.extend_i32_u (local.get $shift))
-			)
-		)
-		;; The lane offset selects the low or high output slot.
-		(if (i32.lt_u (local.get $shift) (i32.const M4_VECTOR_HALF_BITS))
-			(then
-				(global.set $vector-low (i64.or (global.get $vector-low) (local.get $bits)))
-			)
-			;; Upper lanes use the same masked shift modulo 64.
-			(else
-				(global.set $vector-high (i64.or (global.get $vector-high) (local.get $bits)))
-			)
-		)
-	)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-	;; Clamp a narrow arithmetic result to its signed or unsigned lane range.
-	(func $vector-clamp
-		(param $x i64)
-		(param $lo i64)
-		(param $hi i64)
-		(result i64)
-
-		(select
-			(local.get $hi)
-			(select (local.get $lo) (local.get $x) (i64.lt_s (local.get $x) (local.get $lo)))
-			(i64.gt_s (local.get $x) (local.get $hi))
-		)
-	)
-
-	;; Evaluate permitted unfused floating multiply-adds and signed byte dot products lane by lane.
+	;; Evaluate relaxed multiply-adds without fusion and dot products with signed-byte arithmetic.
 	(func $vector-relaxed
 		(param $op i32)
 		(param $a i64)
@@ -232,133 +139,88 @@
 		(param $c i64)
 		(param $ch i64)
 		(result i64)
-		(local $i i32)
-		(local $j i32)
-		(local $width i32)
-		(local $group i32)
-		(local $x i64)
-		(local $y i64)
-		(local $z i64)
-		(local $sum i64)
-		(local $f f32)
-		(local $d f64)
+		(local $left v128)
+		(local $right v128)
+		(local $low v128)
+		(local $high v128)
+		(local $packed v128)
 
-		(local $lane-shift i32)
+		(local.set $left (i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah)))
+		(local.set $right (i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh)))
 
-		(global.set $vector-low (i64.const 0))
-		(global.set $vector-high (i64.const 0))
-		(local.set $width
-			(select (i32.const 32) (i32.const M4_VECTOR_HALF_BITS) (i32.le_u (local.get $op) (i32.const M4_OP_F32X4_RELAXED_NMADD)))
-		)
-		;; Dot operations group two or four signed bytes into one output lane.
-		(if (i32.ge_u (local.get $op) (i32.const M4_OP_I16X8_RELAXED_DOT_I8X16_I7X16_S))
+		;; f32x4.relaxed_madd retains two separate rounding steps and the original sign operation.
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_RELAXED_MADD))
 			(then
-				(local.set $width
-					(select (i32.const 16) (i32.const 32) (i32.eq (local.get $op) (i32.const M4_OP_I16X8_RELAXED_DOT_I8X16_I7X16_S)))
-				)
-				(local.set $group (i32.div_u (local.get $width) (i32.const 8)))
+				(local.set $packed (f32x4.add
+					(f32x4.mul (local.get $left) (local.get $right))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $c)) (local.get $ch))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
+				(return (global.get $vector-low))
 			)
 		)
-		;; Each output lane is packed after its scalar calculation.
-		(loop $lanes
-			(local.set $x
-				(call $vector-lane (local.get $a) (local.get $ah) (local.get $width) (local.get $i))
+
+		;; f32x4.relaxed_nmadd retains two separate rounding steps and the original sign operation.
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_RELAXED_NMADD))
+			(then
+				(local.set $packed (f32x4.add
+					(f32x4.neg (f32x4.mul (local.get $left) (local.get $right)))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $c)) (local.get $ch))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
+				(return (global.get $vector-low))
 			)
-			(local.set $y
-				(call $vector-lane (local.get $b) (local.get $bh) (local.get $width) (local.get $i))
-			)
-			(local.set $z
-				(call $vector-lane (local.get $c) (local.get $ch) (local.get $width) (local.get $i))
-			)
-			;; Signed dot products accumulate exact byte products before output-width wrapping.
-			(if (local.get $group)
-				(then
-					(local.set $sum
-						(select (local.get $z) (i64.const 0) (i32.eq (local.get $op) (i32.const M4_OP_I32X4_RELAXED_DOT_I8X16_I7X16_ADD_S)))
-					)
-					(local.set $j (i32.const 0))
-					;; Accumulate every byte belonging to this output lane.
-					(loop $bytes
-						(local.set $sum
-							(i64.add
-								(local.get $sum)
-								(i64.mul
-									(i64.extend8_s
-										(i64.and
-											(i64.shr_u
-												(select (local.get $ah) (local.get $a)
-													(i32.ge_u (local.tee $lane-shift (i32.shl (i32.add (i32.mul (local.get $i) (local.get $group)) (local.get $j)) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-												)
-												(i64.extend_i32_u (local.get $lane-shift))
-											)
-											(i64.const M4_U8_MAX)
-										)
-									)
-									(i64.extend8_s
-										(i64.and
-											(i64.shr_u
-												(select (local.get $bh) (local.get $b)
-													(i32.ge_u (local.tee $lane-shift (i32.shl (i32.add (i32.mul (local.get $i) (local.get $group)) (local.get $j)) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-												)
-												(i64.extend_i32_u (local.get $lane-shift))
-											)
-											(i64.const M4_U8_MAX)
-										)
-									)
-								)
-							)
-						)
-						(local.set $j (i32.add (local.get $j) (i32.const 1)))
-						(br_if $bytes (i32.lt_u (local.get $j) (local.get $group)))
-					)
-				)
-				;; Floating operations round the multiplication before adding the third operand.
-				(else
-					;; The lane width selects the matching IEEE arithmetic and bit representation.
-					(if (i32.eq (local.get $width) (i32.const 32))
-						(then
-							(local.set $f
-								(f32.mul
-									(f32.reinterpret_i32 (i32.wrap_i64 (local.get $x)))
-									(f32.reinterpret_i32 (i32.wrap_i64 (local.get $y)))
-								)
-							)
-							;; nmadd negates the rounded product before addition.
-							(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_RELAXED_NMADD))
-								(then
-									(local.set $f (f32.neg (local.get $f)))
-								)
-							)
-							(local.set $sum
-								(i64.extend_i32_u
-									(i32.reinterpret_f32
-										(f32.add (local.get $f) (f32.reinterpret_i32 (i32.wrap_i64 (local.get $z))))
-									)
-								)
-							)
-						)
-						;; Double lanes retain the full sixty-four-bit payload.
-						(else
-							(local.set $d
-								(f64.mul (f64.reinterpret_i64 (local.get $x)) (f64.reinterpret_i64 (local.get $y)))
-							)
-							;; nmadd negates the rounded product before addition.
-							(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_RELAXED_NMADD))
-								(then
-									(local.set $d (f64.neg (local.get $d)))
-								)
-							)
-							(local.set $sum
-								(i64.reinterpret_f64 (f64.add (local.get $d) (f64.reinterpret_i64 (local.get $z))))
-							)
-						)
-					)
-				)
-			)
-			(call $vector-insert (local.get $sum) (local.get $width) (local.get $i))
-			(local.set $i (i32.add (local.get $i) (i32.const 1)))
-			(br_if $lanes (i32.lt_u (local.get $i) (i32.div_u (i32.const 128) (local.get $width))))
 		)
+
+		;; f64x2.relaxed_madd retains two separate rounding steps and the original sign operation.
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_RELAXED_MADD))
+			(then
+				(local.set $packed (f64x2.add
+					(f64x2.mul (local.get $left) (local.get $right))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $c)) (local.get $ch))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
+				(return (global.get $vector-low))
+			)
+		)
+
+		;; f64x2.relaxed_nmadd retains two separate rounding steps and the original sign operation.
+		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_RELAXED_NMADD))
+			(then
+				(local.set $packed (f64x2.add
+					(f64x2.neg (f64x2.mul (local.get $left) (local.get $right)))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $c)) (local.get $ch))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
+				(return (global.get $vector-low))
+			)
+		)
+
+		;; Pairwise i32 sums preserve every signed i8 product, including out-of-range i7 input bytes.
+		(local.set $low (i32x4.dot_i16x8_s
+			(i16x8.extend_low_i8x16_s (local.get $left))
+			(i16x8.extend_low_i8x16_s (local.get $right))))
+		(local.set $high (i32x4.dot_i16x8_s
+			(i16x8.extend_high_i8x16_s (local.get $left))
+			(i16x8.extend_high_i8x16_s (local.get $right))))
+		;; Two-byte outputs truncate pair sums instead of saturating the positive 32768 case.
+		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_RELAXED_DOT_I8X16_I7X16_S))
+			(then
+				(local.set $packed (i8x16.shuffle M4_VECTOR_DOT_PACK_PAIRS (local.get $low) (local.get $high)))
+			)
+			;; Four-byte outputs combine neighboring pair sums, then add the third operand modulo i32.
+			(else
+				(local.set $low (i32x4.add (local.get $low)
+					(i8x16.shuffle M4_VECTOR_DOT_SWAP_PAIRS (local.get $low) (local.get $low))))
+				(local.set $high (i32x4.add (local.get $high)
+					(i8x16.shuffle M4_VECTOR_DOT_SWAP_PAIRS (local.get $high) (local.get $high))))
+				(local.set $packed (i32x4.add
+					(i8x16.shuffle M4_VECTOR_DOT_PACK_QUADS (local.get $low) (local.get $high))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $c)) (local.get $ch))))
+			)
+		)
+		(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+		(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 		(global.get $vector-low)
 	)
 
@@ -375,94 +237,10 @@
 		(param $imm2 i32)
 		(result i64)
 
-		;; Normalize relaxed aliases before selecting a strict lane family.
+		;; Normalize relaxed aliases once before selecting a strict lane family.
 		(if (i32.ge_u (local.get $op) (i32.const M4_OP_I8X16_RELAXED_SWIZZLE))
 			(then
-				;; i8x16.relaxed_swizzle uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_RELAXED_SWIZZLE))
-					(then
-						(local.set $op (i32.const M4_OP_I8X16_SWIZZLE))
-					)
-				)
-				;; i32x4.relaxed_trunc_f32x4_s uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_RELAXED_TRUNC_F32X4_S))
-					(then
-						(local.set $op (i32.const M4_OP_I32X4_TRUNC_SAT_F32X4_S))
-					)
-				)
-				;; i32x4.relaxed_trunc_f32x4_u uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_RELAXED_TRUNC_F32X4_U))
-					(then
-						(local.set $op (i32.const M4_OP_I32X4_TRUNC_SAT_F32X4_U))
-					)
-				)
-				;; i32x4.relaxed_trunc_f64x2_s_zero uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_RELAXED_TRUNC_F64X2_S_ZERO))
-					(then
-						(local.set $op (i32.const M4_OP_I32X4_TRUNC_SAT_F64X2_S_ZERO))
-					)
-				)
-				;; i32x4.relaxed_trunc_f64x2_u_zero uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_RELAXED_TRUNC_F64X2_U_ZERO))
-					(then
-						(local.set $op (i32.const M4_OP_I32X4_TRUNC_SAT_F64X2_U_ZERO))
-					)
-				)
-				;; i8x16.relaxed_laneselect uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_RELAXED_LANESELECT))
-					(then
-						(local.set $op (i32.const M4_OP_V128_BITSELECT))
-					)
-				)
-				;; i16x8.relaxed_laneselect uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_RELAXED_LANESELECT))
-					(then
-						(local.set $op (i32.const M4_OP_V128_BITSELECT))
-					)
-				)
-				;; i32x4.relaxed_laneselect uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_RELAXED_LANESELECT))
-					(then
-						(local.set $op (i32.const M4_OP_V128_BITSELECT))
-					)
-				)
-				;; i64x2.relaxed_laneselect uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_RELAXED_LANESELECT))
-					(then
-						(local.set $op (i32.const M4_OP_V128_BITSELECT))
-					)
-				)
-				;; f32x4.relaxed_min uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_RELAXED_MIN))
-					(then
-						(local.set $op (i32.const M4_OP_F32X4_MIN))
-					)
-				)
-				;; f32x4.relaxed_max uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_RELAXED_MAX))
-					(then
-						(local.set $op (i32.const M4_OP_F32X4_MAX))
-					)
-				)
-				;; f64x2.relaxed_min uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_RELAXED_MIN))
-					(then
-						(local.set $op (i32.const M4_OP_F64X2_MIN))
-					)
-				)
-				;; f64x2.relaxed_max uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_RELAXED_MAX))
-					(then
-						(local.set $op (i32.const M4_OP_F64X2_MAX))
-					)
-				)
-				;; i16x8.relaxed_q15mulr_s uses the permitted strict operation as its deterministic result.
-				(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_RELAXED_Q15MULR_S))
-					(then
-						(local.set $op (i32.const M4_OP_I16X8_Q15MULR_SAT_S))
-					)
-				)
-				;; Relaxed multiply-add and dot products evaluate scalar lanes without native guest execution.
+				;; Multiply-adds and signed dots have dedicated strict SIMD sequences.
 				(if
 					(i32.or
 						(i32.and
@@ -485,10 +263,53 @@
 						)
 					)
 				)
+				;; Every permitted alias exits after its single mapping, rather than testing later families again.
+				(block $normalized
+					;; Relaxed swizzle selects the deterministic strict swizzle.
+					(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_RELAXED_SWIZZLE))
+						(then
+							(local.set $op (i32.const M4_OP_I8X16_SWIZZLE))
+							(br $normalized)
+						)
+					)
+					;; Adjacent signed/unsigned truncations share an offset within their f32 or f64 pair.
+					(if (i32.le_u (local.get $op) (i32.const M4_OP_I32X4_RELAXED_TRUNC_F64X2_U_ZERO))
+						(then
+							(local.set $op (i32.add (local.get $op)
+								(if (result i32) (i32.le_u (local.get $op) (i32.const M4_OP_I32X4_RELAXED_TRUNC_F32X4_U))
+									(then (i32.const m4_eval(M4_OP_I32X4_TRUNC_SAT_F32X4_S - M4_OP_I32X4_RELAXED_TRUNC_F32X4_S)))
+									;; The f64 zero-extending pair has a distinct strict offset.
+									(else (i32.const m4_eval(M4_OP_I32X4_TRUNC_SAT_F64X2_S_ZERO - M4_OP_I32X4_RELAXED_TRUNC_F64X2_S_ZERO))))))
+							(br $normalized)
+						)
+					)
+					;; All four lane-select shapes select the existing raw bitwise operation.
+					(if (i32.le_u (local.get $op) (i32.const M4_OP_I64X2_RELAXED_LANESELECT))
+						(then
+							(local.set $op (i32.const M4_OP_V128_BITSELECT))
+							(br $normalized)
+						)
+					)
+					;; Adjacent single-precision extrema preserve strict min/max selection.
+					(if (i32.le_u (local.get $op) (i32.const M4_OP_F32X4_RELAXED_MAX))
+						(then
+							(local.set $op (i32.add (local.get $op) (i32.const m4_eval(M4_OP_F32X4_MIN - M4_OP_F32X4_RELAXED_MIN))))
+							(br $normalized)
+						)
+					)
+					;; Double-precision extrema have the same two-member mapping in their own family.
+					(if (i32.le_u (local.get $op) (i32.const M4_OP_F64X2_RELAXED_MAX))
+						(then
+							(local.set $op (i32.add (local.get $op) (i32.const m4_eval(M4_OP_F64X2_MIN - M4_OP_F64X2_RELAXED_MIN))))
+							(br $normalized)
+						)
+					)
+					;; Dedicated arithmetic was handled above; the remaining valid alias is rounded Q15 multiplication.
+					(local.set $op (i32.const M4_OP_I16X8_Q15MULR_SAT_S))
+				)
 			)
 		)
-		(global.set $vector-low (i64.const 0))
-		(global.set $vector-high (i64.const 0))
+		;; Strict handlers now publish complete raw halves; scalar handlers explicitly clear their high half.
 		;; Opcode 203 predates its corresponding integer lane family.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_ADD))
 			(then
@@ -778,12 +599,7 @@
 		(param $bh i64)
 		(result i64)
 		(local $packed v128)
-		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
-		(local $lane-shift i32)
-		(local $lane-bits i64)
 
 		;; Compare every i8x16 lane without mixing masks between neighboring lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_EQ))
@@ -908,12 +724,7 @@
 		(param $bh i64)
 		(result i64)
 		(local $packed v128)
-		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
-		(local $lane-shift i32)
-		(local $lane-bits i64)
 
 		;; Compare every i16x8 lane without mixing masks between neighboring lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EQ))
@@ -1038,12 +849,7 @@
 		(param $bh i64)
 		(result i64)
 		(local $packed v128)
-		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
-		(local $lane-shift i32)
-		(local $lane-bits i64)
 
 		;; Compare every i32x4 lane without mixing masks between neighboring lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EQ))
@@ -1167,484 +973,139 @@
 		(param $b i64)
 		(param $bh i64)
 		(result i64)
-		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
-		(local $lane-shift i32)
-		(local $lane-bits i64)
 
-		;; Execute f32x4.eq independently in each 32-bit lane.
+		(local $packed v128)
+
+		;; Execute f32x4.eq across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_EQ))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (call $float-apply (i32.const 121) (local.get $x) (local.get $y))))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.eq
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.ne independently in each 32-bit lane.
+		;; Execute f32x4.ne across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_NE))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (call $float-apply (i32.const 122) (local.get $x) (local.get $y))))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.ne
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.lt independently in each 32-bit lane.
+		;; Execute f32x4.lt across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_LT))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (call $float-apply (i32.const 123) (local.get $x) (local.get $y))))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.lt
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.gt independently in each 32-bit lane.
+		;; Execute f32x4.gt across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_GT))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (call $float-apply (i32.const 124) (local.get $x) (local.get $y))))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.gt
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.le independently in each 32-bit lane.
+		;; Execute f32x4.le across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_LE))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (call $float-apply (i32.const 125) (local.get $x) (local.get $y))))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.le
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.ge independently in each 32-bit lane.
+		;; Execute f32x4.ge across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_GE))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (call $float-apply (i32.const 126) (local.get $x) (local.get $y))))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.ge
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.eq independently in each 64-bit lane.
+		;; Execute f64x2.eq across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_EQ))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (call $float-apply (i32.const 142) (local.get $x) (local.get $y))))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.eq
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.ne independently in each 64-bit lane.
+		;; Execute f64x2.ne across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_NE))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (call $float-apply (i32.const 143) (local.get $x) (local.get $y))))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.ne
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.lt independently in each 64-bit lane.
+		;; Execute f64x2.lt across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_LT))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (call $float-apply (i32.const 144) (local.get $x) (local.get $y))))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.lt
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.gt independently in each 64-bit lane.
+		;; Execute f64x2.gt across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_GT))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (call $float-apply (i32.const 145) (local.get $x) (local.get $y))))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.gt
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.le independently in each 64-bit lane.
+		;; Execute f64x2.le across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_LE))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (call $float-apply (i32.const 146) (local.get $x) (local.get $y))))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.le
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.ge independently in each 64-bit lane.
+		;; Execute f64x2.ge across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_GE))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (call $float-apply (i32.const 147) (local.get $x) (local.get $y))))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.ge
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -1661,116 +1122,25 @@
 		(param $bh i64)
 		(result i64)
 		(local $packed v128)
-		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
-		(local $lane-shift i32)
-		(local $lane-bits i64)
 
-		;; Execute i8x16.abs independently in each 8-bit lane.
+		;; Execute i8x16.abs across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_ABS))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U8_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U8_MAX)
-						)
-					)
-					(local.set $lane-bits (select
-							(i64.sub (i64.const 0) (i64.extend8_s (local.get $x)))
-							(i64.extend8_s (local.get $x))
-							(i64.lt_s (i64.extend8_s (local.get $x)) (i64.const 0))
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U8_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 8-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 16)))
-				)
+				(local.set $packed (i8x16.abs
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute i8x16.neg independently in each 8-bit lane.
+		;; Execute i8x16.neg across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_NEG))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U8_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U8_MAX)
-						)
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (local.get $x)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U8_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 8-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 16)))
-				)
+				(local.set $packed (i8x16.neg
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -1784,207 +1154,43 @@
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.ceil independently in each 32-bit lane.
+		;; Execute f32x4.ceil across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_CEIL))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 109) (local.get $x) (local.get $y)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.ceil
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.floor independently in each 32-bit lane.
+		;; Execute f32x4.floor across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_FLOOR))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 110) (local.get $x) (local.get $y)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.floor
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.trunc independently in each 32-bit lane.
+		;; Execute f32x4.trunc across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_TRUNC))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 111) (local.get $x) (local.get $y)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.trunc
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.nearest independently in each 32-bit lane.
+		;; Execute f32x4.nearest across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_NEAREST))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 112) (local.get $x) (local.get $y)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.nearest
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -2090,59 +1296,23 @@
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.ceil independently in each 64-bit lane.
+		;; Execute f64x2.ceil across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_CEIL))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 130) (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.ceil
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.floor independently in each 64-bit lane.
+		;; Execute f64x2.floor across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_FLOOR))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 131) (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.floor
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -2190,31 +1360,13 @@
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.trunc independently in each 64-bit lane.
+		;; Execute f64x2.trunc across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_TRUNC))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 132) (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.trunc
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -2242,116 +1394,25 @@
 		(param $bh i64)
 		(result i64)
 		(local $packed v128)
-		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
-		(local $lane-shift i32)
-		(local $lane-bits i64)
 
-		;; Execute i16x8.abs independently in each 16-bit lane.
+		;; Execute i16x8.abs across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_ABS))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U16_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U16_MAX)
-						)
-					)
-					(local.set $lane-bits (select
-							(i64.sub (i64.const 0) (i64.extend16_s (local.get $x)))
-							(i64.extend16_s (local.get $x))
-							(i64.lt_s (i64.extend16_s (local.get $x)) (i64.const 0))
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U16_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 16-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
-				)
+				(local.set $packed (i16x8.abs
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute i16x8.neg independently in each 16-bit lane.
+		;; Execute i16x8.neg across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_NEG))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U16_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U16_MAX)
-						)
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (local.get $x)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U16_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 16-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
-				)
+				(local.set $packed (i16x8.neg
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -2457,31 +1518,13 @@
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.nearest independently in each 64-bit lane.
+		;; Execute f64x2.nearest across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_NEAREST))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 133) (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.nearest
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -2564,12 +1607,7 @@
 		(param $bh i64)
 		(result i64)
 		(local $packed v128)
-		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
-		(local $lane-shift i32)
-		(local $lane-bits i64)
 
 		;; Execute all i32x4 lanes together while preserving both raw halves.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_ADD))
@@ -2582,109 +1620,23 @@
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute i32x4.abs independently in each 32-bit lane.
+		;; Execute i32x4.abs across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_ABS))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (select
-							(i64.sub (i64.const 0) (i64.extend32_s (local.get $x)))
-							(i64.extend32_s (local.get $x))
-							(i64.lt_s (i64.extend32_s (local.get $x)) (i64.const 0))
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (i32x4.abs
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute i32x4.neg independently in each 32-bit lane.
+		;; Execute i32x4.neg across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_NEG))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (local.get $x)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (i32x4.neg
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -2803,97 +1755,36 @@
 		(param $bh i64)
 		(result i64)
 		(local $packed v128)
-		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
-		(local $lane-bits i64)
 
-		;; Execute i64x2.add independently in each 64-bit lane.
+		;; Execute i64x2.add across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_ADD))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (i64.add (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i64x2.add
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute i64x2.abs independently in each 64-bit lane.
+		;; Execute i64x2.abs across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_ABS))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (select
-							(i64.sub (i64.const 0) (local.get $x))
-							(local.get $x)
-							(i64.lt_s (local.get $x) (i64.const 0))
-						))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i64x2.abs
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute i64x2.neg independently in each 64-bit lane.
+		;; Execute i64x2.neg across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_NEG))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (local.get $x)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i64x2.neg
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -2933,115 +1824,47 @@
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute i64x2.sub independently in each 64-bit lane.
+		;; Execute i64x2.sub across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_SUB))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (i64.sub (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i64x2.sub
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute i64x2.mul independently in each 64-bit lane.
+		;; Execute i64x2.mul across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_MUL))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (i64.mul (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i64x2.mul
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute i64x2.eq independently in each 64-bit lane.
+		;; Execute i64x2.eq across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EQ))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (i64.extend_i32_u (i64.eq (local.get $x) (local.get $y)))))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i64x2.eq
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute i64x2.ne independently in each 64-bit lane.
+		;; Execute i64x2.ne across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_NE))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (i64.sub (i64.const 0) (i64.extend_i32_u (i64.ne (local.get $x) (local.get $y)))))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i64x2.ne
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -3101,585 +1924,125 @@
 		(param $b i64)
 		(param $bh i64)
 		(result i64)
-		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
-		(local $lane-shift i32)
-		(local $lane-bits i64)
 
-		;; Execute f32x4.abs independently in each 32-bit lane.
+		(local $packed v128)
+
+		;; Execute f32x4.abs across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_ABS))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 107) (local.get $x) (local.get $y)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.abs
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.neg independently in each 32-bit lane.
+		;; Execute f32x4.neg across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_NEG))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 108) (local.get $x) (local.get $y)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.neg
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.sqrt independently in each 32-bit lane.
+		;; Execute f32x4.sqrt across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_SQRT))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 113) (local.get $x) (local.get $y)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.sqrt
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.add independently in each 32-bit lane.
+		;; Execute f32x4.add across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_ADD))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 114) (local.get $x) (local.get $y)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.add
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.sub independently in each 32-bit lane.
+		;; Execute f32x4.sub across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_SUB))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 115) (local.get $x) (local.get $y)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.sub
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.mul independently in each 32-bit lane.
+		;; Execute f32x4.mul across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_MUL))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 116) (local.get $x) (local.get $y)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.mul
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.div independently in each 32-bit lane.
+		;; Execute f32x4.div across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_DIV))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 117) (local.get $x) (local.get $y)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.div
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.min independently in each 32-bit lane.
+		;; Execute f32x4.min across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_MIN))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 118) (local.get $x) (local.get $y)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.min
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.max independently in each 32-bit lane.
+		;; Execute f32x4.max across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_MAX))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 119) (local.get $x) (local.get $y)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.max
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.pmin independently in each 32-bit lane.
+		;; Execute f32x4.pmin across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_PMIN))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (select
-							(local.get $y)
-							(local.get $x)
-							(f32.lt
-								(f32.reinterpret_i32 (i32.wrap_i64 (local.get $y)))
-								(f32.reinterpret_i32 (i32.wrap_i64 (local.get $x)))
-							)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.pmin
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f32x4.pmax independently in each 32-bit lane.
+		;; Execute f32x4.pmax across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_PMAX))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $y
-						(i64.and
-							(i64.shr_u
-								(select (local.get $bh) (local.get $b)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						)
-					)
-					(local.set $lane-bits (select
-							(local.get $y)
-							(local.get $x)
-							(f32.gt
-								(f32.reinterpret_i32 (i32.wrap_i64 (local.get $y)))
-								(f32.reinterpret_i32 (i32.wrap_i64 (local.get $x)))
-							)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.pmax
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -3695,325 +2058,125 @@
 		(param $b i64)
 		(param $bh i64)
 		(result i64)
-		(local $i i32)
-		(local $x i64)
-		(local $y i64)
 
-		(local $lane-bits i64)
 
-		;; Execute f64x2.abs independently in each 64-bit lane.
+		(local $packed v128)
+
+		;; Execute f64x2.abs across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_ABS))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 128) (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.abs
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.neg independently in each 64-bit lane.
+		;; Execute f64x2.neg across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_NEG))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 129) (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.neg
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.sqrt independently in each 64-bit lane.
+		;; Execute f64x2.sqrt across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_SQRT))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 134) (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.sqrt
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.add independently in each 64-bit lane.
+		;; Execute f64x2.add across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_ADD))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 135) (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.add
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.sub independently in each 64-bit lane.
+		;; Execute f64x2.sub across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_SUB))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 136) (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.sub
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.mul independently in each 64-bit lane.
+		;; Execute f64x2.mul across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_MUL))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 137) (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.mul
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.div independently in each 64-bit lane.
+		;; Execute f64x2.div across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_DIV))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 138) (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.div
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.min independently in each 64-bit lane.
+		;; Execute f64x2.min across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_MIN))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 139) (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.min
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.max independently in each 64-bit lane.
+		;; Execute f64x2.max across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_MAX))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (call $float-apply (i32.const 140) (local.get $x) (local.get $y)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.max
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.pmin independently in each 64-bit lane.
+		;; Execute f64x2.pmin across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_PMIN))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (select
-							(local.get $y)
-							(local.get $x)
-							(f64.lt (f64.reinterpret_i64 (local.get $y)) (f64.reinterpret_i64 (local.get $x)))
-						))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.pmin
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Execute f64x2.pmax independently in each 64-bit lane.
+		;; Execute f64x2.pmax across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_PMAX))
 			(then
-				;; Pack each result after extracting operands in stack order.
-				(loop $lanes
-					(local.set $x
-						(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $y
-						(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-					)
-					(local.set $lane-bits (select
-							(local.get $y)
-							(local.get $x)
-							(f64.gt (f64.reinterpret_i64 (local.get $y)) (f64.reinterpret_i64 (local.get $x)))
-						))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.pmax
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -4030,283 +2193,100 @@
 		(param $bh i64)
 		(param $imm i32)
 		(result i64)
-		(local $i i32)
 
 		(local $lane-shift i32)
 		(local $lane-bits i64)
 
-		;; Interpret i8x16.shuffle using full-width scalar lanes.
+		(local $indices v128)
+
+		(local $packed v128)
+
+		(local $lane-mask i64)
+
+		;; Select the validated shuffle mask from both inputs with disjoint swizzles.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_SHUFFLE))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (i64.and
-							(i64.shr_u
-								(select (select
-								(local.get $bh)
-								(local.get $ah)
-								(i32.ge_u (i32.load8_u (i32.add (local.get $imm) (local.get $i))) (i32.const 16))
-							) (select
-								(local.get $b)
-								(local.get $a)
-								(i32.ge_u (i32.load8_u (i32.add (local.get $imm) (local.get $i))) (i32.const 16))
-							)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (i32.and (i32.load8_u (i32.add (local.get $imm) (local.get $i))) (i32.const 15)) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U8_MAX)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U8_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 8-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 16)))
-				)
+				(local.set $indices (v128.load (local.get $imm)))
+				;; Indices 16..31 zero the first swizzle; subtracting 16 zeros its complementary lanes.
+				(local.set $packed (v128.or
+					(i8x16.swizzle (i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah)) (local.get $indices))
+					(i8x16.swizzle (i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))
+						(i8x16.sub (local.get $indices) (i8x16.splat (i32.const M4_VECTOR_BYTES))))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i8x16.swizzle using full-width scalar lanes.
+		;; Execute i8x16.swizzle across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_SWIZZLE))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (select
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (i32.wrap_i64
-									(i64.and
-										(i64.shr_u
-											(select (local.get $bh) (local.get $b)
-												(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-											)
-											(i64.extend_i32_u (local.get $lane-shift))
-										)
-										(i64.const M4_U8_MAX)
-									)
-								) (i32.const 3))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U8_MAX)
-							)
-							(i64.const 0)
-							(i32.lt_u
-								(i32.wrap_i64
-									(i64.and
-										(i64.shr_u
-											(select (local.get $bh) (local.get $b)
-												(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-											)
-											(i64.extend_i32_u (local.get $lane-shift))
-										)
-										(i64.const M4_U8_MAX)
-									)
-								)
-								(i32.const 16)
-							)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U8_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 8-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 16)))
-				)
+				(local.set $packed (i8x16.swizzle
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $b)) (local.get $bh))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i8x16.splat using full-width scalar lanes.
+		;; Splat the original scalar bits across i8x16 without floating-point arithmetic.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_SPLAT))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (local.get $a))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U8_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 8-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 16)))
-				)
+				(local.set $packed (i8x16.splat (i32.wrap_i64 (local.get $a))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i16x8.splat using full-width scalar lanes.
+		;; Splat the original scalar bits across i16x8 without floating-point arithmetic.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_SPLAT))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (local.get $a))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U16_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 16-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
-				)
+				(local.set $packed (i16x8.splat (i32.wrap_i64 (local.get $a))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i32x4.splat using full-width scalar lanes.
+		;; Splat the original scalar bits across i32x4 without floating-point arithmetic.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_SPLAT))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (local.get $a))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (i32x4.splat (i32.wrap_i64 (local.get $a))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i64x2.splat using full-width scalar lanes.
+		;; Splat the original scalar bits across i64x2 without floating-point arithmetic.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_SPLAT))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (local.get $a))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i64x2.splat (local.get $a)))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret f32x4.splat using full-width scalar lanes.
+		;; Splat the original scalar bits across f32x4 without floating-point arithmetic.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_SPLAT))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (local.get $a))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (i32x4.splat (i32.wrap_i64 (local.get $a))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret f64x2.splat using full-width scalar lanes.
+		;; Splat the original scalar bits across f64x2 without floating-point arithmetic.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_SPLAT))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (local.get $a))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i64x2.splat (local.get $a)))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
 		;; Interpret i8x16.extract_lane_s using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_EXTRACT_LANE_S))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low
 					(i64.extend_i32_s
 						(i32.wrap_i64
@@ -4330,6 +2310,8 @@
 		;; Interpret i8x16.extract_lane_u using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_EXTRACT_LANE_U))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low
 					(i64.extend_i32_s
 						(i32.wrap_i64
@@ -4351,40 +2333,22 @@
 		;; Interpret i8x16.replace_lane using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_REPLACE_LANE))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (select
-							(local.get $b)
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U8_MAX)
-							)
-							(i32.eq (local.get $i) (local.get $imm))
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U8_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
+				;; Replace only the validated lane's bits and preserve the opposite raw half.
+				(local.set $lane-bits (local.get $b))
+				(local.set $lane-shift (i32.shl (local.get $imm) (i32.const M4_LANE8_SHIFT)))
+				(local.set $lane-mask (i64.shl (i64.const M4_U8_MAX) (i64.extend_i32_u (local.get $lane-shift))))
+				(local.set $lane-bits (i64.shl (i64.and (local.get $lane-bits) (i64.const M4_U8_MAX)) (i64.extend_i32_u (local.get $lane-shift))))
+				;; The selected lower-half lane leaves the upper half unchanged.
+				(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
+					(then
+						(global.set $vector-low (i64.or (i64.and (local.get $a) (i64.xor (local.get $lane-mask) (i64.const -1))) (local.get $lane-bits)))
+						(global.set $vector-high (local.get $ah))
 					)
-					;; Pack this 8-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
+					;; Shifts wrap modulo sixty-four for the corresponding upper-half lane.
+					(else
+						(global.set $vector-low (local.get $a))
+						(global.set $vector-high (i64.or (i64.and (local.get $ah) (i64.xor (local.get $lane-mask) (i64.const -1))) (local.get $lane-bits)))
 					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 16)))
 				)
 				(return (global.get $vector-low))
 			)
@@ -4392,6 +2356,8 @@
 		;; Interpret i16x8.extract_lane_s using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTRACT_LANE_S))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low
 					(i64.extend_i32_s
 						(i32.wrap_i64
@@ -4415,6 +2381,8 @@
 		;; Interpret i16x8.extract_lane_u using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTRACT_LANE_U))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low
 					(i64.extend_i32_s
 						(i32.wrap_i64
@@ -4436,40 +2404,22 @@
 		;; Interpret i16x8.replace_lane using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_REPLACE_LANE))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (select
-							(local.get $b)
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U16_MAX)
-							)
-							(i32.eq (local.get $i) (local.get $imm))
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U16_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
+				;; Replace only the validated lane's bits and preserve the opposite raw half.
+				(local.set $lane-bits (local.get $b))
+				(local.set $lane-shift (i32.shl (local.get $imm) (i32.const M4_LANE16_SHIFT)))
+				(local.set $lane-mask (i64.shl (i64.const M4_U16_MAX) (i64.extend_i32_u (local.get $lane-shift))))
+				(local.set $lane-bits (i64.shl (i64.and (local.get $lane-bits) (i64.const M4_U16_MAX)) (i64.extend_i32_u (local.get $lane-shift))))
+				;; The selected lower-half lane leaves the upper half unchanged.
+				(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
+					(then
+						(global.set $vector-low (i64.or (i64.and (local.get $a) (i64.xor (local.get $lane-mask) (i64.const -1))) (local.get $lane-bits)))
+						(global.set $vector-high (local.get $ah))
 					)
-					;; Pack this 16-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
+					;; Shifts wrap modulo sixty-four for the corresponding upper-half lane.
+					(else
+						(global.set $vector-low (local.get $a))
+						(global.set $vector-high (i64.or (i64.and (local.get $ah) (i64.xor (local.get $lane-mask) (i64.const -1))) (local.get $lane-bits)))
 					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
 				)
 				(return (global.get $vector-low))
 			)
@@ -4477,6 +2427,8 @@
 		;; Interpret i32x4.extract_lane using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTRACT_LANE))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low
 					(i64.extend_i32_s
 						(i32.wrap_i64
@@ -4498,40 +2450,22 @@
 		;; Interpret i32x4.replace_lane using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_REPLACE_LANE))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (select
-							(local.get $b)
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U32_MAX)
-							)
-							(i32.eq (local.get $i) (local.get $imm))
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
+				;; Replace only the validated lane's bits and preserve the opposite raw half.
+				(local.set $lane-bits (local.get $b))
+				(local.set $lane-shift (i32.shl (local.get $imm) (i32.const M4_LANE32_SHIFT)))
+				(local.set $lane-mask (i64.shl (i64.const M4_U32_MAX) (i64.extend_i32_u (local.get $lane-shift))))
+				(local.set $lane-bits (i64.shl (i64.and (local.get $lane-bits) (i64.const M4_U32_MAX)) (i64.extend_i32_u (local.get $lane-shift))))
+				;; The selected lower-half lane leaves the upper half unchanged.
+				(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
+					(then
+						(global.set $vector-low (i64.or (i64.and (local.get $a) (i64.xor (local.get $lane-mask) (i64.const -1))) (local.get $lane-bits)))
+						(global.set $vector-high (local.get $ah))
 					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
+					;; Shifts wrap modulo sixty-four for the corresponding upper-half lane.
+					(else
+						(global.set $vector-low (local.get $a))
+						(global.set $vector-high (i64.or (i64.and (local.get $ah) (i64.xor (local.get $lane-mask) (i64.const -1))) (local.get $lane-bits)))
 					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
 				)
 				(return (global.get $vector-low))
 			)
@@ -4539,6 +2473,8 @@
 		;; Interpret i64x2.extract_lane using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTRACT_LANE))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low
 					(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $imm) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
 				)
@@ -4548,25 +2484,19 @@
 		;; Interpret i64x2.replace_lane using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_REPLACE_LANE))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (select
-							(local.get $b)
-							(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-							(i32.eq (local.get $i) (local.get $imm))
-						))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
+				;; Replace only the validated lane's bits and preserve the opposite raw half.
+				(local.set $lane-bits (local.get $b))
+				;; The selected lower-half lane leaves the upper half unchanged.
+				(if (i32.eqz (local.get $imm))
+					(then
+						(global.set $vector-low (local.get $lane-bits))
+						(global.set $vector-high (local.get $ah))
 					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
+					;; Shifts wrap modulo sixty-four for the corresponding upper-half lane.
+					(else
+						(global.set $vector-low (local.get $a))
+						(global.set $vector-high (local.get $lane-bits))
+					)
 				)
 				(return (global.get $vector-low))
 			)
@@ -4574,6 +2504,8 @@
 		;; Interpret f32x4.extract_lane using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_EXTRACT_LANE))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low
 					(i64.and
 						(i64.shr_u
@@ -4591,40 +2523,22 @@
 		;; Interpret f32x4.replace_lane using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_REPLACE_LANE))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (select
-							(local.get $b)
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U32_MAX)
-							)
-							(i32.eq (local.get $i) (local.get $imm))
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
+				;; Replace only the validated lane's bits and preserve the opposite raw half.
+				(local.set $lane-bits (local.get $b))
+				(local.set $lane-shift (i32.shl (local.get $imm) (i32.const M4_LANE32_SHIFT)))
+				(local.set $lane-mask (i64.shl (i64.const M4_U32_MAX) (i64.extend_i32_u (local.get $lane-shift))))
+				(local.set $lane-bits (i64.shl (i64.and (local.get $lane-bits) (i64.const M4_U32_MAX)) (i64.extend_i32_u (local.get $lane-shift))))
+				;; The selected lower-half lane leaves the upper half unchanged.
+				(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
+					(then
+						(global.set $vector-low (i64.or (i64.and (local.get $a) (i64.xor (local.get $lane-mask) (i64.const -1))) (local.get $lane-bits)))
+						(global.set $vector-high (local.get $ah))
 					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
+					;; Shifts wrap modulo sixty-four for the corresponding upper-half lane.
+					(else
+						(global.set $vector-low (local.get $a))
+						(global.set $vector-high (i64.or (i64.and (local.get $ah) (i64.xor (local.get $lane-mask) (i64.const -1))) (local.get $lane-bits)))
 					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
 				)
 				(return (global.get $vector-low))
 			)
@@ -4632,6 +2546,8 @@
 		;; Interpret f64x2.extract_lane using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_EXTRACT_LANE))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low
 					(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $imm) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
 				)
@@ -4641,25 +2557,19 @@
 		;; Interpret f64x2.replace_lane using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_REPLACE_LANE))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (select
-							(local.get $b)
-							(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-							(i32.eq (local.get $i) (local.get $imm))
-						))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
+				;; Replace only the validated lane's bits and preserve the opposite raw half.
+				(local.set $lane-bits (local.get $b))
+				;; The selected lower-half lane leaves the upper half unchanged.
+				(if (i32.eqz (local.get $imm))
+					(then
+						(global.set $vector-low (local.get $lane-bits))
+						(global.set $vector-high (local.get $ah))
 					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
+					;; Shifts wrap modulo sixty-four for the corresponding upper-half lane.
+					(else
+						(global.set $vector-low (local.get $a))
+						(global.set $vector-high (local.get $lane-bits))
+					)
 				)
 				(return (global.get $vector-low))
 			)
@@ -4678,10 +2588,9 @@
 		(param $c i64)
 		(param $ch i64)
 		(result i64)
-		(local $i i32)
 
-		(local $lane-shift i32)
-		(local $lane-bits i64)
+
+		(local $packed v128)
 
 		;; Interpret v128.not using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_NOT))
@@ -4746,76 +2655,31 @@
 		;; Interpret v128.any_true using full-width scalar lanes.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_ANY_TRUE))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low
 					(i64.extend_i32_u (i64.ne (i64.or (local.get $a) (local.get $ah)) (i64.const 0)))
 				)
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret f32x4.demote_f64x2_zero using full-width scalar lanes.
+		;; Execute f32x4.demote_f64x2_zero across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_DEMOTE_F64X2_ZERO))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (call $float-apply
-							(i32.const 168)
-							(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-							(i64.const 0)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f32x4.demote_f64x2_zero
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret f64x2.promote_low_f32x4 using full-width scalar lanes.
+		;; Execute f64x2.promote_low_f32x4 across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_PROMOTE_LOW_F32X4))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (call $float-apply
-							(i32.const 169)
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U32_MAX)
-							)
-							(i64.const 0)
-						))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.promote_low_f32x4
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -4832,14 +2696,13 @@
 		(param $bh i64)
 		(result i64)
 		(local $packed v128)
-		(local $i i32)
 
-		(local $lane-shift i32)
-		(local $lane-bits i64)
 
 		;; Reduce all i8x16 lanes, including both raw halves, to the same scalar boolean.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_ALL_TRUE))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low (i64.extend_i32_u (i8x16.all_true
 					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah)))))
 				(return (global.get $vector-low))
@@ -4848,6 +2711,8 @@
 		;; Reduce lane sign bits in order to the same scalar mask.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I8X16_BITMASK))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low (i64.extend_i32_u (i8x16.bitmask
 					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah)))))
 				(return (global.get $vector-low))
@@ -4929,6 +2794,8 @@
 		;; Reduce all i16x8 lanes, including both raw halves, to the same scalar boolean.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_ALL_TRUE))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low (i64.extend_i32_u (i16x8.all_true
 					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah)))))
 				(return (global.get $vector-low))
@@ -4937,6 +2804,8 @@
 		;; Reduce lane sign bits in order to the same scalar mask.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_BITMASK))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low (i64.extend_i32_u (i16x8.bitmask
 					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah)))))
 				(return (global.get $vector-low))
@@ -4964,155 +2833,43 @@
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i16x8.extend_low_i8x16_s using full-width scalar lanes.
+		;; Execute i16x8.extend_low_i8x16_s across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTEND_LOW_I8X16_S))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (i64.extend8_s
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (i32.add (local.get $i) (i32.const 0)) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U8_MAX)
-							)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U16_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 16-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
-				)
+				(local.set $packed (i16x8.extend_low_i8x16_s
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i16x8.extend_high_i8x16_s using full-width scalar lanes.
+		;; Execute i16x8.extend_high_i8x16_s across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTEND_HIGH_I8X16_S))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (i64.extend8_s
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (i32.add (local.get $i) (i32.const 8)) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U8_MAX)
-							)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U16_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 16-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
-				)
+				(local.set $packed (i16x8.extend_high_i8x16_s
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i16x8.extend_low_i8x16_u using full-width scalar lanes.
+		;; Execute i16x8.extend_low_i8x16_u across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTEND_LOW_I8X16_U))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (i32.add (local.get $i) (i32.const 0)) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U8_MAX)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U16_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 16-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
-				)
+				(local.set $packed (i16x8.extend_low_i8x16_u
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i16x8.extend_high_i8x16_u using full-width scalar lanes.
+		;; Execute i16x8.extend_high_i8x16_u across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I16X8_EXTEND_HIGH_I8X16_U))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (i32.add (local.get $i) (i32.const 8)) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U8_MAX)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U16_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 16-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
-				)
+				(local.set $packed (i16x8.extend_high_i8x16_u
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -5163,6 +2920,8 @@
 		;; Reduce all i32x4 lanes, including both raw halves, to the same scalar boolean.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_ALL_TRUE))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low (i64.extend_i32_u (i32x4.all_true
 					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah)))))
 				(return (global.get $vector-low))
@@ -5171,160 +2930,50 @@
 		;; Reduce lane sign bits in order to the same scalar mask.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_BITMASK))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low (i64.extend_i32_u (i32x4.bitmask
 					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah)))))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i32x4.extend_low_i16x8_s using full-width scalar lanes.
+		;; Execute i32x4.extend_low_i16x8_s across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTEND_LOW_I16X8_S))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (i64.extend16_s
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (i32.add (local.get $i) (i32.const 0)) (i32.const M4_LANE16_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U16_MAX)
-							)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (i32x4.extend_low_i16x8_s
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i32x4.extend_high_i16x8_s using full-width scalar lanes.
+		;; Execute i32x4.extend_high_i16x8_s across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTEND_HIGH_I16X8_S))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (i64.extend16_s
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (i32.add (local.get $i) (i32.const M4_LANE16_SHIFT)) (i32.const 4))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U16_MAX)
-							)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (i32x4.extend_high_i16x8_s
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i32x4.extend_low_i16x8_u using full-width scalar lanes.
+		;; Execute i32x4.extend_low_i16x8_u across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTEND_LOW_I16X8_U))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (i32.add (local.get $i) (i32.const 0)) (i32.const M4_LANE16_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U16_MAX)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (i32x4.extend_low_i16x8_u
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i32x4.extend_high_i16x8_u using full-width scalar lanes.
+		;; Execute i32x4.extend_high_i16x8_u across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_EXTEND_HIGH_I16X8_U))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (i32.add (local.get $i) (i32.const M4_LANE16_SHIFT)) (i32.const 4))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U16_MAX)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (i32x4.extend_high_i16x8_u
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -5386,6 +3035,8 @@
 		;; Reduce all i64x2 lanes, including both raw halves, to the same scalar boolean.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_ALL_TRUE))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low (i64.extend_i32_u (i64x2.all_true
 					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah)))))
 				(return (global.get $vector-low))
@@ -5394,132 +3045,50 @@
 		;; Reduce lane sign bits in order to the same scalar mask.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_BITMASK))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				(global.set $vector-low (i64.extend_i32_u (i64x2.bitmask
 					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah)))))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i64x2.extend_low_i32x4_s using full-width scalar lanes.
+		;; Execute i64x2.extend_low_i32x4_s across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTEND_LOW_I32X4_S))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (i64.extend32_s
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (i32.add (local.get $i) (i32.const 0)) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U32_MAX)
-							)
-						))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i64x2.extend_low_i32x4_s
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i64x2.extend_high_i32x4_s using full-width scalar lanes.
+		;; Execute i64x2.extend_high_i32x4_s across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTEND_HIGH_I32X4_S))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (i64.extend32_s
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (i32.add (local.get $i) (i32.const 2)) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U32_MAX)
-							)
-						))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i64x2.extend_high_i32x4_s
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i64x2.extend_low_i32x4_u using full-width scalar lanes.
+		;; Execute i64x2.extend_low_i32x4_u across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTEND_LOW_I32X4_U))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (i32.add (local.get $i) (i32.const 0)) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i64x2.extend_low_i32x4_u
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i64x2.extend_high_i32x4_u using full-width scalar lanes.
+		;; Execute i64x2.extend_high_i32x4_u across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I64X2_EXTEND_HIGH_I32X4_U))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (i64.and
-							(i64.shr_u
-								(select (local.get $ah) (local.get $a)
-									(i32.ge_u (local.tee $lane-shift (i32.shl (i32.add (local.get $i) (i32.const 2)) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-								)
-								(i64.extend_i32_u (local.get $lane-shift))
-							)
-							(i64.const M4_U32_MAX)
-						))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i64x2.extend_high_i32x4_u
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -5577,306 +3146,87 @@
 		(param $a i64)
 		(param $ah i64)
 		(result i64)
-		(local $i i32)
 
-		(local $lane-shift i32)
-		(local $lane-bits i64)
 
-		;; Interpret i32x4.trunc_sat_f32x4_s using full-width scalar lanes.
+		(local $packed v128)
+
+		;; Execute i32x4.trunc_sat_f32x4_s across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_TRUNC_SAT_F32X4_S))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (call $float-apply
-							(i32.const 179)
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U32_MAX)
-							)
-							(i64.const 0)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (i32x4.trunc_sat_f32x4_s
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i32x4.trunc_sat_f32x4_u using full-width scalar lanes.
+		;; Execute i32x4.trunc_sat_f32x4_u across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_TRUNC_SAT_F32X4_U))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (call $float-apply
-							(i32.const 180)
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U32_MAX)
-							)
-							(i64.const 0)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (i32x4.trunc_sat_f32x4_u
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret f32x4.convert_i32x4_s using full-width scalar lanes.
+		;; Execute f32x4.convert_i32x4_s across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_CONVERT_I32X4_S))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (call $float-apply
-							(i32.const 160)
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U32_MAX)
-							)
-							(i64.const 0)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.convert_i32x4_s
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret f32x4.convert_i32x4_u using full-width scalar lanes.
+		;; Execute f32x4.convert_i32x4_u across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F32X4_CONVERT_I32X4_U))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (call $float-apply
-							(i32.const 161)
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U32_MAX)
-							)
-							(i64.const 0)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				(local.set $packed (f32x4.convert_i32x4_u
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i32x4.trunc_sat_f64x2_s_zero using full-width scalar lanes.
+		;; Execute i32x4.trunc_sat_f64x2_s_zero across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_TRUNC_SAT_F64X2_S_ZERO))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (call $float-apply
-							(i32.const 181)
-							(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-							(i64.const 0)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i32x4.trunc_sat_f64x2_s_zero
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret i32x4.trunc_sat_f64x2_u_zero using full-width scalar lanes.
+		;; Execute i32x4.trunc_sat_f64x2_u_zero across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_I32X4_TRUNC_SAT_F64X2_U_ZERO))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (call $float-apply
-							(i32.const 182)
-							(select (local.get $ah) (local.get $a) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-							(i64.const 0)
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (i32x4.trunc_sat_f64x2_u_zero
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret f64x2.convert_low_i32x4_s using full-width scalar lanes.
+		;; Execute f64x2.convert_low_i32x4_s across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_CONVERT_LOW_I32X4_S))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (call $float-apply
-							(i32.const 164)
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U32_MAX)
-							)
-							(i64.const 0)
-						))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.convert_low_i32x4_s
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
-		;; Interpret f64x2.convert_low_i32x4_u using full-width scalar lanes.
+		;; Execute f64x2.convert_low_i32x4_u across the complete vector with the same raw-half ABI.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_F64X2_CONVERT_LOW_I32X4_U))
 			(then
-				;; Process every output lane in order.
-				(loop $lanes
-					(local.set $lane-bits (call $float-apply
-							(i32.const 165)
-							(i64.and
-								(i64.shr_u
-									(select (local.get $ah) (local.get $a)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U32_MAX)
-							)
-							(i64.const 0)
-						))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				(local.set $packed (f64x2.convert_low_i32x4_u
+					(i64x2.replace_lane M4_VECTOR_HIGH_LANE (i64x2.splat (local.get $a)) (local.get $ah))))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -5894,10 +3244,13 @@
 		(param $imm2 i32)
 		(result i64)
 		(local $p i32)
-		(local $i i32)
 
 		(local $lane-shift i32)
 		(local $lane-bits i64)
+
+		(local $packed v128)
+
+		(local $lane-mask i64)
 
 		;; Interpret v128.load with an atomic unsigned memory bound check.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD))
@@ -5926,31 +3279,10 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Expand or splat the raw memory lanes into all output lanes.
-				(loop $lanes
-					(local.set $lane-bits (i64.extend8_s
-							(i64.load8_u (i32.add (local.get $p) (i32.mul (local.get $i) (i32.const 1))))
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U16_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 16-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
-				)
+				;; Read only the checked source width and expand the packed lanes together.
+				(local.set $packed (v128.load8x8_s (local.get $p)))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -5965,29 +3297,10 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Expand or splat the raw memory lanes into all output lanes.
-				(loop $lanes
-					(local.set $lane-bits (i64.load8_u (i32.add (local.get $p) (i32.mul (local.get $i) (i32.const 1)))))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U16_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 16-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
-				)
+				;; Read only the checked source width and expand the packed lanes together.
+				(local.set $packed (v128.load8x8_u (local.get $p)))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -6002,31 +3315,10 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Expand or splat the raw memory lanes into all output lanes.
-				(loop $lanes
-					(local.set $lane-bits (i64.extend16_s
-							(i64.load16_u (i32.add (local.get $p) (i32.mul (local.get $i) (i32.const 2))))
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				;; Read only the checked source width and expand the packed lanes together.
+				(local.set $packed (v128.load16x4_s (local.get $p)))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -6041,29 +3333,10 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Expand or splat the raw memory lanes into all output lanes.
-				(loop $lanes
-					(local.set $lane-bits (i64.load16_u (i32.add (local.get $p) (i32.mul (local.get $i) (i32.const 2)))))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				;; Read only the checked source width and expand the packed lanes together.
+				(local.set $packed (v128.load16x4_u (local.get $p)))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -6078,24 +3351,10 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Expand or splat the raw memory lanes into all output lanes.
-				(loop $lanes
-					(local.set $lane-bits (i64.extend32_s
-							(i64.load32_u (i32.add (local.get $p) (i32.mul (local.get $i) (i32.const 4))))
-						))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				;; Read only the checked source width and expand the packed lanes together.
+				(local.set $packed (v128.load32x2_s (local.get $p)))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -6110,22 +3369,10 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Expand or splat the raw memory lanes into all output lanes.
-				(loop $lanes
-					(local.set $lane-bits (i64.load32_u (i32.add (local.get $p) (i32.mul (local.get $i) (i32.const 4)))))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				;; Read only the checked source width and expand the packed lanes together.
+				(local.set $packed (v128.load32x2_u (local.get $p)))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -6140,29 +3387,10 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Expand or splat the raw memory lanes into all output lanes.
-				(loop $lanes
-					(local.set $lane-bits (i64.load8_u (local.get $p)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U8_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 8-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 16)))
-				)
+				;; Read only the checked source width and expand the packed lanes together.
+				(local.set $packed (v128.load8_splat (local.get $p)))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -6177,29 +3405,10 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Expand or splat the raw memory lanes into all output lanes.
-				(loop $lanes
-					(local.set $lane-bits (i64.load16_u (local.get $p)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U16_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 16-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
-				)
+				;; Read only the checked source width and expand the packed lanes together.
+				(local.set $packed (v128.load16_splat (local.get $p)))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -6214,29 +3423,10 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Expand or splat the raw memory lanes into all output lanes.
-				(loop $lanes
-					(local.set $lane-bits (i64.load32_u (local.get $p)))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
-					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
-				)
+				;; Read only the checked source width and expand the packed lanes together.
+				(local.set $packed (v128.load32_splat (local.get $p)))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
@@ -6251,28 +3441,19 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Expand or splat the raw memory lanes into all output lanes.
-				(loop $lanes
-					(local.set $lane-bits (i64.load (local.get $p)))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
-					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
-				)
+				;; Read only the checked source width and expand the packed lanes together.
+				(local.set $packed (v128.load64_splat (local.get $p)))
+				(global.set $vector-low (i64x2.extract_lane M4_VECTOR_LOW_LANE (local.get $packed)))
+				(global.set $vector-high (i64x2.extract_lane M4_VECTOR_HIGH_LANE (local.get $packed)))
 				(return (global.get $vector-low))
 			)
 		)
 		;; Interpret v128.store with an atomic unsigned memory bound check.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
+				(global.set $vector-low (i64.const 0))
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 16)))
 				;; A failed bound check returns before touching native memory.
@@ -6289,6 +3470,8 @@
 		;; Interpret v128.load32_zero with an atomic unsigned memory bound check.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD32_ZERO))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 4)))
 				;; A failed bound check returns before touching native memory.
@@ -6304,6 +3487,8 @@
 		;; Interpret v128.load64_zero with an atomic unsigned memory bound check.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_LOAD64_ZERO))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
 				;; A failed bound check returns before touching native memory.
@@ -6327,40 +3512,22 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Retain every input lane except the selected memory lane.
-				(loop $lanes
-					(local.set $lane-bits (select
-							(i64.load8_u (local.get $p))
-							(i64.and
-								(i64.shr_u
-									(select (local.get $bh) (local.get $b)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U8_MAX)
-							)
-							(i32.eq (local.get $i) (local.get $imm2))
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE8_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U8_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
+				;; Replace only the validated lane's bits and preserve the opposite raw half.
+				(local.set $lane-bits (i64.load8_u (local.get $p)))
+				(local.set $lane-shift (i32.shl (local.get $imm2) (i32.const M4_LANE8_SHIFT)))
+				(local.set $lane-mask (i64.shl (i64.const M4_U8_MAX) (i64.extend_i32_u (local.get $lane-shift))))
+				(local.set $lane-bits (i64.shl (i64.and (local.get $lane-bits) (i64.const M4_U8_MAX)) (i64.extend_i32_u (local.get $lane-shift))))
+				;; The selected lower-half lane leaves the upper half unchanged.
+				(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
+					(then
+						(global.set $vector-low (i64.or (i64.and (local.get $b) (i64.xor (local.get $lane-mask) (i64.const -1))) (local.get $lane-bits)))
+						(global.set $vector-high (local.get $bh))
 					)
-					;; Pack this 8-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
+					;; Shifts wrap modulo sixty-four for the corresponding upper-half lane.
+					(else
+						(global.set $vector-low (local.get $b))
+						(global.set $vector-high (i64.or (i64.and (local.get $bh) (i64.xor (local.get $lane-mask) (i64.const -1))) (local.get $lane-bits)))
 					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 16)))
 				)
 				(return (global.get $vector-low))
 			)
@@ -6376,40 +3543,22 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Retain every input lane except the selected memory lane.
-				(loop $lanes
-					(local.set $lane-bits (select
-							(i64.load16_u (local.get $p))
-							(i64.and
-								(i64.shr_u
-									(select (local.get $bh) (local.get $b)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U16_MAX)
-							)
-							(i32.eq (local.get $i) (local.get $imm2))
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE16_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U16_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
+				;; Replace only the validated lane's bits and preserve the opposite raw half.
+				(local.set $lane-bits (i64.load16_u (local.get $p)))
+				(local.set $lane-shift (i32.shl (local.get $imm2) (i32.const M4_LANE16_SHIFT)))
+				(local.set $lane-mask (i64.shl (i64.const M4_U16_MAX) (i64.extend_i32_u (local.get $lane-shift))))
+				(local.set $lane-bits (i64.shl (i64.and (local.get $lane-bits) (i64.const M4_U16_MAX)) (i64.extend_i32_u (local.get $lane-shift))))
+				;; The selected lower-half lane leaves the upper half unchanged.
+				(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
+					(then
+						(global.set $vector-low (i64.or (i64.and (local.get $b) (i64.xor (local.get $lane-mask) (i64.const -1))) (local.get $lane-bits)))
+						(global.set $vector-high (local.get $bh))
 					)
-					;; Pack this 16-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
+					;; Shifts wrap modulo sixty-four for the corresponding upper-half lane.
+					(else
+						(global.set $vector-low (local.get $b))
+						(global.set $vector-high (i64.or (i64.and (local.get $bh) (i64.xor (local.get $lane-mask) (i64.const -1))) (local.get $lane-bits)))
 					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 8)))
 				)
 				(return (global.get $vector-low))
 			)
@@ -6425,40 +3574,22 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Retain every input lane except the selected memory lane.
-				(loop $lanes
-					(local.set $lane-bits (select
-							(i64.load32_u (local.get $p))
-							(i64.and
-								(i64.shr_u
-									(select (local.get $bh) (local.get $b)
-										(i32.ge_u (local.tee $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT))) (i32.const M4_VECTOR_HALF_BITS))
-									)
-									(i64.extend_i32_u (local.get $lane-shift))
-								)
-								(i64.const M4_U32_MAX)
-							)
-							(i32.eq (local.get $i) (local.get $imm2))
-						))
-					(local.set $lane-shift (i32.shl (local.get $i) (i32.const M4_LANE32_SHIFT)))
-					(local.set $lane-bits
-						(i64.shl
-							(i64.and (local.get $lane-bits) (i64.const M4_U32_MAX))
-							(i64.extend_i32_u (local.get $lane-shift))
-						)
+				;; Replace only the validated lane's bits and preserve the opposite raw half.
+				(local.set $lane-bits (i64.load32_u (local.get $p)))
+				(local.set $lane-shift (i32.shl (local.get $imm2) (i32.const M4_LANE32_SHIFT)))
+				(local.set $lane-mask (i64.shl (i64.const M4_U32_MAX) (i64.extend_i32_u (local.get $lane-shift))))
+				(local.set $lane-bits (i64.shl (i64.and (local.get $lane-bits) (i64.const M4_U32_MAX)) (i64.extend_i32_u (local.get $lane-shift))))
+				;; The selected lower-half lane leaves the upper half unchanged.
+				(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
+					(then
+						(global.set $vector-low (i64.or (i64.and (local.get $b) (i64.xor (local.get $lane-mask) (i64.const -1))) (local.get $lane-bits)))
+						(global.set $vector-high (local.get $bh))
 					)
-					;; Pack this 32-bit lane directly into the selected result half.
-					(if (i32.lt_u (local.get $lane-shift) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes use the same masked shift modulo sixty-four.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
+					;; Shifts wrap modulo sixty-four for the corresponding upper-half lane.
+					(else
+						(global.set $vector-low (local.get $b))
+						(global.set $vector-high (i64.or (i64.and (local.get $bh) (i64.xor (local.get $lane-mask) (i64.const -1))) (local.get $lane-bits)))
 					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 4)))
 				)
 				(return (global.get $vector-low))
 			)
@@ -6474,25 +3605,19 @@
 						(return (i64.const 0))
 					)
 				)
-				;; Retain every input lane except the selected memory lane.
-				(loop $lanes
-					(local.set $lane-bits (select
-							(i64.load (local.get $p))
-							(select (local.get $bh) (local.get $b) (i32.ge_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS)))
-							(i32.eq (local.get $i) (local.get $imm2))
-						))
-					;; Whole-width lanes only select their result half.
-					(if (i32.lt_u (i32.shl (local.get $i) (i32.const M4_LANE64_SHIFT)) (i32.const M4_VECTOR_HALF_BITS))
-						(then
-							(global.set $vector-low (i64.or (global.get $vector-low) (local.get $lane-bits)))
-						)
-						;; Upper lanes preserve the complete sixty-four-bit value.
-						(else
-							(global.set $vector-high (i64.or (global.get $vector-high) (local.get $lane-bits)))
-						)
+				;; Replace only the validated lane's bits and preserve the opposite raw half.
+				(local.set $lane-bits (i64.load (local.get $p)))
+				;; The selected lower-half lane leaves the upper half unchanged.
+				(if (i32.eqz (local.get $imm2))
+					(then
+						(global.set $vector-low (local.get $lane-bits))
+						(global.set $vector-high (local.get $bh))
 					)
-					(local.set $i (i32.add (local.get $i) (i32.const 1)))
-					(br_if $lanes (i32.lt_u (local.get $i) (i32.const 2)))
+					;; Shifts wrap modulo sixty-four for the corresponding upper-half lane.
+					(else
+						(global.set $vector-low (local.get $b))
+						(global.set $vector-high (local.get $lane-bits))
+					)
 				)
 				(return (global.get $vector-low))
 			)
@@ -6500,6 +3625,9 @@
 		;; Interpret v128.store8_lane with an atomic unsigned memory bound check.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE8_LANE))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
+				(global.set $vector-low (i64.const 0))
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 1)))
 				;; A failed bound check returns before touching native memory.
@@ -6526,6 +3654,9 @@
 		;; Interpret v128.store16_lane with an atomic unsigned memory bound check.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE16_LANE))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
+				(global.set $vector-low (i64.const 0))
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 2)))
 				;; A failed bound check returns before touching native memory.
@@ -6552,6 +3683,9 @@
 		;; Interpret v128.store32_lane with an atomic unsigned memory bound check.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE32_LANE))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
+				(global.set $vector-low (i64.const 0))
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 4)))
 				;; A failed bound check returns before touching native memory.
@@ -6578,6 +3712,9 @@
 		;; Interpret v128.store64_lane with an atomic unsigned memory bound check.
 		(if (i32.eq (local.get $op) (i32.const M4_OP_V128_STORE64_LANE))
 			(then
+				;; Scalar/void outputs cannot retain a preceding vector's upper bits.
+				(global.set $vector-high (i64.const 0))
+				(global.set $vector-low (i64.const 0))
 				;; Translate the complete range before reading or writing any byte.
 				(local.set $p (call $memory-address (local.get $a) (local.get $imm) (i32.const 8)))
 				;; A failed bound check returns before touching native memory.

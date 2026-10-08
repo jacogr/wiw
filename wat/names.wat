@@ -12,9 +12,27 @@
 		(local $slot i32)
 
 		(local.set $hash (i32.const M4_NAME_HASH_SEED))
+		;; Bounded word reads mix long identifiers without visiting every byte separately.
+		(block $words-done
+			;; Fold high bits into the bucket bits after each word to spread shared prefixes.
+			(loop $words
+				(br_if $words-done
+					(i32.lt_u (i32.sub (local.get $n) (local.get $cursor)) (i32.const M4_WORD_BYTES))
+				)
+				(local.set $hash
+					(i32.mul
+						(i32.xor (local.get $hash) (i32.load (i32.add (local.get $p) (local.get $cursor))))
+						(i32.const M4_NAME_HASH_PRIME)
+					)
+				)
+				(local.set $hash (i32.xor (local.get $hash) (i32.shr_u (local.get $hash) (i32.const M4_NAME_HASH_FOLD_SHIFT))))
+				(local.set $cursor (i32.add (local.get $cursor) (i32.const M4_WORD_BYTES)))
+				(br $words)
+			)
+		)
 		;; Stop after hashing exactly the identifier's source bytes, including UTF-8 bytes.
 		(block $hashed
-			;; FNV-1a chooses a bucket; equality below remains authoritative despite collisions.
+			;; Byte tails preserve exact source bounds; equality below remains authoritative despite collisions.
 			(loop $bytes
 				(br_if $hashed (i32.eq (local.get $cursor) (local.get $n)))
 				(local.set $hash

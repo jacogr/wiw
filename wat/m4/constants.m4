@@ -105,6 +105,7 @@ m4_define(<!M4_MEMORY_ADDRESS_TYPE_OFFSET!>,<!24!>)m4_dnl
 m4_define(<!M4_TABLE_ADDRESS_TYPE_OFFSET!>,<!24!>)m4_dnl
 m4_define(<!M4_ELEMENT_LIVE_LENGTH_OFFSET!>,<!44!>)m4_dnl
 m4_define(<!M4_VECTOR_HIGH_OFFSET!>,<!8!>)m4_dnl
+m4_define(<!M4_VECTOR_BYTES!>,<!16!>)m4_dnl
 m4_define(<!M4_MEMORY_ACCESS_WIDTH_OFFSET!>,<!28!>)m4_dnl
 m4_define(<!M4_MEMORY_OPERAND_OFFSET!>,<!8!>)m4_dnl
 m4_define(<!M4_BULK_SOURCE_MEMORY_OFFSET!>,<!16!>)m4_dnl
@@ -210,3 +211,50 @@ m4_define(<!M4_FUSION_OPERATOR_OFFSET!>,<!M4_INSTRUCTION_EXTRA_OFFSET!>)m4_dnl
 
 m4_dnl Convert a bit position into its byte lane within a word.
 m4_define(<!M4_BYTE_BIT_SHIFT!>,<!3!>)m4_dnl
+
+m4_dnl Decoded string/data capacity and raw ASCII scan thresholds.
+m4_define(<!M4_DATA_BYTES!>,<!65536!>)m4_dnl
+m4_define(<!M4_ASCII_LIMIT!>,<!128!>)m4_dnl
+m4_define(<!M4_BYTE_BACKSLASH!>,<!92!>)m4_dnl
+m4_define(<!M4_BYTE_DEL!>,<!127!>)m4_dnl
+
+
+m4_dnl Fold word hash high bits into the low bucket bits.
+m4_define(<!M4_NAME_HASH_FOLD_SHIFT!>,<!16!>)m4_dnl
+
+m4_dnl Clear each byte's low bit when comparing adjacent punctuation codes.
+m4_define(<!M4_BYTE_LANES_CLEAR_LOW_BIT!>,<!0xfefefefefefefefe!>)m4_dnl
+
+m4_dnl Keep the low two bytes of each i32 pair sum, preserving modulo-i16 truncation.
+m4_define(<!M4_VECTOR_DOT_PACK_PAIRS!>,<!0 1 4 5 8 9 12 13 16 17 20 21 24 25 28 29!>)m4_dnl
+m4_dnl Exchange neighboring i32 pair sums so addition combines groups of four source bytes.
+m4_define(<!M4_VECTOR_DOT_SWAP_PAIRS!>,<!4 5 6 7 0 1 2 3 12 13 14 15 8 9 10 11!>)m4_dnl
+m4_dnl Select one i32 sum from each duplicated pair across both source halves.
+m4_define(<!M4_VECTOR_DOT_PACK_QUADS!>,<!0 1 2 3 8 9 10 11 16 17 18 19 24 25 26 27!>)m4_dnl
+
+m4_dnl Binary string escapes consist of a backslash and two ASCII hex digits.
+m4_define(<!M4_BINARY_TEXT_BYTES!>,<!1048576!>)m4_dnl
+m4_define(<!M4_BINARY_HEX_DIGITS_BASE!>,<!3877!>)m4_dnl
+m4_define(<!M4_BINARY_ESCAPE_BYTES!>,<!3!>)m4_dnl
+m4_define(<!M4_BYTE_BITS!>,<!8!>)m4_dnl
+m4_define(<!M4_BINARY_STRING_SUFFIX_BYTES!>,<!2!>)m4_dnl
+
+m4_dnl An initialization flag packs its scope depth above the preceding one-based local link.
+m4_dnl Both bounded local indices and control depths fit their sixteen-bit fields.
+m4_define(<!M4_LOCAL_INIT_SCOPE_SHIFT!>,<!16!>)m4_dnl
+m4_define(<!M4_LOCAL_INIT_LINK_MASK!>,<!65535!>)m4_dnl
+m4_dnl Parameter flags are permanently initialized and never enter the local rollback chain.
+m4_define(<!M4_LOCAL_INIT_PERMANENT!>,<!-1!>)m4_dnl
+m4_dnl Reject configurations whose one-based local links or scope depths cannot fit the packed flag.
+m4_ifelse(m4_eval(M4_CAP_LOCALS <= M4_LOCAL_INIT_LINK_MASK && M4_CAP_CONTROLS <= M4_LOCAL_INIT_LINK_MASK),<!1!>,<!!>,<!m4_errprint(<!Local initialization links and scopes require sixteen-bit bounds.
+!>)m4_m4exit(1)!>)m4_dnl
+
+m4_dnl A complete signature header and its 128 parameter type words share one bounded record.
+m4_define(<!M4_SIGNATURE_BYTES!>,<!544!>)m4_dnl
+
+m4_dnl Global alias and import category fields are explicitly reset before publishing a live descriptor.
+m4_define(<!M4_GLOBAL_ALIAS_OFFSET!>,<!60!>)m4_dnl
+m4_define(<!M4_IMPORT_KIND_OFFSET!>,<!24!>)m4_dnl
+
+m4_dnl Memory descriptors include logical limits, physical pages/base and import alias fields.
+m4_define(<!M4_MEMORY_DESCRIPTOR_BYTES!>,<!64!>)m4_dnl

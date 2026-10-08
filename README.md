@@ -219,11 +219,19 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` / `check-wat` run passes all 207 tests in 136,365.556 ms
-(2m16.37s). `check-wasm` passes the same 207 registered tests in
-11,484.518 ms (0m11.48s). Each executes all 65,199 spec commands:
-WAT takes 129,415.366 ms (2m09.42s), and WASM takes
-5,747.784 ms (0m05.75s), with zero failures or skips.
+The latest complete `make check` / `check-wat` run passes all 219 tests in 131,906.149 ms
+(2m11.91s). `check-wasm` passes the same 219 registered tests in
+11,206.767 ms (0m11.21s). Each executes all 65,199 spec commands across 258 files:
+WAT takes 124,992.938 ms (2m04.99s), and WASM takes
+5,358.863 ms (0m05.36s), with zero failures or skips.
+The latest optimization sweep adds native SIMD operations, bulk table handling,
+bounded string/data decoding, linked local-initialization rollback, wider tail
+frame reuse and initialization of records on allocation. Paired hosted samples
+improve table fills by 96%, plain binary data loading by 84%, plain WAT data
+loading by 72%, and scoped local validation by 55%. Corresponding native samples
+improve by 83%, 65%, 48% and 51%. Longer native scalar controls cost up to 2.9%;
+these tradeoffs and reverted experiments are recorded alongside the gains.
+Whole-suite timings above are separate historical runs, not matched speedups.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short

@@ -3,7 +3,7 @@
 		(param $index i32)
 		(result i32)
 
-		(i32.add (global.get $signature-base) (i32.mul (local.get $index) (i32.const 544)))
+		(i32.add (global.get $signature-base) (i32.mul (local.get $index) (i32.const M4_SIGNATURE_BYTES)))
 	)
 
 	;; Locate deferred function type metadata; offset 20 retains a completed non-null reference type.
@@ -30,7 +30,7 @@
 				(if (i32.eqz (global.get $types-indexed))
 					(then (call $zero-bytes (global.get $type-name-index) (i32.const M4_TYPE_NAME_INDEX_BYTES)))
 				)
-				(local.set $i (call $indexed-name (global.get $signature-base) (i32.const 544)
+				(local.set $i (call $indexed-name (global.get $signature-base) (i32.const M4_SIGNATURE_BYTES)
 					(global.get $signature-count) (global.get $types-indexed)
 					(global.get $type-name-index) (i32.const M4_TYPE_NAME_INDEX_MASK)
 					(i32.const 1) (local.get $p) (local.get $n)))
@@ -258,7 +258,7 @@
 			)
 		)
 		(local.set $s (call $signature (global.get $signature-count)))
-		(call $zero-bytes (local.get $s) (i32.const 544))
+		(call $zero-bytes (local.get $s) (i32.const M4_SIGNATURE_BYTES))
 		(i32.store offset=16 (local.get $s) (global.get $tok))
 		(call $next)
 		;; An optional identifier participates only in the explicit type namespace.
@@ -334,7 +334,7 @@
 			(i32.add (global.get $indirect-type-count) (i32.const 1))
 		)
 		(local.set $s (call $signature (local.get $index)))
-		(call $zero-bytes (local.get $s) (i32.const 544))
+		(call $zero-bytes (local.get $s) (i32.const M4_SIGNATURE_BYTES))
 		;; Indirect signatures have no type name, so their first pair retains the optional table target.
 		(drop (call $table-reference (local.get $s)))
 		(i32.store offset=16 (local.get $s) (global.get $tok))
@@ -523,6 +523,8 @@
 								)
 								(local.set $f (call $function (local.get $i)))
 								(local.set $s (call $signature (local.get $j)))
+								;; Anonymous canonical types must reset optional headers and unused parameter words on reload.
+								(call $zero-bytes (local.get $s) (i32.const M4_SIGNATURE_BYTES))
 								(call $initialize-heap-type (local.get $j))
 								(i32.store offset=8 (local.get $s) (i32.load offset=16 (local.get $f)))
 								(i32.store offset=12 (local.get $s) (i32.load offset=24 (local.get $f)))

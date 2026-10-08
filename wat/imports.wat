@@ -28,6 +28,8 @@
 			)
 		)
 		(local.set $record (call $import-record (global.get $import-count)))
+		;; Names overwrite the first six words; clear kind and reserved tail before this import is published.
+		(i64.store offset=M4_IMPORT_KIND_OFFSET (local.get $record) (i64.const 0))
 		(i32.store (local.get $record) (local.get $index))
 		(i32.store offset=20 (local.get $record) (global.get $tok))
 		(call $next)

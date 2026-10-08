@@ -68,6 +68,9 @@
 		(local $end i32)
 		(local $prefix i32)
 
+		(local $comment-bytes v128)
+		(local $comment-mask i32)
+
 		(global.set $kind (i32.const 0))
 		(global.set $len (i32.const 0))
 		(local.set $cursor (global.get $pos))
@@ -215,6 +218,31 @@
 									(i32.ne (local.get $c) (i32.const M4_BYTE_SEMICOLON))
 								)
 								(then
+									;; Only '(' and ';' can begin a nested delimiter; skip their bounded prefix.
+									(if (i32.ge_u (i32.sub (local.get $end) (local.get $cursor)) (i32.const M4_VECTOR_BYTES))
+										(then
+											(local.set $comment-bytes (v128.load (local.get $cursor)))
+											(local.set $comment-mask
+												(i8x16.bitmask
+													(v128.or
+														(i8x16.eq (local.get $comment-bytes) (i8x16.splat (i32.const M4_BYTE_LPAREN)))
+														(i8x16.eq (local.get $comment-bytes) (i8x16.splat (i32.const M4_BYTE_SEMICOLON)))
+													)
+												)
+											)
+											;; The first byte is ordinary, so every vector prefix advances the cursor.
+											(local.set $cursor
+												(i32.add (local.get $cursor)
+													(if (result i32) (local.get $comment-mask)
+														(then (i32.ctz (local.get $comment-mask)))
+														;; No delimiter candidate occurs in the complete vector.
+														(else (i32.const M4_VECTOR_BYTES))
+													)
+												)
+											)
+											(br $comment)
+										)
+									)
 									(local.set $cursor (i32.add (local.get $cursor) (i32.const 1)))
 									(br $comment)
 								)
@@ -342,16 +370,8 @@
 						)
 					)
 				)
-				(local.set $special (i64.xor (local.get $word) (i64.const M4_BYTE_LANES_LPAREN)))
-				(local.set $boundary
-					(i64.or (local.get $boundary)
-						(i64.and
-							(i64.sub (local.get $special) (i64.const M4_BYTE_LANES_ONE))
-							(i64.xor (local.get $special) (i64.const -1))
-						)
-					)
-				)
-				(local.set $special (i64.xor (local.get $word) (i64.const M4_BYTE_LANES_RPAREN)))
+				;; Parentheses differ only in each byte's low bit, so one masked comparison catches both.
+				(local.set $special (i64.xor (i64.and (local.get $word) (i64.const M4_BYTE_LANES_CLEAR_LOW_BIT)) (i64.const M4_BYTE_LANES_LPAREN)))
 				(local.set $boundary
 					(i64.or (local.get $boundary)
 						(i64.and
@@ -439,60 +459,71 @@
 
 	;; Consume a quoted token while preserving escaped delimiters and rejecting literal controls.
 	(func $quoted-token
+		(local $c i32)
+		(local $cursor i32)
+		(local $end i32)
+
 		(global.set $kind (i32.const 4))
-		(call $advance)
-		(global.set $tok (global.get $pos))
-		;; Scan the string contents until a closing quote or a lexical failure.
+		(local.set $cursor (i32.add (global.get $pos) (i32.const 1)))
+		(local.set $end (global.get $end))
+		(global.set $tok (local.get $cursor))
+		;; Scan quoted bytes locally, publishing the cursor at completion or the original failure boundary.
 		(loop $string
 			;; EOF inside a quoted string means its closing quote is missing.
-			(if (i32.ge_u (global.get $pos) (global.get $end))
+			(if (i32.ge_u (local.get $cursor) (local.get $end))
 				(then
+					(global.set $pos (local.get $cursor))
 					(call $fail (i32.const M4_ERR_SYNTAX))
 					(return)
 				)
 			)
-			;; Finish the string span and consume its closing quote.
-			(if (i32.eq (call $peek) (i32.const 34))
+			(local.set $c (i32.load8_u (local.get $cursor)))
+			;; Finish the string span and publish the byte after its closing quote.
+			(if (i32.eq (local.get $c) (i32.const M4_BYTE_QUOTE))
 				(then
-					(global.set $len (i32.sub (global.get $pos) (global.get $tok)))
-					(call $advance)
+					(global.set $len (i32.sub (local.get $cursor) (global.get $tok)))
+					(global.set $pos (i32.add (local.get $cursor) (i32.const 1)))
 					;; Adjacent strings require separating whitespace or a comment.
-					(if (i32.eq (call $peek) (i32.const 34))
-						(then
-							(call $fail (i32.const M4_ERR_SYNTAX))
-						)
+					(if (i32.eq (call $peek) (i32.const M4_BYTE_QUOTE))
+						(then (call $fail (i32.const M4_ERR_SYNTAX)))
 					)
 					(return)
 				)
 			)
-			;; Escaped quotes are content; leave escape decoding to the owning grammar.
-			(if (i32.eq (call $peek) (i32.const 92))
+			;; Escape decoding belongs to the owning grammar; only the following raw byte is checked here.
+			(if (i32.eq (local.get $c) (i32.const M4_BYTE_BACKSLASH))
 				(then
-					(call $advance)
-					;; A backslash requires a following non-control source byte.
-					(if
-						(i32.or
-							(i32.ge_u (global.get $pos) (global.get $end))
-							(i32.or (i32.lt_u (call $peek) (i32.const 32)) (i32.eq (call $peek) (i32.const 127)))
-						)
+					(local.set $cursor (i32.add (local.get $cursor) (i32.const 1)))
+					;; A trailing backslash reports its missing next byte at EOF.
+					(if (i32.ge_u (local.get $cursor) (local.get $end))
 						(then
+							(global.set $pos (local.get $cursor))
 							(call $fail (i32.const M4_ERR_SYNTAX))
 							(return)
 						)
 					)
-					(call $advance)
+					(local.set $c (i32.load8_u (local.get $cursor)))
+					;; Escaped raw controls remain invalid before any owner attempts decoding.
+					(if (i32.or (i32.lt_u (local.get $c) (i32.const M4_BYTE_SPACE)) (i32.eq (local.get $c) (i32.const M4_BYTE_DEL)))
+						(then
+							(global.set $pos (local.get $cursor))
+							(call $fail (i32.const M4_ERR_SYNTAX))
+							(return)
+						)
+					)
+					(local.set $cursor (i32.add (local.get $cursor) (i32.const 1)))
 					(br $string)
 				)
 			)
-			;; Literal control bytes are forbidden, while UTF-8 data text is allowed.
-			(if
-				(i32.or (i32.lt_u (call $peek) (i32.const 32)) (i32.eq (call $peek) (i32.const 127)))
+			;; Literal controls are forbidden; raw UTF-8 bytes are validated by the owning decoder.
+			(if (i32.or (i32.lt_u (local.get $c) (i32.const M4_BYTE_SPACE)) (i32.eq (local.get $c) (i32.const M4_BYTE_DEL)))
 				(then
+					(global.set $pos (local.get $cursor))
 					(call $fail (i32.const M4_ERR_UNSUPPORTED))
 					(return)
 				)
 			)
-			(call $advance)
+			(local.set $cursor (i32.add (local.get $cursor) (i32.const 1)))
 			(br $string)
 		)
 	)

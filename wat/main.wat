@@ -4,6 +4,7 @@
 	m4_include(<!m4/limits.m4!>)
 m4_include(<!m4/opcodes.m4!>)m4_dnl
 m4_include(<!m4/constants.m4!>)m4_dnl
+m4_include(<!m4/encodings.m4!>)m4_dnl
 
 	m4_include(<!state.wat!>)
 	m4_include(<!lexer.wat!>)

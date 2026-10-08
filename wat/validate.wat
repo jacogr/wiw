@@ -227,32 +227,44 @@
 		(local $callee i32)
 		(local $target i32)
 
+		(local $parameters i32)
+		(local $type-pointer i32)
+		(local $init-pointer i32)
+
 		(global.set $current-function (local.get $index))
+		(global.set $local-init-head (i32.const 0))
 		(local.set $f (call $function (local.get $index)))
 		(local.set $pc (i32.load offset=8 (local.get $f)))
 		(global.set $depth (i32.const 0))
 		(global.set $control-count (i32.const 0))
-		(local.set $j (i32.const 0))
-		;; Parameters and defaultable locals start initialized; non-null locals require an assignment.
-		(block $locals-ready
-			;; Preserve each local's initialization independently from operand-stack validation.
-			(loop $locals
-				(br_if $locals-ready (i32.eq (local.get $j) (i32.load offset=20 (local.get $f))))
-				(i32.store
-					(call $local-init-slot (local.get $j))
-					(select
-						(i32.const 1)
-						(i32.const 0)
-						(i32.or
-							(i32.lt_u (local.get $j) (i32.load offset=16 (local.get $f)))
-							(i32.eqz
-								(call $reference-nonnull (i32.load (call $local-type (local.get $index) (local.get $j))))
-							)
-						)
+		(local.set $parameters (i32.load offset=16 (local.get $f)))
+		(local.set $count (i32.load offset=20 (local.get $f)))
+		;; Uniform all-one parameter flags remain initialized, including non-null references, and are never linked.
+		(if (local.get $parameters)
+			(then
+				(memory.fill (global.get $local-init-base) (i32.const M4_LOCAL_INIT_PERMANENT)
+					(i32.mul (local.get $parameters) (i32.const M4_WORD_BYTES)))
+			)
+		)
+		;; Functions without declared locals need no type-pointer setup or local scan.
+		(if (i32.gt_u (local.get $count) (local.get $parameters))
+			(then
+				(local.set $j (local.get $parameters))
+				(local.set $type-pointer (call $local-type (local.get $index) (local.get $parameters)))
+				(local.set $init-pointer (call $local-init-slot (local.get $parameters)))
+				;; Only declared locals require a defaultability lookup; their type words are contiguous.
+				(block $locals-ready
+					;; Every initialized slot is rewritten on reload, including non-null locals at level zero.
+					(loop $locals
+						(br_if $locals-ready (i32.eq (local.get $j) (local.get $count)))
+						(i32.store (local.get $init-pointer)
+							(i32.eqz (call $reference-nonnull (i32.load (local.get $type-pointer)))))
+						(local.set $type-pointer (i32.add (local.get $type-pointer) (i32.const M4_WORD_BYTES)))
+						(local.set $init-pointer (i32.add (local.get $init-pointer) (i32.const M4_WORD_BYTES)))
+						(local.set $j (i32.add (local.get $j) (i32.const 1)))
+						(br $locals)
 					)
 				)
-				(local.set $j (i32.add (local.get $j) (i32.const 1)))
-				(br $locals)
 			)
 		)
 		(call $validation-push (i32.const 0) (i32.load offset=24 (local.get $f)))
@@ -311,6 +323,88 @@
 								(i32.const m4_eval(M4_OP_F64X2_CONVERT_LOW_I32X4_U-M4_OP_V128_CONST)))
 							(i32.le_u (i32.sub (local.get $op) (i32.const M4_OP_I8X16_RELAXED_SWIZZLE))
 								(i32.const m4_eval(M4_OP_I32X4_RELAXED_DOT_I8X16_I7X16_ADD_S-M4_OP_I8X16_RELAXED_SWIZZLE)))))
+					;; Locals resolve against this function's typed parameter/local table.
+					(if
+						(i32.and
+							(i32.ge_u (local.get $op) (i32.const M4_OP_LOCAL_GET))
+							(i32.le_u (local.get $op) (i32.const M4_OP_LOCAL_TEE))
+						)
+						(then
+							;; Resolve names only after inherited parameters have established the final local namespace.
+							(if (i32.load offset=12 (local.get $record))
+								(then
+									(i32.store offset=4
+										(local.get $record)
+										(call $find-local
+											(i32.load offset=4 (local.get $record))
+											(i32.load offset=12 (local.get $record))
+										)
+									)
+									(i32.store offset=12 (local.get $record) (i32.const 0))
+								)
+							)
+							;; References are checked before reading their type, including in dead code.
+							(if
+								(i32.ge_u (i32.load offset=4 (local.get $record)) (i32.load offset=20 (local.get $f)))
+								(then
+									(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
+									(return)
+								)
+							)
+							(local.set $type
+								(i32.load (call $local-type (local.get $index) (i32.load offset=4 (local.get $record))))
+							)
+							;; A non-defaultable local cannot be read before an assignment in its current scope.
+							(if (i32.eq (local.get $op) (i32.const M4_OP_LOCAL_GET))
+								(then
+									;; Name resolution has consumed this field; cache the adjacent move/drop or binary opcode.
+									(i32.store offset=M4_FUSION_OPERATOR_OFFSET (local.get $record)
+										(call $fusion-operator (local.get $record)
+											(i32.add (global.get $code-base) (i32.shl (i32.load offset=12 (local.get $f)) (i32.const M4_INSTRUCTION_SHIFT)))))
+
+									;; Initialized parameters and prior enclosing-scope assignments remain available.
+									(if
+										(i32.eqz (i32.load (call $local-init-slot (i32.load offset=4 (local.get $record)))))
+										(then
+											(call $fail (i32.const M4_ERR_OPERAND_STACK))
+										)
+									)
+								)
+							)
+							;; Writes initialize only previously uninitialized locals, preserving enclosing-scope assignments.
+							(if (i32.ne (local.get $op) (i32.const M4_OP_LOCAL_GET))
+								(then
+									;; The first assignment links its scope and predecessor so end/else visit only changed locals.
+									(if
+										(i32.eqz (i32.load (call $local-init-slot (i32.load offset=4 (local.get $record)))))
+										(then
+											(i32.store
+												(call $local-init-slot (i32.load offset=4 (local.get $record)))
+												(i32.or
+													(i32.shl (global.get $control-count) (i32.const M4_LOCAL_INIT_SCOPE_SHIFT))
+													(global.get $local-init-head))
+											)
+											(global.set $local-init-head
+												(i32.add (i32.load offset=4 (local.get $record)) (i32.const 1)))
+										)
+									)
+								)
+							)
+							;; Reads need no operand; writes and tee require the local's exact width.
+							(if (i32.ne (local.get $op) (i32.const M4_OP_LOCAL_GET))
+								(then
+									(drop (call $validation-pop (local.get $type)))
+								)
+							)
+							;; set produces nothing, while get and tee publish the declared type.
+							(if (i32.ne (local.get $op) (i32.const M4_OP_LOCAL_SET))
+								(then
+									(call $validation-publish (local.get $type))
+								)
+							)
+							(br $code)
+						)
+					)
 					;; Structured entries save their floor after consuming an i32 if condition.
 					(if (call $control-op (local.get $op))
 						(then
@@ -547,84 +641,6 @@
 											)
 										)
 									)
-								)
-							)
-							(br $code)
-						)
-					)
-					;; Locals resolve against this function's typed parameter/local table.
-					(if
-						(i32.and
-							(i32.ge_u (local.get $op) (i32.const M4_OP_LOCAL_GET))
-							(i32.le_u (local.get $op) (i32.const M4_OP_LOCAL_TEE))
-						)
-						(then
-							;; Resolve names only after inherited parameters have established the final local namespace.
-							(if (i32.load offset=12 (local.get $record))
-								(then
-									(i32.store offset=4
-										(local.get $record)
-										(call $find-local
-											(i32.load offset=4 (local.get $record))
-											(i32.load offset=12 (local.get $record))
-										)
-									)
-									(i32.store offset=12 (local.get $record) (i32.const 0))
-								)
-							)
-							;; References are checked before reading their type, including in dead code.
-							(if
-								(i32.ge_u (i32.load offset=4 (local.get $record)) (i32.load offset=20 (local.get $f)))
-								(then
-									(call $fail (i32.const M4_ERR_INVALID_REFERENCE))
-									(return)
-								)
-							)
-							(local.set $type
-								(i32.load (call $local-type (local.get $index) (i32.load offset=4 (local.get $record))))
-							)
-							;; A non-defaultable local cannot be read before an assignment in its current scope.
-							(if (i32.eq (local.get $op) (i32.const M4_OP_LOCAL_GET))
-								(then
-									;; Name resolution has consumed this field; cache the adjacent move/drop or binary opcode.
-									(i32.store offset=M4_FUSION_OPERATOR_OFFSET (local.get $record)
-										(call $fusion-operator (local.get $record)
-											(i32.add (global.get $code-base) (i32.shl (i32.load offset=12 (local.get $f)) (i32.const M4_INSTRUCTION_SHIFT)))))
-
-									;; Initialized parameters and prior enclosing-scope assignments remain available.
-									(if
-										(i32.eqz (i32.load (call $local-init-slot (i32.load offset=4 (local.get $record)))))
-										(then
-											(call $fail (i32.const M4_ERR_OPERAND_STACK))
-										)
-									)
-								)
-							)
-							;; Writes initialize only previously uninitialized locals, preserving enclosing-scope assignments.
-							(if (i32.ne (local.get $op) (i32.const M4_OP_LOCAL_GET))
-								(then
-									;; The first assignment records its scope so an end or else can restore initialization state.
-									(if
-										(i32.eqz (i32.load (call $local-init-slot (i32.load offset=4 (local.get $record)))))
-										(then
-											(i32.store
-												(call $local-init-slot (i32.load offset=4 (local.get $record)))
-												(global.get $control-count)
-											)
-										)
-									)
-								)
-							)
-							;; Reads need no operand; writes and tee require the local's exact width.
-							(if (i32.ne (local.get $op) (i32.const M4_OP_LOCAL_GET))
-								(then
-									(drop (call $validation-pop (local.get $type)))
-								)
-							)
-							;; set produces nothing, while get and tee publish the declared type.
-							(if (i32.ne (local.get $op) (i32.const M4_OP_LOCAL_SET))
-								(then
-									(call $validation-publish (local.get $type))
 								)
 							)
 							(br $code)

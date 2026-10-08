@@ -98,7 +98,7 @@
 		(global.set $field-type-base
 			(i32.add (global.get $code-base) (i32.const M4_FIELD_TYPE_OFFSET))
 		)
-		(call $zero-bytes (global.get $heap-type-base) (i32.const 49152))
+		;; Each declared or interned heap record is initialized before its validated type is used.
 		(global.set $local-init-base
 			(i32.add (global.get $code-base) (i32.const M4_LOCAL_INIT_OFFSET))
 		)
@@ -109,7 +109,8 @@
 			(i32.add (global.get $code-base) (i32.const M4_REFERENCE_TYPE_OFFSET))
 		)
 		(global.set $memory-arena (i32.add (global.get $code-base) (i32.const M4_MEMORY_OFFSET)))
-		(call $zero-bytes (global.get $memory-arena) (i32.const 32768))
+		;; Empty modules still select descriptor zero; other descriptors are initialized as declarations arrive.
+		(call $zero-bytes (global.get $memory-arena) (i32.const M4_MEMORY_DESCRIPTOR_BYTES))
 		(global.set $frame-base (i32.add (global.get $code-base) (i32.const M4_FRAME_OFFSET)))
 		(global.set $stack-base (i32.add (global.get $code-base) (i32.const M4_STACK_OFFSET)))
 		(global.set $function-base (i32.add (global.get $code-base) (i32.const M4_FUNCTION_OFFSET)))
@@ -166,10 +167,7 @@
 		(global.set $host-base (i32.wrap_i64 (local.get $required)))
 		;; Reset optional descriptor fields when reload reuses an existing arena layout.
 		(call $zero-bytes (global.get $segment-base) (i32.const 6144))
-		(call $zero-bytes (global.get $import-base) (i32.const 32768))
-		(call $zero-bytes (global.get $global-base) (i32.const 40960))
-		(call $zero-bytes (global.get $segment-base) (i32.const 6144))
-		(call $zero-bytes (global.get $signature-base) (i32.const 974848))
+		;; Signature allocators initialize each live record; the unused capacity needs no clearing.
 		(i32.const 1)
 	)
 
