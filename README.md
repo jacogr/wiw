@@ -6,6 +6,8 @@ interpreted copy by default. This runtime passes the entire pinned WebAssembly
 interpreted layers.
 
 Requires Git, Node, make, m4, wat2wasm (WABT), and wasm-opt (Binaryen).
+CI pins WABT 1.0.42 and Binaryen 133 using official release archives; the WABT
+archive checksum and installed version are verified before tests.
 
 ```sh
 git submodule update --init test/spec/upstream

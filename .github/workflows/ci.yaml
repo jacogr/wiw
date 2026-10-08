@@ -22,10 +22,28 @@ jobs:
         with:
           node-version: "lts/*"
 
-      - name: Install OS deps (wabt + m4)
+      - name: Install OS deps (make + m4)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends make m4 wabt
+          sudo apt-get install -y --no-install-recommends make m4
+
+      - name: Install WABT (pinned wat2wasm)
+        run: |
+          set -eux
+          WABT_VER=1.0.42
+          WABT_SHA256=84895407a6bbb80e918f33b16b2fb2206021c150b6bc9ff6f761263a745ab131
+          curl -fL -o wabt.tar.gz \
+            "https://github.com/WebAssembly/wabt/releases/download/${WABT_VER}/wabt-${WABT_VER}-linux-x64.tar.gz"
+          echo "$WABT_SHA256  wabt.tar.gz" | sha256sum --check
+          tar -xzf wabt.tar.gz
+
+          WABT_BIN_DIR="$PWD/wabt-${WABT_VER}/bin"
+          export PATH="$WABT_BIN_DIR:$PATH"
+          echo "$WABT_BIN_DIR" >> "$GITHUB_PATH"
+
+          command -v wat2wasm
+          wat2wasm --version
+          test "$(wat2wasm --version)" = "$WABT_VER"
 
       - name: Install Binaryen (new wasm-opt)
         run: |

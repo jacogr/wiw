@@ -8,29 +8,6 @@ import {runtimeFactories} from './runtime.js';
 
 const operations=['f32x4.relaxed_madd','f32x4.relaxed_nmadd','f64x2.relaxed_madd','f64x2.relaxed_nmadd',
   'i16x8.relaxed_dot_i8x16_i7x16_s','i32x4.relaxed_dot_i8x16_i7x16_add_s'];
-// Encode the guest independently of WABT's version-dependent relaxed-dot text spellings.
-// Subopcodes are fixed by the pinned spec's interpreter/binary/encode.ml.
-const relaxedSubopcodes=[0x105,0x106,0x107,0x108,0x112,0x113];
-function relaxedBinary() {
-  const uleb=value=>{
-    const bytes=[];
-    do {const byte=value&127;value>>>=7;bytes.push(byte|(value?128:0));} while(value);
-    return bytes;
-  };
-  const section=(id,payload)=>[id,...uleb(payload.length),...payload];
-  const bodies=relaxedSubopcodes.flatMap((opcode,index)=>{
-    // No declared locals; all functions share three v128 parameters and one v128 result.
-    const body=[0,0x20,0,0x20,1,...(index===4?[]:[0x20,2]),0xfd,...uleb(opcode),0x0b];
-    return [...uleb(body.length),...body];
-  });
-  return new Uint8Array([
-    0,0x61,0x73,0x6d,1,0,0,0,
-    ...section(1,[1,0x60,3,0x7b,0x7b,0x7b,1,0x7b]),
-    ...section(3,[operations.length,...operations.map(()=>0)]),
-    ...section(7,[operations.length,...operations.flatMap((_,index)=>[2,0x66,0x30+index,0,index])]),
-    ...section(10,[operations.length,...bodies])
-  ]);
-}
 const pack=(width,values)=>values.reduce((bits,value,lane)=>bits|(BigInt(value)<<BigInt(lane*width)),0n);
 const patterns=[0n,(1n<<128n)-1n,
   pack(32,[0,0x80000000,0x3fc00000,0xc0200000]),
@@ -72,7 +49,10 @@ for(const [runtime,create] of runtimeFactories) test(`${runtime}: relaxed SIMD r
   try {
     const functions=operations.map((op,index)=>`(func (export "f${index}") (param v128 v128 v128) (result v128)
       local.get 0 local.get 1 ${index===4?'':'local.get 2'} ${op})`);
-    const source=`(module ${functions.join('\n')})`,bytes=relaxedBinary();
+    const source=`(module ${functions.join('\n')})`,guest=join(directory,'guest.wat'),binary=join(directory,'guest.wasm');
+    // --enable-all also supports WABT versions where relaxed SIMD is enabled by default.
+    await writeFile(guest,source);execFileSync('wat2wasm',['--enable-all',guest,'-o',binary]);
+    const bytes=await readFile(binary);
     // The independent oracle uses only strict SIMD with two explicit arithmetic instructions.
     const oracle=`(module (memory (export "memory") 1) ${operations.slice(0,4).map((op,index)=>{
       const shape=op.split('.')[0],product=`(${shape}.mul (v128.load (i32.const 0)) (v128.load (i32.const 16)))`;

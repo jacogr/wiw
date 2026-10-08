@@ -29,7 +29,7 @@ for(const [runtime,create] of runtimeFactories) {
         const wat=join(directory,'guest.wat'),wasm=join(directory,'guest.wasm');
         await writeFile(wat,source);
         // Native compilation is an independent oracle; guests still run through wiw's text/binary loaders.
-        execFileSync('wat2wasm',['--enable-annotations',wat,'-o',wasm]);
+        execFileSync('wat2wasm',['--enable-all',wat,'-o',wasm]);
         const bytes=await readFile(wasm),native=(await WebAssembly.instantiate(bytes)).instance.exports;
         for(const encoded of [false,true]) {
           if(encoded) engine.loadBinary(bytes); else engine.load(source);
