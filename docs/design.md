@@ -3573,3 +3573,66 @@ spec times are 2m04.99s and 0m05.36s. Public execution and loading smoke checks
 pass in both modes. No guest compilation, persistent engine/cache or snapshot
 was introduced. The useful candidates from this sweep are exhausted; speculative
 architecture changes remain separate investigations.
+
+
+### Guarded void-call returns from w4 profiling
+
+w4 initialization is dominated by executing embedded Forth and its stack/check
+helpers. A temporary dispatcher profile records about 1.75 billion dispatches;
+a diagnostic named build attributes about 40 million general frame entries to
+w4's assertion helper. Hash/dictionary lookup accounts for a small fraction.
+The named diagnostic guest was rebuilt for function labels and differs slightly
+from the existing optimized guest; performance comparisons use the unchanged
+existing guest. Counters are scratch-only and fused successors are not separately
+counted. No profiling callbacks or counters remain in the release interpreter.
+
+After complete function validation, a void function whose first three records
+are an i32 parameter local.get, void if and return receives a marker in the
+previously unused word at offset 28 of its existing function-type metadata. The
+marker is the parameter index plus one; zero retains ordinary entry. Parsing
+initializes that record, validation clears the marker, and only a successful
+implicit result check installs it. Instructions, names, source offsets and arena
+layouts are unchanged.
+
+After ordinary direct/indirect/reference call resolution and import handling,
+a taken marker can remove the argument span and consume the original three
+instructions' fuel without initializing a callee frame, locals or labels. It
+reads the supplied i32 before removing mixed-width arguments. A saved caller
+vector remains untouched. False conditions and tail calls use ordinary entry.
+
+At least three remaining fuel units, room for another frame and room for both
+the callee root and its if label are required. Otherwise ordinary entry preserves
+the original resource/fuel failure and source position. The original temporary
+condition slot fits because the matched parameter occupies an already checked
+argument slot. Tests cover every partial-fuel position, full operand stacks,
+512-frame limits, a 4,095-label boundary, false-body default locals, signed guards,
+inherited mixed signatures, all three ordinary call forms, tail fallback, imports,
+changed predicates, reloads and both runtime levels.
+
+Three alternating fresh-instance w4 initialization pairs with one uncounted full
+warmup per compiled interpreter module improve from 11.19 to 8.57 seconds
+(23.4%). Every initialized 4 MiB memory image is identical. A separate initial
+three-pair run has medians 15.82 and 12.87 seconds (18.7%), with substantial
+tiering variation; these are not interchangeable cold/warm claims. A ten-million
+instruction prefix compares exact fuel-exhaustion offsets and complete guest
+memory images: median time improves 21.3% bootstrap and 7.8% self-hosted. The
+prefix does not measure a complete self-hosted initialization.
+
+A focused 10,000-call guard kernel uses three independent instances and nine
+alternating samples after three warmups. Taken guards improve 74.7% bootstrap
+and 48.2% self-hosted. False-guard samples cost 2.7% and 0.7%; ordinary helper
+samples cost 2.1% and 0.7%. Longer three-instance native controls use fifteen
+alternating 100,000-iteration samples after three 10,000-iteration warmups:
+ordinary recursion and wide parameters cost 0.5% and 0.4%; other controls are
+roughly flat or slightly faster. No builds or full tests overlap the retained
+benchmark reports. An initial short paired trial overlapped focused checks and
+is excluded.
+
+Fresh self-hosted construction is essentially flat (+0.3%, 5.820 to 5.836 ms).
+WASM grows 241 bytes and optimized WAT 1,758 bytes. Both complete targets pass
+224 tests, including 65,199 wg-3.0 commands across 258 files with zero failures
+or skips: WAT 2m03.42s, WASM 0m09.48s. Spec portions take 1m57.79s and 0m05.14s.
+The external w4 library run takes 13.15s startup and 65.58s execution, with zero
+Forth assertion errors, empty stacks and exact native stdout. These complete-run
+times are diagnostic validation results, separate from the paired measurements.
+Raw samples, artifact hashes and profile limitations remain in performance history.

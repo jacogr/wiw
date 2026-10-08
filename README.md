@@ -232,11 +232,11 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` / `check-wat` run passes all 222 tests in 127,436.416 ms
-(2m07.44s). `check-wasm` passes the same 222 registered tests in
-11,026.588 ms (0m11.03s). Each executes all 65,199 spec commands across 258 files:
-WAT takes 120,467.034 ms (2m00.47s), and WASM takes
-5,510.750 ms (0m05.51s), with zero failures or skips.
+The latest complete `make check` / `check-wat` run passes all 224 tests in 123,421.367 ms
+(2m03.42s). `check-wasm` passes the same 224 registered tests in
+9,483.600 ms (0m09.48s). Each executes all 65,199 spec commands across 258 files:
+WAT takes 117,789.660 ms (1m57.79s), and WASM takes
+5,144.979 ms (0m05.14s), with zero failures or skips.
 The latest optimization sweep adds native SIMD operations, bulk table handling,
 bounded string/data decoding, linked local-initialization rollback, wider tail
 frame reuse and initialization of records on allocation. Paired hosted samples
@@ -245,6 +245,13 @@ loading by 72%, and scoped local validation by 55%. Corresponding native samples
 improve by 83%, 65%, 48% and 51%. Longer native scalar controls cost up to 2.9%;
 these tradeoffs and reverted experiments are recorded alongside the gains.
 Whole-suite timings above are separate historical runs, not matched speedups.
+A subsequent w4 startup profile identifies hot guarded assertion calls. Validated
+parameter guards can return before frame/local initialization while preserving
+fuel and capacity boundaries. Alternating warmed bootstrap startup improves 23%;
+a bounded self-hosted prefix improves 8%. Taken guard kernels improve 75% native
+and 48% hosted; false-guard overhead and control measurements remain recorded.
+The external w4 library suite passes with zero Forth errors, matching native output;
+no w4-specific target or submodule is required.
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short

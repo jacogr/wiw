@@ -232,6 +232,8 @@
 		(local $init-pointer i32)
 
 		(global.set $current-function (local.get $index))
+		;; Each validation pass clears the guard marker before any body can fail.
+		(i32.store offset=M4_FUNCTION_GUARD_PARAMETER_OFFSET (call $function-type (local.get $index)) (i32.const 0))
 		(global.set $local-init-head (i32.const 0))
 		(local.set $f (call $function (local.get $index)))
 		(local.set $pc (i32.load offset=8 (local.get $f)))
@@ -1208,6 +1210,10 @@
 			(then
 				(global.set $tok (i32.load offset=28 (local.get $f)))
 				(call $validation-end)
+				;; Cache only fully valid bodies, after their implicit result shape is checked.
+				(if (i32.eqz (global.get $error))
+					(then (call $cache-guard-return (local.get $index) (local.get $f)))
+				)
 			)
 		)
 	)

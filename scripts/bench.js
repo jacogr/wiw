@@ -320,6 +320,23 @@ for(const [name,value,check] of [
     local.get 0 i64.const 1 i64.sub local.set 0
     local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
 
+// Taken void guards and their false-body fallback exercise bounded call entry separately.
+for(const condition of [1,0]) {
+  cases[condition?'guardTaken':'guardFalse']=`(module
+    (global $seen (mut i32) (i32.const 0))
+    (func $guard (param i32 i32) (local i32 i32 i64 v128)
+      local.get 0 if return end
+      local.get 4 i64.eqz i32.eqz if unreachable end
+      local.get 5 v128.any_true if unreachable end
+      global.get $seen i32.const 1 i32.add global.set $seen)
+    (func (export "run") (param i64) (result i64) (local $initial i64)
+      local.get 0 local.set $initial i32.const 0 global.set $seen
+      loop i32.const ${condition} i32.const 0 call $guard
+        local.get 0 i64.const 1 i64.sub local.tee 0 i64.const 0 i64.ne br_if 0 end
+      global.get $seen i64.extend_i32_u ${condition?'i64.const 0':'local.get $initial'} i64.ne if unreachable end
+      local.get 0))`;
+}
+
 // Multi-parameter tails preserve vector arguments while retaining the existing implicit root.
 for(const count of [2,8]) {
   const values=Array.from({length:count-1},(_,n)=>`v128.const i64x2 ${n+1} ${n+101}`);

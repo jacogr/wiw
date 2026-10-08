@@ -8,6 +8,7 @@
 
 	;; Locate deferred function type metadata; offset 20 retains a completed non-null reference type.
 	;; Offset M4_FUNCTION_INTERNED_TYPE_OFFSET retains a completed implicit type index plus one.
+	;; Offset M4_FUNCTION_GUARD_PARAMETER_OFFSET caches a validated early-return parameter plus one.
 	(func $function-type
 		(param $index i32)
 		(result i32)

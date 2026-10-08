@@ -903,6 +903,25 @@
 							(return (i64.const 0))
 						)
 					)
+					;; A taken validated parameter guard returns before any declared local is read or written.
+					(block $guard-miss
+						(br_if $guard-miss (local.get $tail))
+						(local.set $count (i32.load offset=M4_FUNCTION_GUARD_PARAMETER_OFFSET (call $function-type (local.get $callee))))
+						;; Ordinary callees leave the marker zero and avoid all guard-specific bounds checks.
+						(br_if $guard-miss (i32.eqz (local.get $count)))
+						;; Partial fuel and exhausted frame/control capacity retain original instruction boundaries.
+						(br_if $guard-miss (i64.lt_u (local.get $fuel) (i64.const M4_GUARD_RETURN_FUEL)))
+						(br_if $guard-miss (i32.ge_u (local.get $calls) (i32.const M4_CAP_CALLS)))
+						(br_if $guard-miss (i32.gt_u (global.get $control-count) (i32.const m4_eval(M4_CAP_CONTROLS - 2))))
+						(local.set $inputs (i32.load offset=M4_FUNCTION_PARAMETERS_OFFSET (local.get $meta)))
+						;; Read the supplied i32 before removing the complete mixed-width argument span.
+						(br_if $guard-miss (i32.eqz (i32.wrap_i64 (i64.load (i32.add (global.get $stack-base)
+							(i32.mul (i32.sub (i32.add (i32.sub (global.get $sp) (local.get $inputs)) (local.get $count)) (i32.const 1))
+								(i32.const M4_SLOT_BYTES)))))))
+						(global.set $sp (i32.sub (global.get $sp) (local.get $inputs)))
+						(local.set $fuel (i64.sub (local.get $fuel) (i64.const M4_GUARD_RETURN_FUEL)))
+						(br $dispatch)
+					)
 					(global.set $sp (i32.sub (global.get $sp) (i32.load offset=M4_FUNCTION_PARAMETERS_OFFSET (local.get $meta))))
 					(local.set $target (i32.add (global.get $stack-base) (i32.mul (global.get $sp) (i32.const M4_SLOT_BYTES))))
 					;; Defined tail calls retain this frame and its cached high-half region.

@@ -47,3 +47,42 @@
 		)
 		(local.get $op)
 	)
+
+	;; Cache a validated void callee's leading local.get/void-if/return guard without rewriting code.
+	(func $cache-guard-return
+		(param $index i32)
+		(param $f i32)
+		(local $record i32)
+		(local $parameter i32)
+
+		;; Imported functions and value-returning functions retain ordinary entry.
+		(if (i32.or (i32.eq (i32.load offset=M4_FUNCTION_START_OFFSET (local.get $f)) (i32.const M4_FUNCTION_IMPORTED))
+			(i32.ne (i32.load offset=M4_FUNCTION_RESULT_SHAPE_OFFSET (local.get $f)) (i32.const 0)))
+			(then (return))
+		)
+		;; Every inspected successor belongs to this callee, including very short functions.
+		(if (i32.lt_u (i32.sub (i32.load offset=M4_FUNCTION_END_OFFSET (local.get $f))
+			(i32.load offset=M4_FUNCTION_START_OFFSET (local.get $f))) (i32.const M4_GUARD_RETURN_FUEL))
+			(then (return))
+		)
+		(local.set $record (i32.add (global.get $code-base)
+			(i32.shl (i32.load offset=M4_FUNCTION_START_OFFSET (local.get $f)) (i32.const M4_INSTRUCTION_SHIFT))))
+		;; Only the exact three-instruction prelude with a void if can bypass initialization.
+		(if (i32.or (i32.ne (i32.load (local.get $record)) (i32.const M4_OP_LOCAL_GET))
+			(i32.or (i32.ne (i32.load offset=M4_INSTRUCTION_BYTES (local.get $record)) (i32.const M4_OP_IF))
+				(i32.or (i32.load offset=m4_eval(M4_INSTRUCTION_BYTES + M4_INSTRUCTION_IMMEDIATE_OFFSET) (local.get $record))
+					(i32.ne (i32.load offset=M4_FUSION_TAIL_BYTES (local.get $record)) (i32.const M4_OP_RETURN)))))
+			(then (return))
+		)
+		(local.set $parameter (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $record)))
+		;; Defaulted locals cannot stand in for a supplied parameter; only i32 can supply if's condition.
+		(if (i32.ge_u (local.get $parameter) (i32.load offset=M4_FUNCTION_PARAMETERS_OFFSET (local.get $f)))
+			(then (return))
+		)
+		;; Name and type resolution are complete before this marker is installed.
+		(if (i32.ne (i32.load (call $local-type (local.get $index) (local.get $parameter))) (i32.const M4_TYPE_I32))
+			(then (return))
+		)
+		(i32.store offset=M4_FUNCTION_GUARD_PARAMETER_OFFSET (call $function-type (local.get $index))
+			(i32.add (local.get $parameter) (i32.const 1)))
+	)

@@ -258,3 +258,7 @@ m4_define(<!M4_IMPORT_KIND_OFFSET!>,<!24!>)m4_dnl
 
 m4_dnl Memory descriptors include logical limits, physical pages/base and import alias fields.
 m4_define(<!M4_MEMORY_DESCRIPTOR_BYTES!>,<!64!>)m4_dnl
+
+m4_dnl Validated void-function guard: i32 parameter index plus one, zero for ordinary entry.
+m4_define(<!M4_FUNCTION_GUARD_PARAMETER_OFFSET!>,<!28!>)m4_dnl
+m4_define(<!M4_GUARD_RETURN_FUEL!>,<!3!>)m4_dnl
