@@ -232,11 +232,11 @@ These timings are diagnostic measurements, not CI thresholds. The full pinned
 spec keeps its original million-call stress inputs; its timings are recorded in
 `test/spec/selfhost.json`. `test/performance.json` retains the initial 34-minute
 baseline and subsequent measurements.
-The latest complete `make check` / `check-wat` run passes all 224 tests in 123,421.367 ms
-(2m03.42s). `check-wasm` passes the same 224 registered tests in
-9,483.600 ms (0m09.48s). Each executes all 65,199 spec commands across 258 files:
-WAT takes 117,789.660 ms (1m57.79s), and WASM takes
-5,144.979 ms (0m05.14s), with zero failures or skips.
+The latest complete `make check` / `check-wat` run passes all 226 tests in 125,281.029 ms
+(125.28s). `check-wasm` passes the same 226 registered tests in
+9,951.003 ms (9.95s). Each executes all 65,199 spec commands across 258 files:
+WAT takes 118,897.055 ms (118.90s), and WASM takes
+5,336.935 ms (5.34s), with zero failures or skips.
 The latest optimization sweep adds native SIMD operations, bulk table handling,
 bounded string/data decoding, linked local-initialization rollback, wider tail
 frame reuse and initialization of records on allocation. Paired hosted samples
@@ -252,6 +252,11 @@ a bounded self-hosted prefix improves 8%. Taken guard kernels improve 75% native
 and 48% hosted; false-guard overhead and control measurements remain recorded.
 The external w4 library suite passes with zero Forth errors, matching native output;
 no w4-specific target or submodule is required.
+Local-address scalar loads now share the validated fusion path and original
+address checks. Checked kernels improve 7–10% native and 3–6% hosted; whole w4
+startup remains within about 1%. Constant-address memory overhead is about 2%
+in confirmation, with other controls roughly flat or slightly faster.
+
 Scalar validation and scalar memory dispatch retain the existing type/address
 checks while avoiding generic handling. Redundant host ABI queries and export
 lookups are removed per invocation, without a persistent cache. Hosted short

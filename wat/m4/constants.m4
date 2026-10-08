@@ -262,3 +262,6 @@ m4_define(<!M4_MEMORY_DESCRIPTOR_BYTES!>,<!64!>)m4_dnl
 m4_dnl Validated void-function guard: i32 parameter index plus one, zero for ordinary entry.
 m4_define(<!M4_FUNCTION_GUARD_PARAMETER_OFFSET!>,<!28!>)m4_dnl
 m4_define(<!M4_GUARD_RETURN_FUEL!>,<!3!>)m4_dnl
+
+m4_dnl Negative local fusion markers distinguish a scalar load from positive move/binary opcodes.
+m4_define(<!M4_FUSION_LOAD_FLAG!>,<!2147483648!>)m4_dnl

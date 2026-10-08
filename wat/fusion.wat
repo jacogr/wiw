@@ -1,5 +1,5 @@
-	;; Recognize a same-function local move/drop or integer operand/binary sequence during local validation.
-	;; Return the move/drop or non-trapping binary opcode, or zero for ordinary execution.
+	;; Recognize a same-function local move/drop, scalar load or integer operand/binary sequence during local validation.
+	;; Return a marked scalar load, move/drop or non-trapping binary opcode, or zero for ordinary execution.
 	(func $fusion-operator
 		(param $record i32)
 		(param $finish i32)
@@ -16,6 +16,13 @@
 		(if (i32.or (i32.eq (local.get $operand) (i32.const M4_OP_DROP))
 			(i32.le_u (i32.sub (local.get $operand) (i32.const M4_OP_LOCAL_SET)) (i32.const 1)))
 			(then (return (local.get $operand)))
+		)
+		;; Scalar loads reuse their validated memory descriptor and original trapping address checks.
+		(if (i32.or
+			(i32.le_u (i32.sub (local.get $operand) (i32.const M4_OP_I32_LOAD)) (i32.const m4_eval(M4_OP_I32_LOAD16_U - M4_OP_I32_LOAD)))
+			(i32.or (i32.le_u (i32.sub (local.get $operand) (i32.const M4_OP_I64_LOAD)) (i32.const m4_eval(M4_OP_I64_LOAD32_U - M4_OP_I64_LOAD)))
+				(i32.or (i32.eq (local.get $operand) (i32.const M4_OP_F32_LOAD)) (i32.eq (local.get $operand) (i32.const M4_OP_F64_LOAD)))))
+			(then (return (i32.or (local.get $operand) (i32.const M4_FUSION_LOAD_FLAG))))
 		)
 		;; Integer fusion additionally requires its binary operation in the same function.
 		(if (i32.lt_u (i32.sub (local.get $finish) (local.get $record)) (i32.const M4_FUSION_BYTES))

@@ -320,6 +320,21 @@ for(const [name,value,check] of [
     local.get 0 i64.const 1 i64.sub local.set 0
     local.get 0 i64.const 0 i64.ne br_if $again) local.get 0))`;
 
+// Local addresses expose scalar-load dispatch separately from constant-address memory traffic.
+for(const [name,operation,check] of [
+  ['I32','i32.load','i32.const 1985229328 i32.ne'],
+  ['I64','i64.load','i64.const 72623861691331088 i64.ne'],
+  ['Byte','i32.load8_u','i32.const 16 i32.ne'],
+  ['Half','i32.load16_s','i32.const 12816 i32.ne'],
+  ['F32','f32.load i32.reinterpret_f32','i32.const 1985229328 i32.ne'],
+  ['F64','f64.load i64.reinterpret_f64','i64.const 72623861691331088 i64.ne']
+]) cases[`localLoad${name}`]=`(module (memory 1)
+  (data (i32.const 0) "\\10\\32\\54\\76\\04\\03\\02\\01")
+  (func (export "run") (param i64) (result i64) (local $address i32)
+    loop ${(`local.get $address ${operation} ${check} if unreachable end `).repeat(8)}
+      local.get 0 i64.const 1 i64.sub local.tee 0 i64.const 0 i64.ne br_if 0 end
+    local.get 0))`;
+
 // Taken void guards and their false-body fallback exercise bounded call entry separately.
 for(const condition of [1,0]) {
   cases[condition?'guardTaken':'guardFalse']=`(module

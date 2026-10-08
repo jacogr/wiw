@@ -399,11 +399,37 @@
 					;; Local get is the common read path and preserves the complete raw value.
 					(if (i32.eq (local.get $op) (i32.const M4_OP_LOCAL_GET))
 						(then
-							;; Fuse marked local moves or scalar binary sequences while preserving source records.
+							;; Fuse marked local moves, scalar loads or binary sequences while preserving source records.
 							(block $fusion-miss
 								;; Non-matching local reads need one marker load rather than repeated successor classification.
 								(local.set $selector (i32.load offset=M4_FUSION_OPERATOR_OFFSET (local.get $record)))
 								(br_if $fusion-miss (i32.eqz (local.get $selector)))
+								;; Negative markers join a local address read to its adjacent scalar load.
+								(if (i32.lt_s (local.get $selector) (i32.const 0))
+									(then
+										;; Keep local.get's temporary operand boundary and each instruction's partial-fuel failure.
+										(br_if $fusion-miss (i32.or (i64.eqz (local.get $fuel))
+											(i32.ge_u (global.get $sp) (i32.const M4_CAP_OPERANDS))))
+										(local.set $a (i64.load offset=M4_CALL_LOCALS_OFFSET
+											(i32.add (local.get $frame) (i32.shl (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $record)) (i32.const M4_SLOT_SHIFT)))))
+										(global.set $tok (i32.load offset=M4_INSTRUCTION_SOURCE_OFFSET (local.get $next)))
+										(local.set $fuel (i64.sub (local.get $fuel) (i64.const 1)))
+										(local.set $meta (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $next)))
+										(call $use-access-memory (i32.load offset=M4_MEMORY_OPERAND_OFFSET (local.get $meta)))
+										(local.set $value (call $scalar-memory-apply
+											(i32.xor (local.get $selector) (i32.const M4_FUSION_LOAD_FLAG)) (local.get $a) (i64.const 0) (local.get $meta)))
+										;; A checked guest trap reports the load's source and cannot publish a placeholder result.
+										(if (global.get $error)
+											(then (return (i64.const 0)))
+										)
+										(local.set $meta (i32.shl (global.get $sp) (i32.const M4_SLOT_SHIFT)))
+										(i64.store (i32.add (global.get $stack-base) (local.get $meta)) (local.get $value))
+										(i64.store (i32.add (global.get $stack-high-base) (local.get $meta)) (i64.const 0))
+										(global.set $sp (i32.add (global.get $sp) (i32.const 1)))
+										(local.set $next (i32.add (local.get $next) (i32.const M4_INSTRUCTION_BYTES)))
+										(br $dispatch)
+									)
+								)
 								;; Simple moves preserve both raw halves and the intermediate local.get capacity boundary.
 								(if (i32.or (i32.eq (local.get $selector) (i32.const M4_OP_DROP))
 									(i32.le_u (i32.sub (local.get $selector) (i32.const M4_OP_LOCAL_SET)) (i32.const 1)))

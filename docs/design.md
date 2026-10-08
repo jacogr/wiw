@@ -3636,3 +3636,51 @@ The external w4 library run takes 13.15s startup and 65.58s execution, with zero
 Forth assertion errors, empty stacks and exact native stdout. These complete-run
 times are diagnostic validation results, separate from the paired measurements.
 Raw samples, artifact hashes and profile limitations remain in performance history.
+
+
+### Validated local-address scalar-load fusion
+
+A cached local.get marker can now identify an adjacent scalar load. Its high bit
+(M4_FUSION_LOAD_FLAG) distinguishes loads from existing positive move/binary
+markers. The load opcode remains in the low bits; original instruction/source
+records are unchanged. All 14 integer and floating scalar load forms are covered.
+
+The dispatcher reads the raw local address, consumes the load's original fuel
+and source, selects its canonical memory using use-access-memory, and calls the
+existing scalar-memory-apply/address checks. This avoids temporary address stack
+publication/reload and a second dispatch. The scalar result clears the high half.
+Partial fuel or a full operand stack retains ordinary execution, preserving the
+original local.get failure. Traps remain attributed to the load before any result
+is published. Memory64 overflow, selected memory aliases and raw float semantics
+remain in their existing helpers. No new arena, guest compiler or rewritten code.
+
+Checked eight-load kernels use three independent instances, three warmups and
+nine alternating 10000-iteration samples. Integer kernels improve 8–10% native
+and about 6% hosted; raw floating load kernels improve 7–10% native and about
+3% hosted. Most long native controls stay within 1%; reference calls improve 2%.
+A constant-address memory control costs 4% initially and 2% in a separate long
+confirmation. Hosted controls improve 1–2%. Fresh self-hosted construction costs
+0.9% (5.696 to 5.749 ms).
+
+Warm complete w4 startup medians are 8.756/8.842s
+(+1.0%). Three alternating fresh instances follow one
+uncounted full initialization per variant, comparing complete 4 MiB guest images.
+The ten-million-instruction prefix is 42.787/43.807ms
+bootstrap and 4797.118/4799.342ms hosted, with matching exact
+fuel/source failure and full memory. It does not verify complete hosted startup.
+
+An earlier general-entry inline trial was reverted: about 1% w4 startup gain
+failed to offset helper/control regressions. The initial load trial used the full
+memory selector; final samples use the existing smaller scalar-access selector.
+Both trials and the retained artifact hashes/raw samples remain in performance
+history. All benchmarks and full verification targets run sequentially.
+
+The final targets pass 226 tests each, including all 65,199 wg-3.0 commands in
+258 files with zero failures/skips. WAT takes 125.28s, WASM
+9.95s. Tests cover every scalar load, text/binary, memory widths,
+unaligned offsets, signed widths, raw NaN bits, last-fitting/overflow accesses,
+exact partial fuel/traps, full caller operand stacks, reloads and deliberate
+non-adjacent misses. w4 library validation passes with zero Forth errors, empty
+stacks and identical native output (78.57s total, diagnostic).
+WASM grows 187 bytes; optimized WAT grows
+1268 bytes. No w4-specific target/dependency is added.
