@@ -110,7 +110,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
   let exportedResources = new Map(), exportedFunctions = new Map();
   let tableFunctions = new Map();
   let foreignFunctions = new Map();
-  let memoryExports;
+  let resourceExports;
   const owner = {};
   const negativeZeroKey = Symbol();
   let externalValues = [null], externalIds = new Map();
@@ -171,27 +171,52 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       throw new Error('value must be an i32 integer');
     }
   }
-  // Resolve a host memory selector without exposing unvalidated descriptor addresses.
-  function memoryIndex(memory = 0) {
-    requireLoaded();
-    const count = e.guest_memory_present();
-    if (typeof memory === 'string') {
-      if (!memoryExports) {
-        memoryExports = new Map();
+  // Resolve numeric or exported-name resource selectors before querying canonical records.
+  function resourceIndex(selector, kind, count, label) {
+    if (typeof selector === 'string') {
+      if (!resourceExports) {
+        resourceExports = new Map();
         for (let index = 0; index < e.exports_count(); index++) {
           const at = e.export_info(index), view = new DataView(e.memory.buffer, memoryOffset);
           const name = readText(view.getUint32(at, true), view.getUint32(at + 4, true));
-          memoryExports.set(name, {index: view.getInt32(at + 8, true), kind: view.getInt32(at + 20, true)});
+          resourceExports.set(name, {index: view.getInt32(at + 8, true), kind: view.getInt32(at + 20, true)});
         }
       }
-      const descriptor = memoryExports.get(memory);
-      if (!descriptor) throw new Error(`unknown export ${memory}`);
-      if (descriptor.kind !== 1) throw new Error(`export kind mismatch ${memory}`);
+      const descriptor = resourceExports.get(selector);
+      if (!descriptor) throw new Error(`unknown export ${selector}`);
+      if (descriptor.kind !== kind) throw new Error(`export kind mismatch ${selector}`);
       return descriptor.index;
     }
-    if (!count && memory === 0) throw new Error('no guest memory');
-    if (!Number.isInteger(memory) || memory < 0 || memory >= count) throw new Error('invalid memory index');
-    return memory;
+    if (!count && selector === 0) throw new Error(`no guest ${label}`);
+    if (!Number.isInteger(selector) || selector < 0 || selector >= count) throw new Error(`invalid ${label} index`);
+    return selector;
+  }
+  function memoryIndex(memory = 0) {
+    requireLoaded();
+    return resourceIndex(memory, 1, e.guest_memory_present(), 'memory');
+  }
+  function tableIndex(table = 0) {
+    requireLoaded();
+    return resourceIndex(table, 3, e.table_count(), 'table');
+  }
+  // Table64 indices are checked in full before using the bounded physical entry arena.
+  function tableEntry(index, table) {
+    if (typeof index === 'bigint') {
+      if (e.table_address_type(table) !== 2) throw new Error('BigInt indices require table64');
+      if (index < 0n || index >= BigInt(e.table_size(table))) throw new Error('table out of bounds');
+      return Number(index);
+    }
+    if (!Number.isSafeInteger(index) || index < 0 || index >= e.table_size(table)) throw new Error('table out of bounds');
+    return index;
+  }
+  // Preserve nullable and concrete reference types instead of checking only funcref/externref kinds.
+  function tableValue(value, table) {
+    const type = e.table_type(table);
+    const bits = typedValue(value, type);
+    const accepts = e.table_accepts(table, bits);
+    check(e.error_code());
+    if (!accepts) throw new Error('table element type mismatch');
+    return bits;
   }
   // Normalize only checked physical offsets, retaining full-width memory64 bounds checks.
   function memoryRange(offset, length, index) {
@@ -414,7 +439,12 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
         const delta = state.entries.length - e.table_size(binding.index);
         if (delta > 0 && e.grow_guest_table(binding.index, delta) < 0) throw new Error('shared table growth exceeds capacity');
         state.entries.forEach((entry, index) => {
-          const target = state.type === 5 ? (entry ? tableFunctionIndex(entry) : -1) : Number(typedValue(entry, 6)) - 1;
+          const target = state.type === 5 ? (entry ? tableFunctionIndex(entry) : -1) : Number(typedValue(entry, state.type)) - 1;
+          if (state.type >= 8) {
+            const accepts = e.table_accepts(binding.index, BigInt((target + 1) >>> 0));
+            check(e.error_code());
+            if (!accepts) throw new Error('shared table element type mismatch; managed references belong to their interpreter');
+          }
           new DataView(e.memory.buffer, memoryOffset).setInt32(e.table_base(binding.index) + index * 4, target, true);
         });
       }
@@ -433,7 +463,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
         if ((isHostReference(state.type))) state.value = decodedValue(state.bits, state.type);
       } else state.entries = Array.from({length: e.table_size(binding.index)}, (_, index) => {
         const target = new DataView(e.memory.buffer, memoryOffset).getInt32(e.table_base(binding.index) + index * 4, true);
-        return state.type === 6 ? decodedValue(BigInt(target + 1), 6) : target < 0 ? null : functionReference(target);
+        return state.type === 5 ? target < 0 ? null : functionReference(target) : decodedValue(BigInt((target + 1) >>> 0), state.type);
       });
     }
   }
@@ -525,7 +555,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
         if ((isHostReference(state.type))) state.value = decodedValue(state.bits, state.type);
       } else Object.assign(state, {addressType: e.table_address_type(index), type: e.table_type(index), descriptor: typeDescription(new DataView(e.memory.buffer, memoryOffset).getInt32(e.table_info(index) + 16, true)), maximum: e.table_max(index), entries: Array.from({length: e.table_size(index)}, (_, slot) => {
         const target = new DataView(e.memory.buffer, memoryOffset).getInt32(e.table_base(index) + slot * 4, true);
-        return e.table_type(index) === 6 ? decodedValue(BigInt(target + 1), 6) : target < 0 ? null : functionReference(target);
+        return e.table_type(index) === 5 ? target < 0 ? null : functionReference(target) : decodedValue(BigInt((target + 1) >>> 0), e.table_type(index));
       })});
       resources.push({index, state});
     }
@@ -717,7 +747,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       requireIdle();
       loaded = false;
       generation++;
-      memoryExports = undefined;
+      resourceExports = undefined;
       const sourceLength = write(source, 4096);
       e.validation_only(1);
       try { check(binarySource ? e.load_binary(4096, sourceLength) : e.load(4096, sourceLength)); }
@@ -728,7 +758,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       requireIdle();
       loaded = false;
       generation++;
-      memoryExports = undefined;
+      resourceExports = undefined;
       bindings = []; resources = []; importedExceptions.clear(); exportedResources = new Map(); exportedFunctions = new Map();
       tableFunctions = new Map(); foreignFunctions = new Map();
       externalValues = [null]; externalIds = new Map();
@@ -966,6 +996,42 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       }
       u32(pages);
       const result = e.grow_memory(index, pages);
+      synchronizeOut();
+      return result;
+    },
+    tableSize(table = 0) {
+      synchronizeIn();
+      return e.table_size(tableIndex(table));
+    },
+    getTable(index, table = 0) {
+      synchronizeIn();
+      const target = tableIndex(table), slot = tableEntry(index, target);
+      const at = e.table_base(target) + slot * 4;
+      const bits = BigInt((new DataView(e.memory.buffer, memoryOffset).getUint32(at, true) + 1) >>> 0);
+      return decodedValue(bits, e.table_type(target));
+    },
+    setTable(index, value, table = 0) {
+      synchronizeIn();
+      const target = tableIndex(table), slot = tableEntry(index, target);
+      const bits = tableValue(value, target);
+      // Reference interning can move backing memory, so obtain the entry address afterward.
+      new DataView(e.memory.buffer, memoryOffset).setInt32(e.table_base(target) + slot * 4, Number(bits) - 1, true);
+      synchronizeOut();
+    },
+    growTable(entries, value = null, table = 0) {
+      synchronizeIn();
+      const target = tableIndex(table);
+      let oversized = false;
+      if (typeof entries === 'bigint') {
+        if (e.table_address_type(target) !== 2) throw new Error('BigInt growth requires table64');
+        if (entries < 0n || entries > (1n << 64n) - 1n) throw new Error('entries must be an unsigned i64 integer');
+        oversized = entries > 0xffffffffn;
+        entries = oversized ? 0 : Number(entries);
+      }
+      u32(entries);
+      const bits = tableValue(value, target);
+      if (oversized) return -1;
+      const result = e.grow_host_table(target, entries, bits);
       synchronizeOut();
       return result;
     },

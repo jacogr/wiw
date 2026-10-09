@@ -53,6 +53,41 @@
 		(select (global.get $guest-max) (i32.const -1) (global.get $memory-max-present))
 	)
 
+	;; Expose the validated table count so host selectors cannot reach unrelated records.
+	(func (export "table_count")
+		(result i32)
+
+		(global.get $guest-table-present)
+	)
+
+	;; Check a host-encoded reference against one table's complete declared element type.
+	(func (export "table_accepts")
+		(param $index i32)
+		(param $value i64)
+		(result i32)
+		(local $type i32)
+
+		(global.set $error (i32.const M4_ERR_SUCCESS))
+		(local.set $type (i32.load offset=M4_TABLE_ELEMENT_TYPE_OFFSET (call $canonical-table-record (local.get $index))))
+		;; Live exception handles belong to their own hierarchy, independent of aggregate heap IDs.
+		(if (i32.and (i64.ne (local.get $value) (i64.const 0))
+			(i32.eq (call $reference-root (local.get $type)) (i32.const M4_REF_EXN_NULLABLE)))
+			(then (return (call $type-compatible (i32.const M4_REF_EXN_NONNULL) (local.get $type))))
+		)
+		(call $runtime-reference-matches (local.get $value) (local.get $type))
+	)
+
+	;; Grow a host-selected table with an already checked reference initializer.
+	(func (export "grow_host_table")
+		(param $index i32)
+		(param $delta i32)
+		(param $value i64)
+		(result i32)
+
+		(call $use-table (local.get $index))
+		(call $table-grow (local.get $value) (local.get $delta))
+	)
+
 	;; Return one table's current number of entries to the trusted host adapter.
 	(func (export "table_size")
 		(param $index i32)

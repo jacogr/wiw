@@ -118,6 +118,30 @@ console.log(engine.memoryPages('scratch'));
 engine.growMemory(1n, 'wide'); // An exported memory64.
 ```
 
+Host table access supports `getTable(index, table = 0)`,
+`setTable(index, value, table = 0)`, `tableSize(table = 0)` and
+`growTable(entries, value = null, table = 0)`. Table selectors use a module index
+or exported name; zero is the default. Table64 also accepts BigInt entry indices
+and unsigned 64-bit BigInt growth deltas, checked before narrowing. Sizes and
+growth results use Numbers; growth returns the previous size or `-1` on capacity
+failure. Invalid indices/values throw, and failed operations preserve entries.
+Non-null tables require a valid initializer even for zero growth.
+
+Function entries accept live wiw function references or `null`, preserving full
+concrete signatures and nullability. External entries accept arbitrary JavaScript
+values, including `undefined` and opaque Promise/thenable values. GC/exception
+entries retain their declared reference types and collection roots; managed
+references belong to their originating interpreter. Shared function/external
+tables synchronize host writes and growth across aliases and instances. Reads,
+writes and growth also work during async callbacks and start functions.
+
+```js
+engine.setTable(0, engine.exportFunction('answer'), 'functions');
+console.log(engine.getTable(0, 'functions')());
+engine.growTable(2, null, 'functions');
+console.log(engine.tableSize('functions'));
+```
+
 `exportFunction(name)` makes a typed forwarding callback;
 `exportNamespace()` also includes opaque memory, global, table and tag bindings.
 Imported resources share mutations, growth and table function references across

@@ -281,6 +281,35 @@ their own descriptors when execution resumes. Tests compare text/binary modules
 against native WebAssembly, including multiple memories, empty memories, memory64,
 shared aliases, async callbacks and start functions, reloads and atomic failures.
 
+## Host table access
+
+The Node host resolves table selectors through the same per-generation export
+cache as memory selectors. The `table_count` ABI bounds numeric queries before
+accessing canonical descriptors. `getTable` decodes packed raw-reference-minus-one
+slots with unsigned arithmetic, including null, i31 and managed object handles.
+`setTable` checks the complete entry bound before encoding its value and writing.
+`table_accepts` checks the table's full reference type, including concrete function
+signatures, GC heap types and nullability; exception handles use their separate
+reference hierarchy. Failed value checks leave entries and size unchanged.
+
+`grow_host_table` uses the existing canonical growth/fill implementation with a
+checked host initializer. Invalid initializers throw even for zero or oversized
+growth; valid allocation/capacity failures return minus one. Table64 BigInt
+indices/deltas are checked before physical narrowing. Sizes and growth results
+remain Numbers because each table has at most 4,096 entries. The implementation
+uses existing fixed table storage and guest instruction behavior is unchanged.
+
+Table access imports current shared state and publishes writes/growth afterward.
+Shared state now retains every supported reference kind rather than treating all
+non-function tables as external references. Managed entries are checked before
+shared synchronization, preventing incompatible cross-instance opaque handles
+from entering concrete GC tables. Managed values remain instance-owned; shared
+function and external tables retain alias identity and typed async forwarding.
+JavaScript-held references and table slots both participate in existing GC roots.
+Tests cover text/binary native comparisons, selectors/reloads, opaque external
+values, concrete/non-null function types, GC and exception tables, table64,
+shared aliases and async automatic-start initialization.
+
 ## Host ABI
 
 The low-level API exports memory, load(ptr,len), initialize(), invoke(namePtr,nameLen,argsPtr,
