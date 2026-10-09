@@ -92,7 +92,8 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
   const importedExceptions = new Map();
   function guestException() {
     const reference = e.exception_reference();
-    if (importedExceptions.has(reference)) return importedExceptions.get(reference);
+    const previous = importedExceptions.get(reference)?.deref();
+    if (previous) return previous;
     const view = new DataView(e.memory.buffer, memoryOffset), at = e.exception_info(reference);
     const tag = view.getInt32(at + 8, true), identity = Number(view.getBigUint64(at + 16, true));
     const heap = view.getInt32(e.tag_info(tag) + 24, true), count = view.getInt32(at + 4, true) - 1;
@@ -114,8 +115,11 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       view.setBigInt64(at + slot * 8, BigInt.asIntN(64, bits), true);
       view.setBigInt64(e.argument_high_base() + slot * 8, BigInt.asIntN(64, bits >> 64n), true);
     });
-    const reference = e.import_exception(identity, args.length, at);
-    importedExceptions.set(reference, exception);
+    const mask = params.reduce((bits, type, slot) => isHostReference(type) ? bits | (1n << BigInt(slot)) : bits, 0n);
+    const reference = e.import_exception(identity, args.length, at, BigInt.asIntN(64, mask), BigInt.asIntN(64, mask >> 64n));
+    check(e.error_code());
+    e.gc_pin(reference, 1);
+    importedExceptions.set(reference, new WeakRef(exception));
     return reference;
   }
   function requireLoaded() {
@@ -145,8 +149,23 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     return new TextDecoder('utf-8', {ignoreBOM: true}).decode(new Uint8Array(e.memory.buffer, memoryOffset + p, n));
   }
   const scalarNames = [null, 'i32', 'i64', 'f32', 'f64', 'funcref', 'externref', 'v128', 'anyref', 'exnref'];
-  const opaqueReferences = new Map();
+  let opaqueReferences = new Map();
   const opaqueReferenceValues = new WeakMap();
+  // Weak caches preserve identity while callers retain a handle, without retaining dead guest objects forever.
+  function refreshHostRoots() {
+    if (!opaqueReferences.size && !importedExceptions.size) return;
+    const alive = new Set(), expired = new Set();
+    for (const [key, weak] of opaqueReferences) {
+      const value = weak.deref();
+      if (value) alive.add(opaqueReferenceValues.get(value).bits);
+      else { opaqueReferences.delete(key); expired.add(BigInt(key.slice(key.indexOf(':') + 1))); }
+    }
+    for (const [bits, weak] of importedExceptions) {
+      if (weak.deref()) alive.add(bits);
+      else { importedExceptions.delete(bits); expired.add(bits); }
+    }
+    for (const bits of expired) if (!alive.has(bits)) e.gc_pin(bits, 0);
+  }
   const isHostReference = type => type >= 5 && type !== 7;
   function decodedValue(/** @type {bigint} */ bits, /** @type {number} */ type) {
     if (!type) return undefined;
@@ -159,11 +178,14 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       if (bits === 0n) return null;
       if (type === 8 && (bits & 0xe0000000n) === 0x20000000n) return externalValues[Number(bits & 0x1fffffffn)];
       const key = `${type}:${bits}`;
-      if (!opaqueReferences.has(key)) {
-        const reference = Object.freeze({});
-        opaqueReferences.set(key, reference); opaqueReferenceValues.set(reference, {bits, type});
+      let reference = opaqueReferences.get(key)?.deref();
+      if (!reference) {
+        reference = Object.freeze({});
+        opaqueReferences.set(key, new WeakRef(reference));
+        opaqueReferenceValues.set(reference, {bits, type, generation});
+        e.gc_pin(bits, 1);
       }
-      return opaqueReferences.get(key);
+      return reference;
     }
     const view = new DataView(new ArrayBuffer(8));
     view.setBigInt64(0, bits, true);
@@ -184,7 +206,10 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     if (type === 6) {
       if (value === null) return 0n;
       const opaque = opaqueReferenceValues.get(value);
-      if (opaque?.type === 8) return opaque.bits;
+      if (opaque?.type === 8) {
+        if (opaque.generation !== generation) throw new Error('stale opaque wiw reference');
+        return opaque.bits;
+      }
       const key = Object.is(value, -0) ? negativeZeroKey : value;
       if (!externalIds.has(key)) {
         if (externalValues.length >= 65536) throw new Error('external reference resource limit');
@@ -196,7 +221,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       if (value === null) return 0n;
       const reference = opaqueReferenceValues.get(value);
       if (!reference && type === 8) return typedValue(value, 6) | 0x20000000n;
-      if (!reference || reference.type !== type) throw new Error('value must be a live opaque wiw reference or null');
+      if (!reference || reference.type !== type || reference.generation !== generation) throw new Error('value must be a live opaque wiw reference or null');
       return reference.bits;
     }
     if (type === 3 || type === 4) {
@@ -450,7 +475,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
           if (type === 7) bits = BigInt.asUintN(64, bits) | (BigInt.asUintN(64, view.getBigInt64(pendingHigh + index * 8, true)) << 64n);
           return rawResult(bits, type);
         });
-        const args = rawArgs.map((value, index) => binding.params[index] === 5 || binding.params[index] === 6 ? value.value : decodedValue(value.bits, binding.params[index]));
+        const args = rawArgs.map((value, index) => isHostReference(binding.params[index]) ? value.value : decodedValue(value.bits, binding.params[index]));
         synchronizeOut();
         const forwarding = functionTypes.get(binding.callback);
         const returned = forwarding?.raw ? forwarding.raw(rawArgs) : binding.callback(...args);
@@ -529,6 +554,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
   // Run either public scalar values or exact raw slots through the same protected invocation.
   function invokeValues(name, values, raw = false, index = undefined) {
       synchronizeIn();
+      refreshHostRoots();
       const at = e.host_base();
       // Indexed calls already resolved their export and need no second name write.
       const n = index === undefined ? write(name, at) : 0;
@@ -574,6 +600,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       bindings = []; resources = []; importedExceptions.clear(); exportedResources = new Map(); exportedFunctions = new Map();
       tableFunctions = new Map(); foreignFunctions = new Map();
       externalValues = [null]; externalIds = new Map();
+      opaqueReferences = new Map();
       const sourceLength = write(source, 4096);
       check(binarySource ? e.load_binary(4096, sourceLength) : e.load(4096, sourceLength));
       for (let index = 0; index < e.tag_count(); index++) e.bind_tag(index, nextTagIdentity++);
@@ -692,6 +719,14 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
         return rawSlot(arg, signature.params[index]);
       });
       return invokeValues('', values, true, signature.index);
+    },
+    // Return bytes reclaimed from the guest's private object arena; collection preserves live reference identity.
+    collectGarbage() {
+      requireIdle(); requireLoaded();
+      synchronizeIn(); refreshHostRoots();
+      const before = e.gc_live_bytes();
+      e.collect_garbage(); check(e.error_code());
+      return before - e.gc_live_bytes();
     },
     signature(/** @type {string} */ name) {
       const signature = functionSignature(name);

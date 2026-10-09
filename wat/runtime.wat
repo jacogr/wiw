@@ -1142,6 +1142,7 @@
 					;; Throws allocate or reuse an exception reference, then unwind to its nearest matching handler.
 					(if (i32.eq (local.get $route) (i32.const M4_ROUTE_THROW))
 						(then
+							(call $gc-snapshot (local.get $calls) (local.get $record))
 							;; A fresh throw captures the tag identity and its complete raw payload.
 							(if (i32.eq (local.get $op) (i32.const M4_OP_THROW))
 								(then
@@ -1455,8 +1456,13 @@
 					;; Aggregate instructions consume variable field vectors directly from the operand stack.
 					(if (i32.eq (local.get $route) (i32.const M4_ROUTE_GC_AGGREGATE))
 						(then
+							(call $gc-snapshot (local.get $calls) (local.get $record))
 							(local.set $value
 								(call $gc-aggregate-apply (local.get $op) (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $record)))
+							)
+							;; A trapped allocation or field access must stop before publishing values or executing another opcode.
+							(if (global.get $error)
+								(then (return (i64.const 0)))
 							)
 							;; Value-producing aggregate instructions publish both halves of vector fields.
 							(if (call $outputs (local.get $op))

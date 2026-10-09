@@ -369,7 +369,7 @@
 		(call $field-record (i32.add (local.get $base) (local.get $index)))
 	)
 
-	;; Allocate an aggregate object with a type header and sixteen-byte raw field slots.
+	;; Allocate a stable-address object, collecting unreachable blocks before reporting exhaustion.
 	(func $gc-allocate
 		(param $heap i32)
 		(param $count i32)
@@ -378,32 +378,32 @@
 		(local $size i64)
 		(local $object i32)
 
-		(local.set $size
-			(i64.add (i64.const 16) (i64.mul (i64.extend_i32_u (local.get $count)) (i64.const 16)))
+		(local.set $size (i64.add (i64.const M4_GC_HEADER_BYTES)
+			(i64.mul (i64.extend_i32_u (local.get $count)) (i64.const M4_GC_SLOT_BYTES))))
+		;; An individually oversized allocation cannot benefit from collection.
+		(if (i64.gt_u (local.get $size) (i64.const M4_GC_ARENA_BYTES))
+			(then (call $fail (i32.const M4_ERR_RESOURCE_LIMIT)) (return (i32.const 0)))
 		)
-		;; Size arithmetic remains wide until it has been bounded by the private object arena.
-		(if
-			(i64.gt_u
-				(local.get $size)
-				(i64.extend_i32_u (i32.sub (i32.const 16777216) (global.get $gc-object-used)))
-			)
+		(local.set $object (call $gc-take (i32.wrap_i64 (local.get $size))))
+		;; Retry only after all guest, host and native-constructor roots have been traced.
+		(if (i32.eqz (local.get $object))
 			(then
-				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
-				(return (i32.const 0))
+				(call $gc-collect)
+				(local.set $object (call $gc-take (i32.wrap_i64 (local.get $size))))
 			)
 		)
-		(local.set $object (i32.add (global.get $gc-object-base) (global.get $gc-object-used)))
-		(global.set $gc-object-used
-			(i32.add (global.get $gc-object-used) (i32.wrap_i64 (local.get $size)))
+		;; A full live heap or fragmented surviving allocations retain the normal resource failure.
+		(if (i32.eqz (local.get $object))
+			(then (call $fail (i32.const M4_ERR_RESOURCE_LIMIT)) (return (i32.const 0)))
 		)
-		;; Default constructors require zeroed fields; explicit constructors overwrite every raw slot.
+		;; Constructors that evaluate nested expressions must begin with null reference fields.
 		(if (local.get $clear)
-			(then (call $zero-bytes (local.get $object) (i32.wrap_i64 (local.get $size))))
-			;; Initialize header padding even when field writes are supplied by the caller.
-			(else (i64.store offset=M4_VECTOR_HIGH_OFFSET (local.get $object) (i64.const 0)))
+			(then (call $zero-bytes (i32.add (local.get $object) (i32.const M4_GC_HEADER_BYTES))
+				(i32.sub (i32.wrap_i64 (local.get $size)) (i32.const M4_GC_HEADER_BYTES))))
 		)
 		(i32.store (local.get $object) (local.get $heap))
 		(i32.store offset=4 (local.get $object) (local.get $count))
+		(i32.store offset=8 (local.get $object) (i32.const 0))
 		(local.get $object)
 	)
 
@@ -1022,7 +1022,7 @@
 	)
 
 	;; Parse a folded struct or array constant with recursively typed field expressions.
-	(func $gc-constant
+	(func $gc-constant-body
 		(param $op i32)
 		(param $expected i32)
 		(result i64)
@@ -1070,6 +1070,11 @@
 			(then
 				(local.set $value (call $global-initializer (call $unpacked-type (local.get $type))))
 				(local.set $high (global.get $initializer-high))
+				;; Repeated reference elements remain live while the length expression allocates.
+				(if (call $is-reference (local.get $type))
+					(then (i64.store (i32.add (global.get $gc-temp-base)
+						(i32.mul (i32.sub (global.get $gc-temp-count) (i32.const 2)) (i32.const 8))) (local.get $value)))
+				)
 			)
 		)
 		;; Array length is either a fixed immediate or an i32 constant expression.
@@ -1087,7 +1092,11 @@
 				)
 			)
 		)
-		(local.set $object (call $gc-allocate (local.get $heap) (local.get $count) (i32.const 0)))
+		(local.set $object (call $gc-allocate (local.get $heap) (local.get $count) (i32.const 1)))
+		;; The partially initialized parent is rooted before evaluating any nested field expression.
+		(i64.store (i32.add (global.get $gc-temp-base)
+			(i32.mul (i32.sub (global.get $gc-temp-count) (i32.const 1)) (i32.const 8)))
+			(call $gc-reference (local.get $object)))
 		;; Allocation failure preserves the first resource error.
 		(if (global.get $error)
 			(then
@@ -1447,6 +1456,8 @@
 				(return (i64.const 0))
 			)
 		)
+		;; Deferred element constructors can allocate while the destination is only in a native local.
+		(call $gc-temp-push (call $gc-reference (local.get $dest)))
 		;; Numeric segment bytes use exact-width loads or one contiguous vector copy.
 		(if (local.get $width)
 			(then
@@ -1483,6 +1494,7 @@
 				)
 			)
 		)
+		(global.set $gc-temp-count (i32.sub (global.get $gc-temp-count) (i32.const 1)))
 		(global.set $gc-high (i64.const 0))
 		(select
 			(call $gc-reference (local.get $dest))

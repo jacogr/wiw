@@ -910,6 +910,7 @@
 				(br $tables)
 			)
 		)
+		(global.set $gc-tables-ready (i32.const 1))
 	)
 
 	;; Apply active elements after the host has installed imported table entries.

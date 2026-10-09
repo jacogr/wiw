@@ -318,3 +318,24 @@
 	(global $locals-indexed (mut i32) (i32.const 0))
 	(global $local-name-function (mut i32) (i32.const -1))
 	(global $local-name-generation (mut i32) (i32.const 0))
+
+	;; Collector state is private to each load and preserves all published object addresses.
+	(global $gc-free (mut i32) (i32.const 0))
+	(global $gc-live (mut i32) (i32.const 0))
+	(global $gc-queue-base (mut i32) (i32.const 0))
+	(global $gc-queue-count (mut i32) (i32.const 0))
+	(global $gc-map-index-base (mut i32) (i32.const 0))
+	(global $gc-map-base (mut i32) (i32.const 0))
+	(global $gc-map-used (mut i32) (i32.const 0))
+	(global $gc-temp-base (mut i32) (i32.const 0))
+	(global $gc-temp-count (mut i32) (i32.const 0))
+	(global $gc-calls (mut i32) (i32.const 0))
+	(global $gc-pc (mut i32) (i32.const 0))
+	(global $gc-stack-end (mut i32) (i32.const 0))
+	(global $gc-initializing (mut i32) (i32.const 1))
+
+	;; Table entry arenas become traceable only after fresh null initialization.
+	(global $gc-tables-ready (mut i32) (i32.const 0))
+
+	;; A replayed global initializer replaces its old value rather than keeping both graphs alive.
+	(global $gc-replacing-global (mut i32) (i32.const -1))

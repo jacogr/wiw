@@ -132,6 +132,8 @@
 				)
 			)
 		)
+		;; Completed resources now root their current values; obsolete initializer copies can be reclaimed.
+		(global.set $gc-initializing (i32.const 0))
 		;; Initialization is idempotent for modules without a start or with a completed start.
 		(if (i32.eqz (global.get $start-state))
 			(then

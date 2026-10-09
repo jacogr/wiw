@@ -880,7 +880,7 @@
 						)
 						(i64.store offset=24
 							(local.get $record)
-							(call $initializer-value
+							(call $gc-replace-initializer (local.get $i)
 								(i32.load offset=40 (local.get $record))
 								(i32.load offset=12 (local.get $record))
 							)

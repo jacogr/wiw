@@ -14,6 +14,7 @@ m4_include(<!m4/encodings.m4!>)m4_dnl
 	m4_include(<!types.wat!>)
 	m4_include(<!references.wat!>)
 	m4_include(<!gc.wat!>)
+	m4_include(<!collector.wat!>)
 	m4_include(<!exceptions.wat!>)
 	m4_include(<!heap-types.wat!>)
 	m4_include(<!results.wat!>)

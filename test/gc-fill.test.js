@@ -88,10 +88,11 @@ for(const [runtime,create] of runtimeFactories) {
 
 for(const [runtime,create] of runtimeFactories) test(`${runtime}: failed struct allocation preserves keyword bytes and permits a fresh load`,async()=>{
   const engine=await create();
-  // A nearly full 16MiB arena leaves only a header, insufficient for either struct.
+  // A nearly full live array cannot be reclaimed; only a header remains for either struct.
   for(const constructor of ['i32.const 111 i32.const 222 struct.new $S','struct.new_default $S']) {
     const source=`(module (type $A (array i32)) (type $S (struct (field i32) (field i32)))
-      (func (export "exhaust") i32.const 1048574 array.new_default $A drop ${constructor} drop)
+      (global $live (mut (ref null $A)) (ref.null $A))
+      (func (export "exhaust") i32.const 1048574 array.new_default $A global.set $live ${constructor} drop)
       (func (export "answer") (result i32) i32.const 42))`;
     engine.load(source);
     assert.throws(()=>engine.invoke('exhaust'),new RegExp(`resource limit at byte ${source.indexOf(constructor.startsWith('i32')?'struct.new $S':'struct.new_default $S')}$`));

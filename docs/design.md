@@ -3706,3 +3706,59 @@ no worker/persistent-engine architecture or snapshot is added to the runtime.
 results. This is complete library coverage for the recorded artifacts, not the
 complete Forth-standard-suite or an additional self-hosting depth. Existing
 226-test matrices and production code are unchanged.
+
+
+### Collection of guest objects and exception payloads
+
+The shared 16 MiB object arena now uses non-moving mark-and-sweep collection.
+Allocation keeps its bump path and retries through a coalescing first-fit free
+list. If neither path can satisfy a request, collection traces reachable objects,
+coalesces adjacent dead blocks and returns a dead tail to the bump allocator.
+Allocation still fails for an oversized object, an exhausted live heap or a
+fragmented heap without a sufficiently large contiguous span. References and
+object identity do not change when neighboring objects are reclaimed.
+
+The previously unused object-header word at offset 12 records aligned block size,
+free/mark flags and host ownership. Exception objects preserve their visible ABI
+and add two hidden slots containing a 128-bit payload-reference mask. The mask
+also accompanies forwarded exceptions with no locally declared tag, so numeric
+payload bits cannot accidentally retain objects.
+
+Validation saves exact reference operand positions at allocating instructions and
+call sites. During tracing, suspended callers retain only their operand prefix
+below the child's stack base; the current instruction's complete pre-pop stack
+preserves constructor operands held temporarily in native locals. Declared local
+and field types select other roots. Globals, tables and live element constants
+contribute their current references. Nested constant constructors use an explicit
+native temporary root stack, and replayed global initializers exclude the
+obsolete value while constructing its replacement. Numeric arrays skip element
+tracing. An iterative object queue handles deep and cyclic graphs without native
+recursion. GC queue/index/map/temporary arenas add approximately 8.5 MiB of
+interpreter storage, with a 4 MiB bound for compressed operand maps.
+
+The Node adapter pins live opaque wrappers and imported exception identities.
+Weak identity caches are pruned at invocation and explicit collection boundaries;
+Node's collection of a wrapper permits its guest allocation to be reclaimed.
+Reload clears identity caches and generation-checks old opaque handles. Explicit
+`collectGarbage()` requires an idle instance and returns reclaimed bytes. Collector
+work does not consume guest instruction fuel. Internal allocation retry and public
+explicit collection use the same WAT collector in compiled and self-hosted modes.
+
+Regressions cover allocation beyond the arena across and within calls, precise
+roots and numeric lookalikes, unreachable cycles, shared fields, long graphs,
+fragmented free-span reuse, host handle lifetime, exception payloads above bit 63,
+passive elements, nested/deferred initialization, trapping full live heaps, reload
+and self-hosted execution.
+
+The allocation-pressure regression also exposed a pre-existing aggregate dispatch
+bug: an allocation failure could publish a placeholder and continue to a later
+host callback before reporting the resource error. Aggregate execution now stops
+immediately on a helper error, preserving the original failure offset and
+preventing those later effects. The regression checks callback count and recovery.
+
+Final release validation: `make check-wasm` passes 239 tests in 11.11 seconds;
+`make check-wat` passes the same 239 tests in 134.05 seconds. Both execute all
+258 pinned wg-3.0 files, with 65,199 passed commands, zero failures and zero skips.
+The 13 new collection regressions run in each runtime, including the binary
+native-execution comparison and exact instruction-fuel boundary. These full-run
+timings are diagnostic measurements, not paired performance comparisons.

@@ -281,6 +281,13 @@
 				)
 				(local.set $op (i32.load (local.get $record)))
 				(global.set $tok (i32.load offset=8 (local.get $record)))
+				;; Allocation and call sites retain exact reference positions before consuming operands.
+				(if (call $gc-map-op (local.get $op))
+					(then
+						(i32.store (i32.add (global.get $gc-map-index-base) (i32.shl (local.get $pc) (i32.const 2))) (i32.const 0))
+						(call $gc-build-map (local.get $pc))
+					)
+				)
 				(local.set $pc (i32.add (local.get $pc) (i32.const 1)))
 				;; Ordinary scalar constants, arithmetic and conversions use one compact fixed signature.
 				(if

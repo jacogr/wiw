@@ -129,6 +129,14 @@ and forwarded calls preserve identity across instances. Each load retains up to
 65,535 distinct non-null external values; reload clears those handles.
 `invokeRaw` uses `{type, value}` for references and `{type, bits}` for numbers.
 
+`collectGarbage()` also allows explicit collection while the instance is idle,
+returning the number of reclaimed bytes, including private object headers.
+Guest globals, tables, reference locals, operands, object fields and exception
+payloads retain their reachable graphs. JavaScript-held opaque references remain
+roots; weak identity caches allow abandoned handles to be reclaimed after Node
+collects their wrappers. Reload invalidates opaque handles from the previous
+instance. Guest instruction fuel is unchanged by collection work.
+
 `table.get`, `table.set`, `table.size`, `table.copy`, `table.grow` and `table.fill` support independently indexed funcref and externref tables, including imported
 tables and optional numeric/named targets. Copies preserve overlapping and null
 entries, and check both ranges before writing. Text and binary guests use the
@@ -151,8 +159,12 @@ and 768 explicit types,
 128 results per function/control, 4,096 result-shape records,
 768 total declared/interned types, 1,024 indirect/control signatures, 1,024 import
 descriptors, 8,192 bytes per float literal and 1 MiB binary text expansion.
-GC objects and exception payloads share a 16 MiB arena per loaded instance,
-reclaimed on reload; there are 256 tag descriptors and 32,768 field descriptors.
+GC objects and exception payloads share a 16 MiB arena per loaded instance.
+A non-moving mark-and-sweep collector automatically reclaims unreachable objects
+when allocation needs space, including unreachable cycles. Live references keep
+their identity and addresses. The live heap remains bounded, and fragmentation
+can prevent a large contiguous allocation. There are 256 tag descriptors and
+32,768 field descriptors; precise operand root maps have a 4 MiB metadata bound.
 Allocation and fuel exhaustion are explicit failures. Default invocation fuel
 is 100,000; the spec runner uses 10,000,000. The interpreter uses bounded physical
 backing for wide logical addresses.

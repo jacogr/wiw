@@ -680,8 +680,11 @@
 		)
 		(local.set $count (i32.load offset=8 (local.get $signature)))
 		(local.set $object
-			(call $gc-allocate (i32.const -1) (i32.add (local.get $count) (i32.const 1)) (i32.const 1))
+			(call $gc-allocate (i32.const -1) (i32.add (local.get $count) (i32.const 3)) (i32.const 1))
 		)
+		;; A failed allocation must not corrupt interpreter state through address zero.
+		(if (global.get $error) (then (return (i64.const 0))))
+		(i32.store offset=4 (local.get $object) (i32.add (local.get $count) (i32.const 1)))
 		(i32.store offset=8 (local.get $object) (local.get $tag))
 		(i64.store
 			(call $gc-slot (local.get $object) (i32.const 0))
@@ -694,6 +697,11 @@
 			(loop $params
 				(br_if $done (i32.eqz (local.get $i)))
 				(local.set $value (call $gc-pop))
+				;; Numeric payloads with reference-like bits must never keep objects alive.
+				(if (call $is-reference (i32.load offset=32
+					(i32.add (local.get $signature) (i32.mul (i32.sub (local.get $i) (i32.const 1)) (i32.const 4)))))
+					(then (call $gc-exception-mask (local.get $object) (i32.sub (local.get $i) (i32.const 1))))
+				)
 				(i64.store (call $gc-slot (local.get $object) (local.get $i)) (local.get $value))
 				(i64.store offset=8
 					(call $gc-slot (local.get $object) (local.get $i))
@@ -849,13 +857,15 @@
 		(param $identity i32)
 		(param $count i32)
 		(param $args i32)
+		(param $refs-low i64)
+		(param $refs-high i64)
 		(result i64)
 		(local $object i32)
 		(local $i i32)
 		(local $tag i32)
 
 		(local.set $object
-			(call $gc-allocate (i32.const -1) (i32.add (local.get $count) (i32.const 1)) (i32.const 1))
+			(call $gc-allocate (i32.const -1) (i32.add (local.get $count) (i32.const 3)) (i32.const 1))
 		)
 		(local.set $tag (i32.const -1))
 		;; Find a local alias of the received tag identity for subsequent host payload diagnostics.
@@ -875,11 +885,16 @@
 				(br $tags)
 			)
 		)
+		;; A failed allocation must not corrupt interpreter state through address zero.
+		(if (global.get $error) (then (return (i64.const 0))))
+		(i32.store offset=4 (local.get $object) (i32.add (local.get $count) (i32.const 1)))
 		(i32.store offset=8 (local.get $object) (local.get $tag))
 		(i64.store
 			(call $gc-slot (local.get $object) (i32.const 0))
 			(i64.extend_i32_u (local.get $identity))
 		)
+		(i64.store (call $gc-slot (local.get $object) (i32.add (local.get $count) (i32.const 1))) (local.get $refs-low))
+		(i64.store offset=8 (call $gc-slot (local.get $object) (i32.add (local.get $count) (i32.const 1))) (local.get $refs-high))
 		(local.set $i (i32.const 0))
 		;; Copy canonical raw argument slots out of transient host scratch before dispatch resumes.
 		(block $done

@@ -41,7 +41,7 @@ m4_define(<!M4_FP_A_OFFSET!>,<!26757120!>)m4_dnl
 m4_define(<!M4_FP_B_OFFSET!>,<!26761216!>)m4_dnl
 m4_define(<!M4_FP_T_OFFSET!>,<!26765312!>)m4_dnl
 m4_define(<!M4_MEMORY_OFFSET!>,<!26769408!>)m4_dnl
-m4_define(<!M4_OWNED_BYTES!>,<!44427520!>)m4_dnl
+m4_define(<!M4_OWNED_BYTES!>,<!53348608!>)m4_dnl
 m4_define(<!M4_LOCAL_NAME_BYTES!>,<!8704!>)m4_dnl
 m4_define(<!M4_REFERENCE_TYPE_OFFSET!>,<!26802176!>)m4_dnl
 m4_define(<!M4_TYPE_COMPARISON_OFFSET!>,<!26933248!>)m4_dnl
@@ -77,3 +77,10 @@ m4_define(<!M4_SIGNATURE_BUCKET_BYTES!>,<!4096!>)m4_dnl
 m4_define(<!M4_SIGNATURE_MIN_TYPES!>,<!16!>)m4_dnl
 m4_define(<!M4_SIGNATURE_MIN_FUNCTIONS!>,<!32!>)m4_dnl
 m4_define(<!M4_SIGNATURE_REFERENCE_TOKEN!>,<!8!>)m4_dnl
+m4_dnl Collector queue, precise instruction root maps and native constructor temporaries.
+m4_define(<!M4_GC_QUEUE_OFFSET!>,<!44427520!>)m4_dnl
+m4_define(<!M4_GC_MAP_INDEX_OFFSET!>,<!48621824!>)m4_dnl
+m4_define(<!M4_GC_MAP_OFFSET!>,<!49146112!>)m4_dnl
+m4_define(<!M4_GC_MAP_BYTES!>,<!4194304!>)m4_dnl
+m4_define(<!M4_GC_TEMP_OFFSET!>,<!53340416!>)m4_dnl
+m4_define(<!M4_GC_TEMP_SLOTS!>,<!1024!>)m4_dnl

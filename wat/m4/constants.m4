@@ -265,3 +265,16 @@ m4_define(<!M4_GUARD_RETURN_FUEL!>,<!3!>)m4_dnl
 
 m4_dnl Negative local fusion markers distinguish a scalar load from positive move/binary opcodes.
 m4_define(<!M4_FUSION_LOAD_FLAG!>,<!2147483648!>)m4_dnl
+
+m4_dnl Non-moving GC blocks retain the existing sixteen-byte object header.
+m4_define(<!M4_GC_ARENA_BYTES!>,<!16777216!>)m4_dnl
+m4_define(<!M4_GC_HEADER_BYTES!>,<!16!>)m4_dnl
+m4_define(<!M4_GC_FLAGS_OFFSET!>,<!12!>)m4_dnl
+m4_define(<!M4_GC_FREE!>,<!1!>)m4_dnl
+m4_define(<!M4_GC_MARK!>,<!2!>)m4_dnl
+m4_define(<!M4_GC_HOST_ROOT!>,<!4!>)m4_dnl
+m4_define(<!M4_GC_SIZE_MASK!>,<!-16!>)m4_dnl
+m4_define(<!M4_GC_OBJECT_TAG!>,<!1073741824!>)m4_dnl
+m4_define(<!M4_GC_EXCEPTION_TAG!>,<!268435456!>)m4_dnl
+m4_define(<!M4_GC_TAG_MASK!>,<!4026531840!>)m4_dnl
+m4_define(<!M4_GC_ADDRESS_MASK!>,<!268435455!>)m4_dnl

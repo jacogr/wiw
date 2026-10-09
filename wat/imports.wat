@@ -155,6 +155,13 @@
 		(global.set $pending-import (i32.load offset=12 (call $function (local.get $index))))
 		(global.set $pending-offset (global.get $tok))
 		(global.set $saved-calls (local.get $calls))
+		;; Imported exception allocation uses the same precise roots as the suspended call site.
+		(global.set $gc-calls (local.get $calls))
+		(global.set $gc-stack-end (global.get $sp))
+		;; The caller has already published its instruction following the call.
+		(if (local.get $calls)
+			(then (global.set $gc-pc (i32.sub (i32.load (local.get $frame)) (i32.const 1))))
+		)
 		(global.set $saved-frame (local.get $frame))
 		(global.set $saved-fuel (local.get $fuel))
 	)
