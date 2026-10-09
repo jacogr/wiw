@@ -252,6 +252,11 @@ a bounded self-hosted prefix improves 8%. Taken guard kernels improve 75% native
 and 48% hosted; false-guard overhead and control measurements remain recorded.
 The external w4 library suite passes with zero Forth errors, matching native output;
 no w4-specific target or submodule is required.
+The default self-hosted engine has also completed w4 initialization and that full
+library suite: all 4 MiB of initialized memory match actual native w4, with zero
+Forth errors, empty stacks and identical stdout. The local artifact/revision
+record is in `test/integration/w4-selfhost.json`; execution is slow through the
+extra interpreter layer and is not a default CI workload.
 Local-address scalar loads now share the validated fusion path and original
 address checks. Checked kernels improve 7–10% native and 3–6% hosted; whole w4
 startup remains within about 1%. Constant-address memory overhead is about 2%

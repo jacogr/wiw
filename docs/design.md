@@ -3684,3 +3684,25 @@ non-adjacent misses. w4 library validation passes with zero Forth errors, empty
 stacks and identical native output (78.57s total, diagnostic).
 WASM grows 187 bytes; optimized WAT grows
 1268 bytes. No w4-specific target/dependency is added.
+
+
+### Complete external w4 execution through the self-hosted runtime
+
+The prior ten-million-instruction prefix check is now complemented by a complete
+local run of default createInterpreter(): wiw-opt.wasm interprets wiw-opt.wat,
+which loads and interprets the unchanged w4-opt.wasm guest. No guest binary
+compilation is used by wiw and no production changes are needed. The complete
+_start image matches all 4 MiB of the fresh actual-native WebAssembly reference.
+The full library entry point is included through one evaluate invocation; zero
+Forth assertion errors, empty data/return stacks, exact stdout and empty stderr
+confirm completion beyond a successful Wasm return.
+
+Initialization takes 16.07 minutes and library execution 120.11 minutes
+in the recorded self-hosted run. Those are single-run diagnostic timings, not
+paired optimization estimates. Standard streams and preopens use disposable
+fixture copies. A scratch worker logs progress during synchronous guest work;
+no worker/persistent-engine architecture or snapshot is added to the runtime.
+`test/integration/w4-selfhost.json` records hashes, revisions and the two-mode
+results. This is complete library coverage for the recorded artifacts, not the
+complete Forth-standard-suite or an additional self-hosting depth. Existing
+226-test matrices and production code are unchanged.

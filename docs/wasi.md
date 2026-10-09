@@ -85,3 +85,18 @@ higher startup cost, so choose the runtime deliberately for local diagnostics.
 `wasm2wat --fold-exprs` can produce standard WAT from an optimized guest binary.
 Binaryen's diagnostic `--print-minified` output can contain internal tuple syntax
 for multivalue guests; use standard WAT or the binary loader for those modules.
+
+## Completed self-hosted application validation
+
+The default `createInterpreter()` path has completed w4 initialization and its
+full library suite against an unchanged optimized w4 binary. A fresh actual
+native WebAssembly instance provides the reference: the initialized 4 MiB memory
+is identical, the library reports zero Forth errors, both stacks are empty,
+and captured stdout is identical with empty stderr. The complete suite is
+included in one `evaluate` call.
+
+The recorded run takes 16.07 minutes for initialization and 120.11 minutes
+for library execution. Artifact hashes and revisions are recorded in
+`test/integration/w4-selfhost.json`. These are local diagnostic timings, not CI
+thresholds. No w4-specific target, dependency or submodule is required. The
+complete Forth-standard-suite and deeper self-hosting remain separate checks.

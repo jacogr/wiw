@@ -1,0 +1,44 @@
+{
+  "guestBinarySha256": "9a1055c87eeb3f6f59e2fdf40fb409400c34b2e6d7b690ac31c28243ac1fd960",
+  "interpreterBinarySha256": "cc23777c4e97c6e1986b349091586d046e95529355ee9cb870c42982df8f7d09",
+  "interpreterSourceSha256": "f5875528864a32f4703d69ebc5d98ba3f6789f551cb83cc0be047e678ed2f20b",
+  "node": "v24.11.1",
+  "method": "Unchanged optimized w4 binary. Fresh actual-native WASI reference, followed by a fresh default self-hosted wiw WAT engine. Disposable fixture copies and captured streams. Whole library included in one evaluate invocation, with no snapshots or guest compilation in wiw.",
+  "runs": [
+    {
+      "mode": "native",
+      "constructionMs": 11.548082999999991,
+      "startupMs": 112.22074999999998,
+      "suiteMs": 534.513042,
+      "initializedMemorySha256": "0223117505fc0bfa31af0d654a3a5d7c02cec3e98a8375c02562434ea42dca9b",
+      "forthErrors": 0,
+      "stacksEmpty": true,
+      "stdoutBytes": 1301,
+      "stdoutSha256": "a0c29faab12e3444940f10f6c6b495873d09de018b4e0d9d5c732e38e5f23ab1",
+      "stderrBytes": 0
+    },
+    {
+      "mode": "selfhosted",
+      "constructionMs": 106.81208299999992,
+      "startupMs": 964216.0718329999,
+      "suiteMs": 7206427.5995000005,
+      "initializedMemorySha256": "0223117505fc0bfa31af0d654a3a5d7c02cec3e98a8375c02562434ea42dca9b",
+      "forthErrors": 0,
+      "stacksEmpty": true,
+      "stdoutBytes": 1301,
+      "stdoutSha256": "a0c29faab12e3444940f10f6c6b495873d09de018b4e0d9d5c732e38e5f23ab1",
+      "stderrBytes": 0
+    }
+  ],
+  "interpreterRevision": "a144b9e0bceda62656f6e2934a1a2619ad5acfd9",
+  "guestRevision": "8cb32ad4697b498c8faa5ade609cb8bbe2356864",
+  "coverage": [
+    "Complete _start, not a bounded prefix",
+    "Full 4 MiB initialized guest memory equals actual-native w4",
+    "Single evaluate invocation includes the complete w4-test-suite.f entry point",
+    "Forth #ERRORS is zero",
+    "Data and return stacks empty after the assertion probe is removed",
+    "Exact 1301-byte stdout equality and empty stderr"
+  ],
+  "scope": "One complete external integration run per mode against the recorded local artifacts; no Forth-standard-suite or deeper self-hosting claim."
+}
