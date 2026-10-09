@@ -312,6 +312,23 @@ shared aliases and async automatic-start initialization.
 
 ## Host exceptions and tags
 
+`createTag` constructs a private structural singleton function type from a copied
+array of public parameter names. Numeric/vector names carry their normal value
+kinds; reference names describe nullable abstract function, external, internal or
+exception hierarchies. The type graph and its parameter records are frozen, and
+the factory assigns a globally distinct tag identity only after validation.
+Host tags have no guest load generation and remain valid across reloads. They use
+the existing complete structural import matching without a relaxed host-specific
+signature path. Concrete/non-null parameter types remain guest-defined.
+
+Imported host tags retain their canonical handle during export, including multiple
+aliases and independent consumers. Guest-created tag/resource generations keep
+their previous invalidation rules. The factory creates no interpreter or guest
+allocation; exceptions still use the loaded engine's payload encoding and resume
+mechanism. Tests cover all public kinds, copied signatures, nullability/heap
+mismatches, 128-parameter limits, reloads, async multi-instance propagation and
+native text/binary import comparisons.
+
 `getTag` resolves a checked tag selector through the shared export cache or
 finds a local alias of an existing live tag identity. `tagSignature` reads the
 canonical heap parameter types. `createException` and `createExceptionRaw`

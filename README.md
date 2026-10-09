@@ -159,6 +159,29 @@ consumer.load(`(module
 console.log(consumer.invoke('answer'));
 ```
 
+The exported `createTag(parameters = [])` helper creates an opaque host-owned tag
+without loading a provider guest. Parameters are an array of public type names:
+`i32`, `i64`, `f32`, `f64`, `v128`, `funcref`, `externref`, `anyref` or `exnref`,
+with at most 128 parameters. Reference names describe nullable abstract types;
+concrete heap types and non-null variants still require a guest-defined tag.
+The factory copies the signature, and each call creates a distinct identity.
+
+```js
+import {createTag, createInterpreter} from './wiw.js';
+const failure = createTag(['i32']);
+const engine = await createInterpreter();
+engine.load(`(module (tag (import "host" "failure") (param i32)))`,
+  {host: {failure}});
+const error = engine.createException(failure, 42);
+console.log(error.is(failure)); // true
+```
+
+Host tags can be imported by multiple guests; re-exported aliases return the
+original host handle. Guest reload does not invalidate a host-owned tag or change
+its identity. An engine needs a loaded alias to construct exceptions for that
+tag, while host inspection uses the stable handle directly. Managed payload
+references retain their existing instance ownership and reload rules.
+
 Tags support `getTag(tag = 0)` and `tagSignature(tag = 0)`. Select a tag by
 module index, exported name, or a live opaque tag binding with an alias in the
 loaded module. `getTag` returns the same tag bindings used by `exportNamespace`;
@@ -179,7 +202,7 @@ or out-of-range index throws. Payloads are private snapshots, and raw inspection
 returns a fresh slot descriptor. Reference values retain their identity, including
 opaque Promise values. Managed GC/exception references remain instance-owned;
 shared tags and ordinary function/external payloads follow existing forwarding
-rules. Reload invalidates the old instance's tag bindings.
+rules. Reload invalidates guest-owned tag bindings; host-created tags remain valid.
 
 ```js
 const tag = engine.getTag('failure');

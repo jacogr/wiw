@@ -32,6 +32,24 @@ function exceptionArgument(exception, tag, index, raw) {
   return raw ? {...data.args[index]} : data.values[index];
 }
 
+// Host-defined tags carry a structural signature and an identity independent of any guest load.
+export function createTag(parameters = []) {
+  if (!Array.isArray(parameters)) throw new Error('tag parameters must be an array');
+  if (parameters.length > 128) throw new Error('too many tag parameters (maximum 128)');
+  const kinds = {i32:1, i64:2, f32:3, f64:4, funcref:5, externref:6, v128:7, anyref:8, exnref:9};
+  const roots = {funcref:5, externref:6, anyref:16, exnref:32};
+  const params = Array.from(parameters, name => {
+    if (typeof name !== 'string' || !Object.hasOwn(kinds, name)) throw new Error(`unsupported tag parameter type ${String(name)}`);
+    return Object.freeze(Object.hasOwn(roots, name) ? {kind:kinds[name], nonnull:false, heap:roots[name]} : {kind:kinds[name]});
+  });
+  const heap = {kind:0, final:1, position:0, parent:null, params:Object.freeze(params), results:Object.freeze([]), fields:Object.freeze([])};
+  heap.group = Object.freeze([heap]); Object.freeze(heap);
+  const handle = Object.freeze({kind:'tag'});
+  resourceTypes.set(handle, {kind:4, identity:nextTagIdentity++, valid:()=>true, handle,
+    descriptor:Object.freeze({kind:5, nonnull:true, heap})});
+  return handle;
+}
+
 const invocationContext = new AsyncLocalStorage();
 const currentDepth = () => invocationContext.getStore() ?? 0;
 const asynchronousImports = new WeakSet();
@@ -603,6 +621,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     if (exportedResources.has(key)) return exportedResources.get(key);
     const imported = resources.find(binding => binding.index === index && binding.state.kind === kind);
     let state = imported?.state;
+    if (state?.handle) { exportedResources.set(key, state.handle); return state.handle; }
     if (!state) {
       const currentGeneration = generation;
       state = {kind, valid: () => loaded && generation === currentGeneration};
