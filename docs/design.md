@@ -256,6 +256,31 @@ bulk-memory, sign-extension and nontrapping float-conversion instructions; Binar
 explicit feature flags. These instructions are also supported by guest dispatch,
 so the expanded engine remains self-hosting.
 
+## Host memory access
+
+The Node API resolves an optional memory selector to a checked module index.
+Selectors are numeric indices (including unexported memories) or exported names;
+zero remains the default. Export descriptors are cached lazily per load generation,
+with explicit unknown-name/kind diagnostics. `guest_memory_present` supplies the
+memory count, so invalid indices never reach unchecked canonical descriptor queries.
+
+`readMemory`, `writeMemory`, `growMemory` and `memoryPages` use the existing indexed
+memory ABI. Bounds are checked against the selected canonical page count before
+constructing views. Length checks use subtraction, accepting an empty range exactly
+at the end and rejecting partial writes. Memory64 BigInt offsets are checked before
+Number conversion; BigInt growth outside the host i32 delta slot returns failure
+without truncation. Memory32 accepts only Number offsets/deltas. Page counts and
+growth results remain Numbers, matching the existing host API and bounded backing.
+
+Every operation imports current shared state; writes/growth publish state afterward.
+Duplicate imports resolve to their canonical memory, so aliases see the same bytes
+and page count. Indexed growth preserves packed following memories and refreshes
+backing views. These operations are allowed during suspended imports and automatic
+start functions, without reentering guest dispatch. Guest memory instructions select
+their own descriptors when execution resumes. Tests compare text/binary modules
+against native WebAssembly, including multiple memories, empty memories, memory64,
+shared aliases, async callbacks and start functions, reloads and atomic failures.
+
 ## Host ABI
 
 The low-level API exports memory, load(ptr,len), initialize(), invoke(namePtr,nameLen,argsPtr,

@@ -110,6 +110,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
   let exportedResources = new Map(), exportedFunctions = new Map();
   let tableFunctions = new Map();
   let foreignFunctions = new Map();
+  let memoryExports;
   const owner = {};
   const negativeZeroKey = Symbol();
   let externalValues = [null], externalIds = new Map();
@@ -170,12 +171,39 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       throw new Error('value must be an i32 integer');
     }
   }
-  function memoryRange(/** @type {number} */ offset, /** @type {number} */ length) {
+  // Resolve a host memory selector without exposing unvalidated descriptor addresses.
+  function memoryIndex(memory = 0) {
     requireLoaded();
-    if (!e.guest_memory_present()) throw new Error('no guest memory');
+    const count = e.guest_memory_present();
+    if (typeof memory === 'string') {
+      if (!memoryExports) {
+        memoryExports = new Map();
+        for (let index = 0; index < e.exports_count(); index++) {
+          const at = e.export_info(index), view = new DataView(e.memory.buffer, memoryOffset);
+          const name = readText(view.getUint32(at, true), view.getUint32(at + 4, true));
+          memoryExports.set(name, {index: view.getInt32(at + 8, true), kind: view.getInt32(at + 20, true)});
+        }
+      }
+      const descriptor = memoryExports.get(memory);
+      if (!descriptor) throw new Error(`unknown export ${memory}`);
+      if (descriptor.kind !== 1) throw new Error(`export kind mismatch ${memory}`);
+      return descriptor.index;
+    }
+    if (!count && memory === 0) throw new Error('no guest memory');
+    if (!Number.isInteger(memory) || memory < 0 || memory >= count) throw new Error('invalid memory index');
+    return memory;
+  }
+  // Normalize only checked physical offsets, retaining full-width memory64 bounds checks.
+  function memoryRange(offset, length, index) {
+    const size = e.memory_pages(index) * 65536;
+    if (typeof offset === 'bigint') {
+      if (e.memory_width(index) !== 2) throw new Error('BigInt offsets require memory64');
+      if (offset < 0n || offset > BigInt(size)) throw new Error('memory out of bounds');
+      offset = Number(offset);
+    }
     if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length < 0 ||
-        offset + length > e.guest_memory_pages() * 65536) throw new Error('memory out of bounds');
-    return e.guest_memory_base() + offset;
+        offset > size || length > size - offset) throw new Error('memory out of bounds');
+    return e.memory_base(index) + offset;
   }
   function requireIdle() {
     if (invoking) throw new Error('interpreter is already invoking');
@@ -689,6 +717,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       requireIdle();
       loaded = false;
       generation++;
+      memoryExports = undefined;
       const sourceLength = write(source, 4096);
       e.validation_only(1);
       try { check(binarySource ? e.load_binary(4096, sourceLength) : e.load(4096, sourceLength)); }
@@ -699,6 +728,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       requireIdle();
       loaded = false;
       generation++;
+      memoryExports = undefined;
       bindings = []; resources = []; importedExceptions.clear(); exportedResources = new Map(); exportedFunctions = new Map();
       tableFunctions = new Map(); foreignFunctions = new Map();
       externalValues = [null]; externalIds = new Map();
@@ -907,24 +937,35 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       if (type === 7) check(e.set_global_high(at, n, BigInt.asIntN(64, bits >> 64n)));
       synchronizeOut();
     },
-    readMemory(/** @type {number} */ offset, /** @type {number} */ length) {
+    readMemory(offset, length, memory = 0) {
       synchronizeIn();
-      const at = memoryRange(offset, length);
+      const at = memoryRange(offset, length, memoryIndex(memory));
       return new Uint8Array(e.memory.buffer, memoryOffset + at, length).slice();
     },
-    writeMemory(/** @type {number} */ offset, /** @type {Uint8Array} */ bytes) {
+    writeMemory(offset, bytes, memory = 0) {
       synchronizeIn();
       if (!(bytes instanceof Uint8Array)) throw new Error('memory bytes must be a Uint8Array');
-      const at = memoryRange(offset, bytes.length);
+      const at = memoryRange(offset, bytes.length, memoryIndex(memory));
       new Uint8Array(e.memory.buffer, memoryOffset + at, bytes.length).set(bytes);
       synchronizeOut();
     },
-    growMemory(/** @type {number} */ pages) {
+    // Page counts remain Numbers because host-visible physical backing is bounded.
+    memoryPages(memory = 0) {
       synchronizeIn();
-      requireLoaded();
-      if (!e.guest_memory_present()) throw new Error('no guest memory');
+      return e.memory_pages(memoryIndex(memory));
+    },
+    growMemory(pages, memory = 0) {
+      synchronizeIn();
+      const index = memoryIndex(memory);
+      if (typeof pages === 'bigint') {
+        if (e.memory_width(index) !== 2) throw new Error('BigInt growth requires memory64');
+        if (pages < 0n || pages > (1n << 64n) - 1n) throw new Error('pages must be an unsigned i64 integer');
+        // Large logical deltas must fail without narrowing or wrapping the host ABI's i32 slot.
+        if (pages > 0xffffffffn) return -1;
+        pages = Number(pages);
+      }
       u32(pages);
-      const result = e.grow_guest_memory(pages);
+      const result = e.grow_memory(index, pages);
       synchronizeOut();
       return result;
     },

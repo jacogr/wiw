@@ -95,9 +95,30 @@ For local WASI integration tests, [the test host adapter](docs/wasi.md) provides
 Preview 1 imports and process-exit handling without a guest-specific target or
 repository dependency.
 
-`getGlobal`/`setGlobal`, `readMemory`/`writeMemory`, and `growMemory` provide
-checked resource access. Memory reads return copies and do not require a memory
-export. `exportFunction(name)` makes a typed forwarding callback;
+`getGlobal`/`setGlobal` provide checked global access. Memory access supports
+`readMemory(offset, length, memory = 0)`, `writeMemory(offset, bytes, memory = 0)`,
+`growMemory(pages, memory = 0)` and `memoryPages(memory = 0)`. Select a memory
+by its numeric module index or exported name; omitted selectors retain memory
+zero. Numeric indices also address unexported memories. Reads return copies;
+writes require a `Uint8Array` and check the entire range before changing bytes.
+
+Offsets use safe integer Numbers; memory64 also accepts BigInt offsets and
+unsigned 64-bit BigInt growth deltas. Bounds are checked before narrowing to
+physical backing addresses. Oversized valid growth returns `-1` without changing
+the memory. Read lengths, page counts and growth results use Numbers for both
+address widths: `growMemory` returns the previous page count or `-1`. Memory32
+rejects BigInt offsets/deltas. Aliases share bytes and growth, including across
+instances. Host operations work during synchronous/asynchronous callbacks and
+start functions; growth preserves the other memories and zeroes new pages.
+
+```js
+engine.writeMemory(0, new Uint8Array([42]), 'scratch');
+console.log(engine.readMemory(0, 1, 'scratch')[0]); // 42
+console.log(engine.memoryPages('scratch'));
+engine.growMemory(1n, 'wide'); // An exported memory64.
+```
+
+`exportFunction(name)` makes a typed forwarding callback;
 `exportNamespace()` also includes opaque memory, global, table and tag bindings.
 Imported resources share mutations, growth and table function references across
 instances. Reload invalidates previous bindings.
