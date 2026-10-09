@@ -7,12 +7,31 @@ let nextTagIdentity = 1;
 const exceptionTypes = new WeakMap();
 export class WiwException extends Error {
   constructor() {super('uncaught guest exception'); this.name = 'WiwException';}
+  // Compare live tag identity rather than matching payload signatures.
+  is(tag) { return exceptionData(this, tag).matches; }
+  getArg(tag, index) { return exceptionArgument(this, tag, index, false); }
+  getArgRaw(tag, index) { return exceptionArgument(this, tag, index, true); }
 }
 
 // Typed forwarding bindings retain the provider's signature and load generation.
 /** @type {WeakMap<Function, {params: number[], results: number | number[], valid: () => boolean}>} */
 const functionTypes = new WeakMap();
 const resourceTypes = new WeakMap();
+// Exception payload snapshots remain private; inspection never touches guest scratch or frame state.
+function exceptionData(exception, tag) {
+  const data = exceptionTypes.get(exception), state = resourceTypes.get(tag);
+  if (!data) throw new Error('uninitialized wiw exception');
+  if (!state || state.kind !== 4) throw new Error('exception inspection requires a wiw tag');
+  if (!state.valid()) throw new Error('stale tag binding');
+  return {data, matches: data.identity === state.identity};
+}
+function exceptionArgument(exception, tag, index, raw) {
+  const {data, matches} = exceptionData(exception, tag);
+  if (!matches) throw new Error('exception tag mismatch');
+  if (!Number.isInteger(index) || index < 0 || index >= data.args.length) throw new Error('exception argument index out of bounds');
+  return raw ? {...data.args[index]} : data.values[index];
+}
+
 const invocationContext = new AsyncLocalStorage();
 const currentDepth = () => invocationContext.getStore() ?? 0;
 const asynchronousImports = new WeakSet();
@@ -143,8 +162,14 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       const low = view.getBigInt64(at + 32 + slot * 16, true), high = view.getBigUint64(at + 40 + slot * 16, true);
       return rawResult(type === 7 ? BigInt.asUintN(64, low) | (high << 64n) : low, type);
     });
+    return exceptionSnapshot(identity, params, args);
+  }
+  // Copy typed and raw payloads so mutation of caller descriptors cannot change a later rethrow.
+  function exceptionSnapshot(identity, params, args) {
     const exception = new WiwException();
-    exceptionTypes.set(exception, {identity, params, args});
+    const snapshots = args.map(arg => Object.freeze({...arg}));
+    const values = snapshots.map((arg, index) => isHostReference(params[index]) ? arg.value : decodedValue(arg.bits, params[index]));
+    exceptionTypes.set(exception, {identity, params: Object.freeze([...params]), args: Object.freeze(snapshots), values: Object.freeze(values)});
     return exception;
   }
   function importException(exception) {
@@ -198,6 +223,41 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
   function tableIndex(table = 0) {
     requireLoaded();
     return resourceIndex(table, 3, e.table_count(), 'table');
+  }
+  // A supplied tag handle must have a live alias in this loaded module.
+  function tagIndex(tag = 0) {
+    requireLoaded();
+    if (typeof tag === 'object' && tag !== null) {
+      const state = resourceTypes.get(tag);
+      if (!state || state.kind !== 4) throw new Error('value must be a wiw tag');
+      if (!state.valid()) throw new Error('stale tag binding');
+      for (let index = 0; index < e.tag_count(); index++) {
+        if (new DataView(e.memory.buffer, memoryOffset).getInt32(e.tag_info(index) + 16, true) === state.identity) return index;
+      }
+      throw new Error('tag does not belong to loaded module');
+    }
+    return resourceIndex(tag, 4, e.tag_count(), 'tag');
+  }
+  function tagParameters(index) {
+    const heap = new DataView(e.memory.buffer, memoryOffset).getInt32(e.tag_info(index) + 24, true);
+    return Array.from({length: e.heap_params(heap)}, (_, slot) => e.value_kind(e.heap_param_type(heap, slot)));
+  }
+  // Host-created exceptions are snapshots; guest allocation occurs only when a callback throws one.
+  function createException(tag, args, raw) {
+    synchronizeIn();
+    const index = tagIndex(tag), params = tagParameters(index);
+    if (args.length !== params.length) throw new Error('exception argument mismatch');
+    const payload = args.map((arg, slot) => {
+      const bits = raw ? rawSlot(arg, params[slot]) : typedValue(arg, params[slot]);
+      if (isHostReference(params[slot])) {
+        const accepts = e.tag_accepts(index, slot, bits);
+        check(e.error_code());
+        if (!accepts) throw new Error('exception payload type mismatch');
+      }
+      return rawResult(bits, params[slot]);
+    });
+    const identity = new DataView(e.memory.buffer, memoryOffset).getInt32(e.tag_info(index) + 16, true);
+    return exceptionSnapshot(identity, params, payload);
   }
   // Table64 indices are checked in full before using the bounded physical entry arena.
   function tableEntry(index, table) {
@@ -999,6 +1059,10 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       synchronizeOut();
       return result;
     },
+    getTag(tag = 0) { return exportResource(tagIndex(tag), 4); },
+    tagSignature(tag = 0) { return {params: tagParameters(tagIndex(tag)).map(type => scalarNames[type])}; },
+    createException(tag, ...args) { return createException(tag, args, false); },
+    createExceptionRaw(tag, ...args) { return createException(tag, args, true); },
     tableSize(table = 0) {
       synchronizeIn();
       return e.table_size(tableIndex(table));

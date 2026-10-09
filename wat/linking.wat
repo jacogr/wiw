@@ -60,21 +60,53 @@
 		(global.get $guest-table-present)
 	)
 
+	;; Match an already encoded host reference, keeping exception handles in their own hierarchy.
+	(func $host-reference-matches
+		(param $value i64)
+		(param $type i32)
+		(result i32)
+
+		;; Non-null exception handles do not carry an aggregate's declared heap type.
+		(if
+			(i32.and
+				(i64.ne (local.get $value) (i64.const 0))
+				(i32.eq (call $reference-root (local.get $type)) (i32.const M4_REF_EXN_NULLABLE))
+			)
+			(then
+				(return (call $type-compatible (i32.const M4_REF_EXN_NONNULL) (local.get $type)))
+			)
+		)
+		(call $runtime-reference-matches (local.get $value) (local.get $type))
+	)
+
 	;; Check a host-encoded reference against one table's complete declared element type.
 	(func (export "table_accepts")
 		(param $index i32)
 		(param $value i64)
 		(result i32)
-		(local $type i32)
 
 		(global.set $error (i32.const M4_ERR_SUCCESS))
-		(local.set $type (i32.load offset=M4_TABLE_ELEMENT_TYPE_OFFSET (call $canonical-table-record (local.get $index))))
-		;; Live exception handles belong to their own hierarchy, independent of aggregate heap IDs.
-		(if (i32.and (i64.ne (local.get $value) (i64.const 0))
-			(i32.eq (call $reference-root (local.get $type)) (i32.const M4_REF_EXN_NULLABLE)))
-			(then (return (call $type-compatible (i32.const M4_REF_EXN_NONNULL) (local.get $type))))
+		(call $host-reference-matches
+			(local.get $value)
+			(i32.load offset=M4_TABLE_ELEMENT_TYPE_OFFSET (call $canonical-table-record (local.get $index)))
 		)
-		(call $runtime-reference-matches (local.get $value) (local.get $type))
+	)
+
+	;; Check one host-created exception payload reference against the tag's complete parameter type.
+	(func (export "tag_accepts")
+		(param $index i32)
+		(param $slot i32)
+		(param $value i64)
+		(result i32)
+
+		(global.set $error (i32.const M4_ERR_SUCCESS))
+		(call $host-reference-matches
+			(local.get $value)
+			(call $heap-param-type
+				(i32.load offset=M4_TAG_HEAP_TYPE_OFFSET (call $tag-record (local.get $index)))
+				(local.get $slot)
+			)
+		)
 	)
 
 	;; Grow a host-selected table with an already checked reference initializer.

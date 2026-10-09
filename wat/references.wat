@@ -1595,7 +1595,7 @@
 	)
 
 	;; Expose one declared heap parameter type without erasing nullability or the heap identity.
-	(func (export "heap_param_type")
+	(func $heap-param-type (export "heap_param_type")
 		(param $index i32)
 		(param $slot i32)
 		(result i32)

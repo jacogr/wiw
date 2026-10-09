@@ -159,6 +159,35 @@ consumer.load(`(module
 console.log(consumer.invoke('answer'));
 ```
 
+Tags support `getTag(tag = 0)` and `tagSignature(tag = 0)`. Select a tag by
+module index, exported name, or a live opaque tag binding with an alias in the
+loaded module. `getTag` returns the same tag bindings used by `exportNamespace`;
+`tagSignature` returns `{params: [...]}` with the public value type names.
+
+`createException(tag, ...values)` makes a typed `WiwException` that a callback
+can throw or reject for guest `try_table` handlers. `createExceptionRaw(tag,
+...slots)` preserves exact numeric bits, using the same raw slot format as
+`invokeRaw`. Creation checks the argument count and full reference types,
+including concrete heap types and nullability. It is also available during
+callbacks and start functions. Guest exception storage is allocated when the
+exception enters the guest, using the existing collector and resume mechanism.
+
+Caught and host-created exceptions provide `is(tag)`, `getArg(tag, index)` and
+`getArgRaw(tag, index)`. Matching uses tag identity, so distinct tags with identical
+signatures remain distinct. Inspection requires a live tag binding; a wrong tag
+or out-of-range index throws. Payloads are private snapshots, and raw inspection
+returns a fresh slot descriptor. Reference values retain their identity, including
+opaque Promise values. Managed GC/exception references remain instance-owned;
+shared tags and ordinary function/external payloads follow existing forwarding
+rules. Reload invalidates the old instance's tag bindings.
+
+```js
+const tag = engine.getTag('failure');
+const error = engine.createException(tag, 42);
+console.log(error.is(tag), error.getArg(tag, 0)); // true 42
+// Throw error from an import callback to enter the guest's handler for this tag.
+```
+
 Function bindings live under module/field keys. `load`/`loadBinary` and
 `invoke`/`invokeRaw` execute synchronously and reject asynchronous callbacks.
 Use `await loadAsync(source, imports)`, `await loadBinaryAsync(bytes, imports)`,

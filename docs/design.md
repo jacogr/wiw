@@ -310,6 +310,33 @@ Tests cover text/binary native comparisons, selectors/reloads, opaque external
 values, concrete/non-null function types, GC and exception tables, table64,
 shared aliases and async automatic-start initialization.
 
+## Host exceptions and tags
+
+`getTag` resolves a checked tag selector through the shared export cache or
+finds a local alias of an existing live tag identity. `tagSignature` reads the
+canonical heap parameter types. `createException` and `createExceptionRaw`
+encode payloads through the existing typed/raw transport, validate reference
+parameters with `tag_accepts`, and create a private host snapshot. Creation does
+not allocate a guest exception; throwing it from a callback imports it through
+the existing raw exception ABI. This preserves both SIMD halves, numeric bits,
+reference roots and the original tag identity through guest handlers.
+
+Host-created and uncaught exceptions carry immutable private parameter/raw/value
+arrays. Public `is`, `getArg` and `getArgRaw` check live tag bindings, identity
+and payload index bounds without issuing interpreter calls. Raw slots are copied
+on inspection so caller mutation cannot change a later rethrow. Numeric values
+are decoded once for ordinary inspection; the original raw slots remain intact.
+Reference payloads remain strongly held while the JavaScript exception is live.
+
+The shared host reference checker keeps exception handles separate from aggregate
+heap IDs and preserves full concrete function/GC types and nullability. Tags
+with identical signatures but different identities never compare equal. Imported
+aliases retain shared identities, and unknown identities can still enter catch-all
+handlers. Reload follows the existing tag binding generation rules. Tests cover
+native exception API comparisons, raw signaling NaNs/vectors, synchronous/async
+handler entry, void automatic-start exceptions, shared aliases, malformed payloads,
+GC retention and stale or unrelated tags.
+
 ## Host ABI
 
 The low-level API exports memory, load(ptr,len), initialize(), invoke(namePtr,nameLen,argsPtr,

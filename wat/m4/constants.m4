@@ -68,6 +68,7 @@ m4_define(<!M4_REF_EXN_NONNULL!>,<!33!>)m4_dnl
 m4_dnl
 m4_dnl Record widths, packed table locations and field offsets.
 m4_define(<!M4_TABLE_ELEMENT_TYPE_OFFSET!>,<!16!>)m4_dnl
+m4_define(<!M4_TAG_HEAP_TYPE_OFFSET!>,<!24!>)m4_dnl
 m4_define(<!M4_SLOT_BYTES!>,<!8!>)m4_dnl
 m4_define(<!M4_GC_SLOT_BYTES!>,<!16!>)m4_dnl
 m4_define(<!M4_SLOT_SHIFT!>,<!3!>)m4_dnl
