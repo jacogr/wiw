@@ -437,8 +437,8 @@
 
 		(local.set $offset (global.get $tok))
 		(call $next)
-		;; Global capacity protects its fixed record arena.
-		(if (i32.ge_u (global.get $global-count) (i32.const M4_CAP_GLOBALS))
+		;; The global quota bounds its configured descriptor arena.
+		(if (i32.ge_u (global.get $global-count) (global.get $global-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
@@ -517,13 +517,14 @@
 		(local.set $base
 			(i64.and
 				(i64.add
-					(i64.add (i64.extend_i32_u (global.get $code-base)) (i64.const M4_OWNED_BYTES))
+					(i64.extend_i32_u (global.get $owned-end))
 					(i64.const 65535)
 				)
 				(i64.const -65536)
 			)
 		)
 		(local.set $cursor (local.get $base))
+		(global.set $linear-base (i32.wrap_i64 (local.get $base)))
 		;; Every descriptor is initialized before any segment can access its contents.
 		(block $done
 			;; Aliased imports share the first binding's storage instead of allocating duplicate bytes.
@@ -534,7 +535,7 @@
 				(if (i32.eqz (i32.load offset=52 (local.get $record)))
 					(then
 						;; Initial storage remains subject to the implementation's physical capacity.
-						(if (i32.gt_u (i32.load offset=8 (local.get $record)) (i32.const M4_CAP_PAGES))
+						(if (i32.gt_u (i32.load offset=8 (local.get $record)) (global.get $guest-capacity))
 							(then
 								(global.set $tok (i32.load offset=48 (local.get $record)))
 								(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
@@ -567,6 +568,7 @@
 			(i32.wrap_i64 (i64.sub (local.get $cursor) (local.get $base)))
 		)
 		(global.set $host-base (i32.wrap_i64 (local.get $cursor)))
+		(global.set $resources-allocated (i32.const 1))
 		(call $use-memory (i32.const 0))
 		;; Modules without a memory still retain valid host scratch after the interpreter arenas.
 		(if (i32.eqz (global.get $memory-present))

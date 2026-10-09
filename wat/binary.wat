@@ -2821,10 +2821,20 @@
 		(if (i32.eq (local.get $section) (i32.const 3))
 			(then
 				;; The type-index map has one bounded slot per possible defined function.
-				(if (i32.gt_u (local.get $count) (i32.const M4_CAP_FUNCTIONS))
+				(if (i32.gt_u (local.get $count) (global.get $function-limit))
 					(then
 						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 						(return)
+					)
+				)
+				;; Larger function vectors use a disjoint map without moving the type or constant scratch.
+				(if (i32.gt_u (local.get $count) (i32.const M4_CAP_FUNCTIONS))
+					(then
+						(global.set $bin-function-map (i32.add (global.get $bin-out) (i32.const M4_BINARY_SCRATCH_BYTES)))
+						(if (i32.eqz (call $ensure-bytes (i64.add (i64.extend_i32_u (global.get $bin-function-map))
+							(i64.shl (i64.extend_i32_u (local.get $count)) (i64.const 2)))))
+							(then (call $fail (i32.const M4_ERR_RESOURCE_LIMIT)) (return))
+						)
 					)
 				)
 				(global.set $bin-functions (local.get $count))
@@ -3104,7 +3114,7 @@
 		(if
 			(i32.eqz
 				(call $ensure-bytes
-					(i64.add (i64.extend_i32_u (global.get $bin-out)) (i64.const 1056768))
+					(i64.add (i64.extend_i32_u (global.get $bin-out)) (i64.const M4_BINARY_SCRATCH_BYTES))
 				)
 			)
 			(then

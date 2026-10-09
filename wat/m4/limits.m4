@@ -84,3 +84,14 @@ m4_define(<!M4_GC_MAP_OFFSET!>,<!49146112!>)m4_dnl
 m4_define(<!M4_GC_MAP_BYTES!>,<!4194304!>)m4_dnl
 m4_define(<!M4_GC_TEMP_OFFSET!>,<!53340416!>)m4_dnl
 m4_define(<!M4_GC_TEMP_SLOTS!>,<!1024!>)m4_dnl
+
+m4_dnl Default instance quotas; function tables grow geometrically from their original capacity.
+m4_define(<!M4_LIMIT_FUNCTIONS!>,<!65536!>)m4_dnl
+m4_define(<!M4_LIMIT_EXPORTS!>,<!512!>)m4_dnl
+m4_define(<!M4_LIMIT_GLOBALS!>,<!512!>)m4_dnl
+m4_define(<!M4_FUNCTION_DECLARATIONS_BASE!>,<!3920!>)m4_dnl
+m4_define(<!M4_FUNCTION_DECLARATIONS_BYTES!>,<!64!>)m4_dnl
+m4_define(<!M4_FUNCTION_RECORD_BYTES!>,<!32!>)m4_dnl
+m4_define(<!M4_FUNCTION_TYPES_BYTES!>,<!32!>)m4_dnl
+m4_define(<!M4_FUNCTION_LOCAL_TYPES_BYTES!>,<!m4_eval(M4_CAP_LOCALS * 4)!>)m4_dnl
+m4_define(<!M4_BINARY_SCRATCH_BYTES!>,<!1056768!>)m4_dnl

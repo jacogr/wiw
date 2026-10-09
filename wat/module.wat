@@ -150,11 +150,12 @@
 			(then
 				;; The first indexed lookup clears stale slots from any previous source layout.
 				(if (i32.eqz (global.get $function-names-indexed))
-					(then (call $zero-bytes (global.get $function-name-index) (i32.const M4_FUNCTION_NAME_INDEX_BYTES)))
+					(then (call $zero-bytes (global.get $function-name-index)
+						(i32.shl (i32.add (global.get $function-name-mask) (i32.const 1)) (i32.const M4_NAME_INDEX_SLOT_SHIFT))))
 				)
 				(local.set $i (call $indexed-name (global.get $function-base) (i32.const 32)
 					(global.get $function-count) (global.get $function-names-indexed)
-					(global.get $function-name-index) (i32.const M4_FUNCTION_NAME_INDEX_MASK)
+					(global.get $function-name-index) (global.get $function-name-mask)
 					(i32.const 1) (local.get $p) (local.get $n)))
 				(global.set $function-names-indexed (global.get $function-count))
 				(return (local.get $i))
@@ -277,8 +278,8 @@
 				(return)
 			)
 		)
-		;; Bound the export table before its next entry could reach the call-frame region.
-		(if (i32.ge_u (global.get $export-count) (i32.const 512))
+		;; Enforce the export quota before appending to its configured record arena.
+		(if (i32.ge_u (global.get $export-count) (global.get $export-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
@@ -430,13 +431,15 @@
 
 		(local.set $offset (global.get $tok))
 		(call $next)
-		;; Function capacity bounds every related function/local-name table.
-		(if (i32.ge_u (global.get $function-count) (i32.const M4_CAP_FUNCTIONS))
+		;; The instance function quota is independent from the storage reserved so far.
+		(if (i32.ge_u (global.get $function-count) (global.get $function-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
+		;; Grow all related function tables before retaining this declaration's record pointers.
+		(if (i32.eqz (call $reserve-function)) (then (return)))
 		;; A dollar-prefixed function name is optional; anonymous functions keep numeric indices.
 		(if (call $named)
 			(then

@@ -141,7 +141,7 @@
 		;; Reject sizes beyond the engine's fixed arenas before changing any bound sizes.
 		(if
 			(i32.or
-				(i32.gt_u (local.get $pages) (i32.const M4_CAP_PAGES))
+				(i32.gt_u (local.get $pages) (global.get $guest-capacity))
 				(i32.gt_u (local.get $entries) (i32.const 4096))
 			)
 			(then
@@ -167,10 +167,10 @@
 		(local $i i32)
 
 		(global.set $error (i32.const M4_ERR_SUCCESS))
-		;; Host-created function records obey the same fixed function and parameter capacities.
+		;; Host-created function records obey the same instance function quota and parameter bound.
 		(if
 			(i32.or
-				(i32.ge_u (global.get $function-count) (i32.const M4_CAP_FUNCTIONS))
+				(i32.ge_u (global.get $function-count) (global.get $function-limit))
 				(i32.gt_u (local.get $count) (i32.const 128))
 			)
 			(then
@@ -178,6 +178,10 @@
 				(return (i32.const -1))
 			)
 		)
+		;; Host signatures may live in scratch that table growth relocates, so preserve the vector first.
+		(memory.copy (global.get $type-stack-base) (local.get $types) (i32.shl (local.get $count) (i32.const 2)))
+		(if (i32.eqz (call $reserve-function)) (then (return (i32.const -1))))
+		(local.set $types (global.get $type-stack-base))
 		(local.set $index (global.get $function-count))
 		(local.set $f (call $function (local.get $index)))
 		;; Dynamic entries start with fresh type metadata even when a previous module used this slot.
@@ -414,7 +418,7 @@
 		(local $record i32)
 
 		;; Imported sizes remain bounded by the same physical page capacity as definitions.
-		(if (i32.gt_u (local.get $pages) (i32.const M4_CAP_PAGES))
+		(if (i32.gt_u (local.get $pages) (global.get $guest-capacity))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (global.get $error))

@@ -3762,3 +3762,52 @@ Final release validation: `make check-wasm` passes 239 tests in 11.11 seconds;
 The 13 new collection regressions run in each runtime, including the binary
 native-execution comparison and exact instruction-fuel boundary. These full-run
 timings are diagnostic measurements, not paired performance comparisons.
+
+
+### Instance resource budgets and growing function metadata
+
+Factory options now accept `limits.functions`, `exports`, `globals`, `callFrames`
+and `memoryPages`. Quotas persist across reload and are validated before runtime
+construction. The compiled and self-hosted factories configure the same WAT
+state; self-hosted setup finishes before applying the caller's parent instruction
+budget, preserving construction with `parentFuel: 0`.
+
+Function storage starts in the existing 512-slot layout. At each boundary it
+doubles a contiguous dynamic region containing records, per-function local names
+and local types, deferred function metadata, the declaration bitmap and a name
+index with twice as many buckets as function slots. Reverse-order memory copies
+preserve overlapping source tables during subsequent growth. Numeric function
+identities, resolved calls and heap-type indices remain unchanged. The name index
+is rebuilt lazily after growth, while declaration bits and completed types are
+copied. Binary function sections reserve a larger disjoint type-index map when
+needed. The default function quota is 65,536; clients can lower it explicitly.
+
+Export/global budgets above 512 and call-frame budgets above 512 reserve separate
+arenas during prepare. Frame high halves retain their existing parallel layout.
+Memory backing uses the instance page quota for both initial allocation and growth;
+configured larger budgets do not bypass declared guest maxima or backing-address
+bounds. All other independent interpreter capacities remain in force.
+
+The end of owned metadata determines the page-aligned start of linear memories.
+When imported table synchronization introduces enough foreign functions to grow
+metadata after instantiation, initialized memories and host scratch move together.
+Canonical descriptors receive the common displacement, aliases continue to follow
+their descriptors, and the selected memory cache is refreshed. Host-supplied
+signature types are copied to stable scratch before relocation. Allocation and
+address-range checks happen before moving bytes or committing new metadata bases.
+Reload returns to the original function layout and preserves configured quotas.
+
+Regressions cover multiple geometric growth boundaries, named locals and type
+metadata, high-index direct/indirect/reference calls, duplicate detection, text and
+binary quotas, larger exports/globals and resource sharing, vector recursion beyond
+512 frames, memory beyond 128 MiB, late imported-table growth with multiple memories,
+combined GC/frame/global/function budgets and physical allocation failure. The
+failure fixture limits native backing to 1,900 pages and is optimized with the
+release flags before testing both compiled and self-hosted recovery.
+
+Final release validation: both full targets pass 248 tests, with zero failures or
+skips. The native target takes 11.06 seconds and the self-hosted target takes
+137.66 seconds. Each executes all 258 pinned wg-3.0 files and 65,199 commands.
+The nine new capacity tests run alongside the existing GC, WASI, ownership and
+multiple-layer self-hosting regressions. These full-run timings are diagnostic
+measurements rather than paired performance comparisons.

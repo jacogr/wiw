@@ -18,12 +18,36 @@ const maxInvocationDepth = 128;
 // Backing memory and address origins stay private to the host adapters.
 const engineBackends = new WeakMap();
 
+// Validate resource budgets before allocating either a bootstrap or a self-hosted runtime.
+const defaultLimits = Object.freeze({functions:65536, exports:512, globals:512, callFrames:512, memoryPages:2048});
+const maximumLimits = Object.freeze({functions:65536, exports:65536, globals:65536, callFrames:4096, memoryPages:65536});
+function instanceLimits(options) {
+  const requested = options.limits ?? {};
+  if (typeof requested !== 'object' || requested === null || Array.isArray(requested)) throw new Error('limits must be an object');
+  const limits = {...defaultLimits};
+  for (const [name, value] of Object.entries(requested)) {
+    if (!Object.hasOwn(limits, name)) throw new Error(`unknown limit ${name}`);
+    const minimum = name === 'callFrames' ? 1 : 0;
+    if (!Number.isInteger(value) || value < minimum || value > maximumLimits[name]) {
+      throw new Error(`limit ${name} must be an integer from ${minimum} to ${maximumLimits[name]}`);
+    }
+    limits[name] = value;
+  }
+  return limits;
+}
+function configureLimits(exports, limits) {
+  const status = exports.configure_limits(limits.functions, limits.exports, limits.globals, limits.callFrames, limits.memoryPages);
+  if (status) throw new Error(`could not configure interpreter limits: status ${status}`);
+}
+
 /** Create a fresh native interpreter from a binary path or a caller-owned compiled bootstrap module. */
 /** Guest source is never handed to WebAssembly; compiled modules share code, not instance state. */
-export async function createBootstrapInterpreter(binary = new URL('./build/wiw-opt.wasm', import.meta.url)) {
+export async function createBootstrapInterpreter(binary = new URL('./build/wiw-opt.wasm', import.meta.url), options = {}) {
+  const limits = instanceLimits(options);
   const instance = binary instanceof WebAssembly.Module
     ? new WebAssembly.Instance(binary)
     : (await WebAssembly.instantiate(await readFile(binary))).instance;
+  configureLimits(instance.exports, limits);
   return wrapInterpreter(instance.exports);
 }
 
@@ -34,12 +58,13 @@ export async function createInterpreter(binary = new URL('./build/wiw-opt.wasm',
 
 /** Run a WAT copy of wiw (optimized by default) inside a bootstrap using the same host ABI. */
 export async function createInterpretedInterpreter(binary = new URL('./build/wiw-opt.wasm', import.meta.url), options = {}) {
+  const limits = instanceLimits(options);
   const parent = await createBootstrapInterpreter(binary);
   const backend = engineBackends.get(parent);
   // Parent ABI calls are implementation work, not guest-to-guest forwarding.
   backend.countsForwardingDepth = false;
   parent.load(options.source ?? await readFile(new URL('./build/wiw-opt.wat', import.meta.url), 'utf8'));
-  backend.exports.set_fuel64(BigInt(options.parentFuel ?? ((1n << 64n) - 1n)));
+  backend.exports.set_fuel64((1n << 64n) - 1n);
   // The parent holds child arenas as well as the child's full guest-memory capacity.
   backend.exports.enable_interpreter_backing();
   const memoryOffset = backend.memoryOffset + backend.exports.guest_memory_base();
@@ -47,6 +72,8 @@ export async function createInterpretedInterpreter(binary = new URL('./build/wiw
   for (const [name, value] of Object.entries(backend.exports)) {
     if (typeof value === 'function') exports[name] = (...args) => parent.invoke(name, ...args);
   }
+  configureLimits(exports, limits);
+  backend.exports.set_fuel64(BigInt(options.parentFuel ?? ((1n << 64n) - 1n)));
   return wrapInterpreter(exports, {
     memoryOffset,
     ensureMemory(required) {

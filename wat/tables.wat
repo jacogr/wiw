@@ -120,14 +120,14 @@
 		(param $index i32)
 		(local $address i32)
 
-		;; Failed lookups cannot write outside the fixed 512-function bitmap.
+		;; Failed lookups cannot write outside the current function declaration bitmap.
 		(if (global.get $error)
 			(then
 				(return)
 			)
 		)
 		(local.set $address
-			(i32.add (i32.const 3920) (i32.shr_u (local.get $index) (i32.const 3)))
+			(i32.add (global.get $function-declarations) (i32.shr_u (local.get $index) (i32.const 3)))
 		)
 		(i32.store8
 			(local.get $address)

@@ -157,7 +157,7 @@ for (const binary of ['wiw-opt.wasm']) {
   });
 
   test(`${binary}: call/operand limits, recursion and fuel are recoverable`, async () => {
-    const i = await createInterpreter(url);
+    const i = await createInterpreter(url, {limits:{functions:512}});
     i.load(`(module ${'(func) '.repeat(255)} (func (export \"last\") (result i32) i32.const 42))`);
     assert.equal(i.invoke('last'), 42);
     assert.throws(() => i.load(`(module ${'(func) '.repeat(513)})`), /resource limit/);

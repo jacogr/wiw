@@ -149,11 +149,42 @@ entries until dropped; active/declarative segments have no live entries after
 initialization. Bounds failures write no prefix. Imports, forward references
 and explicit `call_indirect` table targets retain independent namespaces.
 
-Implementation bounds are 512 functions, 512 exports, 128 parameters and 1,088
-combined parameter/local slots per function, 131,072 normalized instructions,
-512 call frames, 4,096 operands/controls, 256 syntax frames, 32,768 auxiliary
-immediate slots (branch vectors and table targets), 512 globals, 128 data/element
-segments, 64 KiB decoded data/names, 2,048 memory pages per memory (128 MiB),
+Instance resource budgets are configurable through the second factory argument,
+for both `createInterpreter` and `createBootstrapInterpreter`:
+
+```js
+const engine = await createInterpreter(undefined, {
+  limits: {
+    functions: 8192,
+    exports: 1024,
+    globals: 1024,
+    callFrames: 1024,
+    memoryPages: 4096
+  }
+});
+```
+
+| Budget | Default | Accepted range |
+| --- | ---: | ---: |
+| `functions` | 65,536 | 0–65,536 |
+| `exports` | 512 | 0–65,536 |
+| `globals` | 512 | 0–65,536 |
+| `callFrames` | 512 | 1–4,096 |
+| `memoryPages` | 2,048 (128 MiB) | 0–65,536 |
+
+These quotas persist across reloads. Function tables start at 512 slots and grow
+geometrically as needed, including their local/name/type metadata, declaration
+bitmap, name index and binary decoding map. Unused function quota is not
+preallocated. Larger export/global/frame budgets reserve additional arenas when
+a module loads. Memory pages are allocated and grown on demand. Invalid options
+are rejected before runtime construction. Physical allocation failure and backing
+address overflow remain explicit resource failures; a quota does not guarantee
+that other implementation limits or available memory will permit the allocation.
+
+Other implementation bounds remain 128 parameters and 1,088 combined
+parameter/local slots per function, 131,072 normalized instructions, 4,096
+operands/controls, 256 syntax frames, 32,768 auxiliary immediate slots (branch
+vectors and table targets), 128 data/element segments, 64 KiB decoded data/names,
 512 memory descriptors, 32 tables with 4,096 entries each, 4,096 element references
 and 768 explicit types,
 128 results per function/control, 4,096 result-shape records,

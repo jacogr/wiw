@@ -806,7 +806,7 @@
 							(if
 								(i32.eqz
 									(i32.and
-										(i32.load8_u (i32.add (i32.const 3920) (i32.shr_u (local.get $target) (i32.const 3))))
+										(i32.load8_u (i32.add (global.get $function-declarations) (i32.shr_u (local.get $target) (i32.const 3))))
 										(i32.shl (i32.const 1) (i32.and (local.get $target) (i32.const 7)))
 									)
 								)

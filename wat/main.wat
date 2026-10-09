@@ -34,6 +34,7 @@ m4_include(<!m4/encodings.m4!>)m4_dnl
 	m4_include(<!control-parse.wat!>)
 	m4_include(<!fusion.wat!>)
 	m4_include(<!validate.wat!>)
+	m4_include(<!capacities.wat!>)
 	m4_include(<!instructions.wat!>)
 	m4_include(<!parser.wat!>)
 	m4_include(<!runtime.wat!>)

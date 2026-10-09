@@ -258,9 +258,9 @@ for (const binary of ['wiw-opt.wasm']) {
     for (const source of ['(module (import "env" "m" (memory 1)))', '(module (import "env" "g" (global i32)))']) assert.throws(() => i.load(source), /missing resource import/);
     const complete = '(module (import "env" "f" (func $f (param $x i32) (result i32))) (export "f" (func $f)))';
     for (let at = 0; at < complete.length; at++) assert.throws(() => i.load(complete.slice(0, at)), /syntax|unsupported/);
-    const maximum = `(module ${Array.from({ length: 512 }, (_, n) => `(import "env" "f" (func $f${n}))`).join('')})`;
+    const maximum = `(module ${Array.from({ length: 1024 }, (_, n) => `(import "env" "f" (func $f${n}))`).join('')})`;
     i.load(maximum, { env: { f: () => {} } });
-    assert.throws(() => i.load(maximum.slice(0, -1) + '(func))'), /resource limit/);
+    assert.throws(() => i.load(maximum.slice(0, -1) + '(import "env" "f" (func)))'), /resource limit/);
   });
 
   test(`${binary}: low-level import suspension and resume preserve ABI state and call-site diagnostics`, async () => {

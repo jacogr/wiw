@@ -8,8 +8,8 @@
 		(local $available i64)
 		(local $pages i32)
 
-		;; The 512-function declaration bitmap occupies reserved static bytes below guest source.
-		(call $zero-bytes (i32.const 3920) (i32.const 64))
+		;; The initial function declaration bitmap occupies reserved static bytes below guest source.
+		(call $zero-bytes (i32.const M4_FUNCTION_DECLARATIONS_BASE) (i32.const M4_FUNCTION_DECLARATIONS_BYTES))
 		;; Rebuild indexes lazily from this source rather than retaining previous module names.
 		(global.set $function-names-indexed (i32.const 0))
 		(global.set $types-indexed (i32.const 0))
@@ -178,6 +178,14 @@
 		(global.set $type-name-index (i32.add (global.get $code-base) (i32.const M4_TYPE_NAME_INDEX_OFFSET)))
 		(global.set $local-name-index (i32.add (global.get $code-base) (i32.const M4_LOCAL_NAME_INDEX_OFFSET)))
 		(global.set $host-base (i32.wrap_i64 (local.get $required)))
+		(global.set $owned-end (global.get $host-base))
+		(global.set $function-capacity (i32.const M4_CAP_FUNCTIONS))
+		(global.set $function-declarations (i32.const M4_FUNCTION_DECLARATIONS_BASE))
+		(global.set $function-name-mask (i32.const M4_FUNCTION_NAME_INDEX_MASK))
+		(global.set $resources-allocated (i32.const 0))
+		;; Optional larger export/global/frame arenas are reserved once, before parsing can retain pointers.
+		(if (i32.eqz (call $prepare-capacities)) (then (return (i32.const 0))))
+		(global.set $function-arena (global.get $owned-end))
 		;; Reset optional descriptor fields when reload reuses an existing arena layout.
 		(call $zero-bytes (global.get $segment-base) (i32.const 6144))
 		;; Signature allocators initialize each live record; the unused capacity needs no clearing.

@@ -339,3 +339,16 @@
 
 	;; A replayed global initializer replaces its old value rather than keeping both graphs alive.
 	(global $gc-replacing-global (mut i32) (i32.const -1))
+
+	;; Instance quotas survive reload; active table capacity grows only when a new function needs a slot.
+	(global $function-limit (mut i32) (i32.const M4_LIMIT_FUNCTIONS))
+	(global $export-limit (mut i32) (i32.const M4_LIMIT_EXPORTS))
+	(global $global-limit (mut i32) (i32.const M4_LIMIT_GLOBALS))
+	(global $call-limit (mut i32) (i32.const M4_CAP_CALLS))
+	(global $function-capacity (mut i32) (i32.const M4_CAP_FUNCTIONS))
+	(global $function-declarations (mut i32) (i32.const M4_FUNCTION_DECLARATIONS_BASE))
+	(global $function-name-mask (mut i32) (i32.const M4_FUNCTION_NAME_INDEX_MASK))
+	(global $function-arena (mut i32) (i32.const 0))
+	(global $owned-end (mut i32) (i32.const 0))
+	(global $linear-base (mut i32) (i32.const 0))
+	(global $resources-allocated (mut i32) (i32.const 0))

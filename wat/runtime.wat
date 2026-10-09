@@ -937,7 +937,7 @@
 						(br_if $guard-miss (i32.eqz (local.get $count)))
 						;; Partial fuel and exhausted frame/control capacity retain original instruction boundaries.
 						(br_if $guard-miss (i64.lt_u (local.get $fuel) (i64.const M4_GUARD_RETURN_FUEL)))
-						(br_if $guard-miss (i32.ge_u (local.get $calls) (i32.const M4_CAP_CALLS)))
+						(br_if $guard-miss (i32.ge_u (local.get $calls) (global.get $call-limit)))
 						(br_if $guard-miss (i32.gt_u (global.get $control-count) (i32.const m4_eval(M4_CAP_CONTROLS - 2))))
 						(local.set $inputs (i32.load offset=M4_FUNCTION_PARAMETERS_OFFSET (local.get $meta)))
 						;; Read the supplied i32 before removing the complete mixed-width argument span.
@@ -1021,7 +1021,7 @@
 						;; Ordinary calls allocate the next bounded frame and high-half region.
 						(else
 							;; Reject recursion before writing outside the call-frame arena.
-							(if (i32.ge_u (local.get $calls) (i32.const M4_CAP_CALLS))
+							(if (i32.ge_u (local.get $calls) (global.get $call-limit))
 								(then
 									(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 									(return (i64.const 0))
