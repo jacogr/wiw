@@ -867,7 +867,7 @@
 
 		;; Eight slots cannot overlap following branch vectors or other instruction immediates.
 		(if
-			(i32.gt_u (global.get $table-count) (i32.sub (i32.const M4_CAP_TABLE) (i32.const 8)))
+			(i32.gt_u (global.get $table-count) (i32.sub (global.get $auxiliary-limit) (i32.const 8)))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))

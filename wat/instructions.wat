@@ -122,8 +122,6 @@
 			(i32.add (global.get $code-base) (i32.const M4_REFERENCE_TYPE_OFFSET))
 		)
 		(global.set $memory-arena (i32.add (global.get $code-base) (i32.const M4_MEMORY_OFFSET)))
-		;; Empty modules still select descriptor zero; other descriptors are initialized as declarations arrive.
-		(call $zero-bytes (global.get $memory-arena) (i32.const M4_MEMORY_DESCRIPTOR_BYTES))
 		(global.set $frame-base (i32.add (global.get $code-base) (i32.const M4_FRAME_OFFSET)))
 		(global.set $stack-base (i32.add (global.get $code-base) (i32.const M4_STACK_OFFSET)))
 		(global.set $function-base (i32.add (global.get $code-base) (i32.const M4_FUNCTION_OFFSET)))
@@ -182,12 +180,18 @@
 		(global.set $function-capacity (i32.const M4_CAP_FUNCTIONS))
 		(global.set $function-declarations (i32.const M4_FUNCTION_DECLARATIONS_BASE))
 		(global.set $function-name-mask (i32.const M4_FUNCTION_NAME_INDEX_MASK))
+		(global.set $type-name-mask (i32.const M4_TYPE_NAME_INDEX_MASK))
+		(global.set $local-name-mask (i32.const M4_LOCAL_NAME_INDEX_MASK))
+		(global.set $big-limb-limit (i32.const M4_BIG_LIMB_CAPACITY))
 		(global.set $resources-allocated (i32.const 0))
-		;; Optional larger export/global/frame arenas are reserved once, before parsing can retain pointers.
+		;; Optional larger arenas are reserved once, before parsing can retain pointers.
 		(if (i32.eqz (call $prepare-capacities)) (then (return (i32.const 0))))
 		(global.set $function-arena (global.get $owned-end))
+		;; Empty modules still select descriptor zero; declarations initialize other records.
+		(call $zero-bytes (global.get $memory-arena) (i32.const M4_MEMORY_DESCRIPTOR_BYTES))
+		(call $zero-bytes (global.get $guest-table-arena) (i32.const M4_TABLE_HEADER_BYTES))
 		;; Reset optional descriptor fields when reload reuses an existing arena layout.
-		(call $zero-bytes (global.get $segment-base) (i32.const 6144))
+		(call $zero-bytes (global.get $segment-base) (i32.mul (global.get $segment-limit) (i32.const 48)))
 		;; Signature allocators initialize each live record; the unused capacity needs no clearing.
 		(i32.const 1)
 	)
@@ -210,7 +214,7 @@
 			)
 		)
 		;; Stop before the instruction region can overwrite folding frames.
-		(if (i32.ge_u (global.get $code-count) (i32.const M4_CAP_INSTRUCTIONS))
+		(if (i32.ge_u (global.get $code-count) (global.get $instruction-limit))
 			(then
 				(global.set $tok (local.get $offset))
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))

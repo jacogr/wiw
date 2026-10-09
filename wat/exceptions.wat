@@ -237,7 +237,7 @@
 
 		(local.set $index (global.get $tag-count))
 		;; Bound tag descriptors independently from the function namespace.
-		(if (i32.ge_u (local.get $index) (i32.const 256))
+		(if (i32.ge_u (local.get $index) (global.get $tag-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
@@ -368,14 +368,14 @@
 						(if (i32.eq (local.get $j) (global.get $signature-count))
 							(then
 								;; Bound the type namespace before copying the parameter vector.
-								(if (i32.ge_u (local.get $j) (i32.const M4_CAP_TYPES))
+								(if (i32.ge_u (local.get $j) (global.get $type-limit))
 									(then
 										(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 										(return)
 									)
 								)
 								(call $initialize-heap-type (local.get $j))
-								(memory.copy (call $signature (local.get $j)) (local.get $signature) (i32.const M4_SIGNATURE_BYTES))
+								(memory.copy (call $signature (local.get $j)) (local.get $signature) (global.get $signature-bytes))
 								(global.set $signature-count (i32.add (local.get $j) (i32.const 1)))
 							)
 						)
@@ -665,6 +665,17 @@
 		)
 	)
 
+	;; Allocate payloads plus a variable reference bitmap, retaining the original small-object layout.
+	(func $exception-slot-count
+		(param $count i32)
+		(result i32)
+		(local $masks i32)
+
+		(local.set $masks (i32.shr_u (i32.add (local.get $count) (i32.const 127)) (i32.const 7)))
+		(i32.add (i32.add (local.get $count) (i32.const 1))
+			(select (local.get $masks) (i32.const 2) (i32.gt_u (local.get $masks) (i32.const 2))))
+	)
+
 	;; Capture a fresh thrown tag payload in reverse operand order without losing vector high halves.
 	(func $create-exception
 		(param $tag i32)
@@ -680,7 +691,7 @@
 		)
 		(local.set $count (i32.load offset=8 (local.get $signature)))
 		(local.set $object
-			(call $gc-allocate (i32.const -1) (i32.add (local.get $count) (i32.const 3)) (i32.const 1))
+			(call $gc-allocate (i32.const -1) (call $exception-slot-count (local.get $count)) (i32.const 1))
 		)
 		;; A failed allocation must not corrupt interpreter state through address zero.
 		(if (global.get $error) (then (return (i64.const 0))))
@@ -768,13 +779,13 @@
 											;; A caller's root control index precedes every region in that caller.
 											(loop $calls
 												(br_if $owner-found
-													(i32.le_u (i32.load offset=M4_CALL_ROOT_OFFSET (local.get $frame)) (local.get $i))
+													(i32.le_u (i32.load (i32.add (local.get $frame) (global.get $call-root-offset))) (local.get $i))
 												)
 												(local.set $calls (i32.sub (local.get $calls) (i32.const 1)))
 												(local.set $frame
 													(i32.add
 														(global.get $call-base)
-														(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const M4_CALL_BYTES))
+														(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (global.get $call-bytes))
 													)
 												)
 												(br $calls)
@@ -852,20 +863,33 @@
 		(call $exception-object (local.get $value))
 	)
 
-	;; Import an exception payload received through a forwarded function call.
+	;; Preserve the original two-word bitmap ABI for existing low-level hosts.
 	(func (export "import_exception")
-		(param $identity i32)
-		(param $count i32)
-		(param $args i32)
-		(param $refs-low i64)
-		(param $refs-high i64)
-		(result i64)
+		(param $identity i32) (param $count i32) (param $args i32)
+		(param $refs-low i64) (param $refs-high i64) (result i64)
+
+		(call $import-exception (local.get $identity) (local.get $count) (local.get $args)
+			(i32.const 0) (local.get $refs-low) (local.get $refs-high))
+	)
+
+	;; Import the complete variable-width bitmap for larger public exception payloads.
+	(func (export "import_exception_bits")
+		(param $identity i32) (param $count i32) (param $args i32) (param $refs i32) (result i64)
+
+		(call $import-exception (local.get $identity) (local.get $count) (local.get $args)
+			(local.get $refs) (i64.const 0) (i64.const 0))
+	)
+
+	;; Copy host payload bits and exact reference positions before resuming guest dispatch.
+	(func $import-exception
+		(param $identity i32) (param $count i32) (param $args i32) (param $refs i32)
+		(param $refs-low i64) (param $refs-high i64) (result i64)
 		(local $object i32)
 		(local $i i32)
 		(local $tag i32)
 
 		(local.set $object
-			(call $gc-allocate (i32.const -1) (i32.add (local.get $count) (i32.const 3)) (i32.const 1))
+			(call $gc-allocate (i32.const -1) (call $exception-slot-count (local.get $count)) (i32.const 1))
 		)
 		(local.set $tag (i32.const -1))
 		;; Find a local alias of the received tag identity for subsequent host payload diagnostics.
@@ -893,8 +917,18 @@
 			(call $gc-slot (local.get $object) (i32.const 0))
 			(i64.extend_i32_u (local.get $identity))
 		)
-		(i64.store (call $gc-slot (local.get $object) (i32.add (local.get $count) (i32.const 1))) (local.get $refs-low))
-		(i64.store offset=8 (call $gc-slot (local.get $object) (i32.add (local.get $count) (i32.const 1))) (local.get $refs-high))
+		;; The public adapter supplies every bitmap word; legacy callers supply exactly two.
+		(if (local.get $refs)
+			(then
+				(memory.copy (call $gc-slot (local.get $object) (i32.add (local.get $count) (i32.const 1)))
+					(local.get $refs) (i32.shl (i32.shr_u (i32.add (local.get $count) (i32.const 63)) (i32.const 6)) (i32.const 3)))
+			)
+			;; Original payloads retain their two reference words and all upper slots stay zero.
+			(else
+				(i64.store (call $gc-slot (local.get $object) (i32.add (local.get $count) (i32.const 1))) (local.get $refs-low))
+				(i64.store offset=8 (call $gc-slot (local.get $object) (i32.add (local.get $count) (i32.const 1))) (local.get $refs-high))
+			)
+		)
 		(local.set $i (i32.const 0))
 		;; Copy canonical raw argument slots out of transient host scratch before dispatch resumes.
 		(block $done

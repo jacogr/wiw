@@ -21,7 +21,7 @@
 			)
 		)
 		;; Keep every import category within the shared descriptor arena.
-		(if (i32.ge_u (global.get $import-count) (i32.const M4_CAP_IMPORTS))
+		(if (i32.ge_u (global.get $import-count) (global.get $import-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
@@ -123,7 +123,7 @@
 					)
 				)
 				;; Keep every import category within the shared descriptor arena.
-				(if (i32.ge_u (global.get $import-count) (i32.const M4_CAP_IMPORTS))
+				(if (i32.ge_u (global.get $import-count) (global.get $import-limit))
 					(then
 						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 						(return)
@@ -368,7 +368,7 @@
 			(then
 				;; Check capacity before publishing the new cursor to dispatch.
 				(if
-					(i32.gt_u (i32.add (global.get $sp) (local.get $count)) (i32.const M4_CAP_OPERANDS))
+					(i32.gt_u (i32.add (global.get $sp) (local.get $count)) (global.get $operand-limit))
 					(then
 						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 					)

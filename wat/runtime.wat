@@ -54,13 +54,13 @@
 			)
 		)
 		;; Reserve one implicit root label after initializing all parameter/local slots.
-		(if (i32.ge_u (global.get $control-count) (i32.const M4_CAP_CONTROLS))
+		(if (i32.ge_u (global.get $control-count) (global.get $control-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
-		(i32.store offset=M4_CALL_ROOT_OFFSET (local.get $frame) (global.get $control-count))
+		(i32.store (i32.add (local.get $frame) (global.get $call-root-offset)) (global.get $control-count))
 		(local.set $control (call $control (global.get $control-count)))
 		(i32.store (local.get $control) (i32.const 0))
 		(i32.store offset=M4_CONTROL_START_OFFSET (local.get $control) (i32.load offset=M4_FUNCTION_START_OFFSET (local.get $f)))
@@ -143,7 +143,7 @@
 		(param $value i64)
 
 		;; Saved caller operands count toward the same global capacity as callee operands.
-		(if (i32.ge_u (global.get $sp) (i32.const M4_CAP_OPERANDS))
+		(if (i32.ge_u (global.get $sp) (global.get $operand-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
@@ -230,7 +230,7 @@
 		(local.set $frame-high
 			(i32.add
 				(global.get $call-high-base)
-				(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const M4_LOCAL_NAME_BYTES))
+				(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (global.get $local-bytes))
 			)
 		)
 		;; The immutable instruction arena keeps its origin across calls and memory growth.
@@ -270,14 +270,14 @@
 					(local.set $frame
 						(i32.add
 							(global.get $call-base)
-							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const M4_CALL_BYTES))
+							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (global.get $call-bytes))
 						)
 					)
 					;; Imported exception unwinding selects the handler frame high-half region.
 					(local.set $frame-high
 						(i32.add
 							(global.get $call-high-base)
-							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const M4_LOCAL_NAME_BYTES))
+							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (global.get $local-bytes))
 						)
 					)
 					;; Refresh the cached cursor/end when execution selects this frame.
@@ -305,7 +305,7 @@
 			(if (i32.eq (local.get $next) (local.get $finish))
 				(then
 					;; Function completion removes its implicit root and any remaining callee labels.
-					(global.set $control-count (i32.load offset=M4_CALL_ROOT_OFFSET (local.get $frame)))
+					(global.set $control-count (i32.load (i32.add (local.get $frame) (global.get $call-root-offset))))
 					;; Returning from the root finishes the invocation, with zero as a void placeholder.
 					(if (i32.eq (local.get $calls) (i32.const 1))
 						(then
@@ -337,14 +337,14 @@
 					(local.set $frame
 						(i32.add
 							(global.get $call-base)
-							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const M4_CALL_BYTES))
+							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (global.get $call-bytes))
 						)
 					)
 					;; Returning to the caller restores its corresponding high-half region.
 					(local.set $frame-high
 						(i32.add
 							(global.get $call-high-base)
-							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const M4_LOCAL_NAME_BYTES))
+							(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (global.get $local-bytes))
 						)
 					)
 					;; Refresh the cached cursor/end when execution selects this frame.
@@ -409,7 +409,7 @@
 									(then
 										;; Keep local.get's temporary operand boundary and each instruction's partial-fuel failure.
 										(br_if $fusion-miss (i32.or (i64.eqz (local.get $fuel))
-											(i32.ge_u (global.get $sp) (i32.const M4_CAP_OPERANDS))))
+											(i32.ge_u (global.get $sp) (global.get $operand-limit))))
 										(local.set $a (i64.load offset=M4_CALL_LOCALS_OFFSET
 											(i32.add (local.get $frame) (i32.shl (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $record)) (i32.const M4_SLOT_SHIFT)))))
 										(global.set $tok (i32.load offset=M4_INSTRUCTION_SOURCE_OFFSET (local.get $next)))
@@ -436,7 +436,7 @@
 									(then
 										;; Partial fuel or a full operand stack uses the original instruction paths.
 										(br_if $fusion-miss (i32.or (i64.eqz (local.get $fuel))
-											(i32.ge_u (global.get $sp) (i32.const M4_CAP_OPERANDS))))
+											(i32.ge_u (global.get $sp) (global.get $operand-limit))))
 										;; Drop has no observable value access; writes first read both halves before any alias can change.
 										(if (i32.ne (local.get $selector) (i32.const M4_OP_DROP))
 											(then
@@ -466,7 +466,7 @@
 								;; Partial fuel and near-capacity execution preserve every original intermediate boundary.
 								(br_if $fusion-miss
 									(i32.or (i64.lt_u (local.get $fuel) (i64.const 2))
-										(i32.gt_u (global.get $sp) (i32.const M4_FUSION_STACK_MAX))))
+										(i32.gt_u (global.get $sp) (i32.sub (global.get $operand-limit) (i32.const 2)))))
 								(local.set $a (i64.load offset=M4_CALL_LOCALS_OFFSET
 									(i32.add (local.get $frame) (i32.mul (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $record)) (i32.const M4_SLOT_BYTES)))))
 								;; A second local read supplies the same raw low half as ordinary local.get.
@@ -587,7 +587,7 @@
 										(br_if $constant-miss (i32.ne (i32.load (local.get $next)) (i32.const M4_OP_LOCAL_SET)))
 										;; Partial fuel and a full stack retain the original constant instruction boundary.
 										(br_if $constant-miss (i32.or (i64.eqz (local.get $fuel))
-											(i32.ge_u (global.get $sp) (i32.const M4_CAP_OPERANDS))))
+											(i32.ge_u (global.get $sp) (global.get $operand-limit))))
 										(local.set $meta (i32.mul (i32.load offset=M4_INSTRUCTION_IMMEDIATE_OFFSET (local.get $next)) (i32.const M4_SLOT_BYTES)))
 										(i64.store offset=M4_CALL_LOCALS_OFFSET (i32.add (local.get $frame) (local.get $meta)) (local.get $value))
 										(i64.store (i32.add (local.get $frame-high) (local.get $meta)) (i64.const 0))
@@ -601,7 +601,7 @@
 						)
 					)
 					;; Check capacity before publishing either raw half in this operand slot.
-					(if (i32.ge_u (global.get $sp) (i32.const M4_CAP_OPERANDS))
+					(if (i32.ge_u (global.get $sp) (global.get $operand-limit))
 						(then
 							(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 							(return (i64.const 0))
@@ -708,7 +708,7 @@
 					)
 					(local.set $meta (call $metadata (local.get $pc)))
 					;; Reserve a bounded scope before writing its record or executing its body.
-					(if (i32.ge_u (global.get $control-count) (i32.const M4_CAP_CONTROLS))
+					(if (i32.ge_u (global.get $control-count) (global.get $control-limit))
 						(then
 							(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 							(return (i64.const 0))
@@ -782,7 +782,7 @@
 						)
 					)
 					;; Check capacity before publishing either raw half in this operand slot.
-					(if (i32.ge_u (global.get $sp) (i32.const M4_CAP_OPERANDS))
+					(if (i32.ge_u (global.get $sp) (global.get $operand-limit))
 						(then
 							(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 							(return (i64.const 0))
@@ -915,7 +915,7 @@
 										(i32.load offset=M4_CALL_STACK_BASE_OFFSET (local.get $frame))
 										(i32.load offset=M4_FUNCTION_PARAMETERS_OFFSET (local.get $meta))
 									)
-									(global.set $control-count (i32.load offset=M4_CALL_ROOT_OFFSET (local.get $frame)))
+									(global.set $control-count (i32.load (i32.add (local.get $frame) (global.get $call-root-offset))))
 									(i32.store (local.get $frame) (i32.load offset=M4_CALL_END_OFFSET (local.get $frame)))
 								)
 							)
@@ -938,7 +938,7 @@
 						;; Partial fuel and exhausted frame/control capacity retain original instruction boundaries.
 						(br_if $guard-miss (i64.lt_u (local.get $fuel) (i64.const M4_GUARD_RETURN_FUEL)))
 						(br_if $guard-miss (i32.ge_u (local.get $calls) (global.get $call-limit)))
-						(br_if $guard-miss (i32.gt_u (global.get $control-count) (i32.const m4_eval(M4_CAP_CONTROLS - 2))))
+						(br_if $guard-miss (i32.gt_u (global.get $control-count) (i32.sub (global.get $control-limit) (i32.const 2))))
 						(local.set $inputs (i32.load offset=M4_FUNCTION_PARAMETERS_OFFSET (local.get $meta)))
 						;; Read the supplied i32 before removing the complete mixed-width argument span.
 						(br_if $guard-miss (i32.eqz (i32.wrap_i64 (i64.load (i32.add (global.get $stack-base)
@@ -984,7 +984,7 @@
 									(global.set $sp (i32.load offset=M4_CALL_STACK_BASE_OFFSET (local.get $frame)))
 									;; Discard nested controls while retaining the allocated implicit root.
 									(global.set $control-count
-										(i32.add (i32.load offset=M4_CALL_ROOT_OFFSET (local.get $frame)) (i32.const 1))
+										(i32.add (i32.load (i32.add (local.get $frame) (global.get $call-root-offset))) (i32.const 1))
 									)
 									;; Self calls retain all headers; mutual calls refresh only callee-dependent fields.
 									(if (i32.ne (local.get $callee) (i32.load offset=M4_CALL_FUNCTION_OFFSET (local.get $frame)))
@@ -994,7 +994,7 @@
 											(i32.store offset=M4_CALL_FUNCTION_OFFSET (local.get $frame) (local.get $callee))
 											(local.set $entry-control
 												(i32.add (global.get $control-base)
-													(i32.mul (i32.load offset=M4_CALL_ROOT_OFFSET (local.get $frame)) (i32.const M4_CONTROL_BYTES))
+													(i32.mul (i32.load (i32.add (local.get $frame) (global.get $call-root-offset))) (i32.const M4_CONTROL_BYTES))
 												)
 											)
 											(i32.store offset=M4_CONTROL_START_OFFSET (local.get $entry-control) (i32.load offset=M4_FUNCTION_START_OFFSET (local.get $meta)))
@@ -1016,7 +1016,7 @@
 								)
 							)
 							(global.set $sp (i32.load offset=M4_CALL_STACK_BASE_OFFSET (local.get $frame)))
-							(global.set $control-count (i32.load offset=M4_CALL_ROOT_OFFSET (local.get $frame)))
+							(global.set $control-count (i32.load (i32.add (local.get $frame) (global.get $call-root-offset))))
 						)
 						;; Ordinary calls allocate the next bounded frame and high-half region.
 						(else
@@ -1028,10 +1028,10 @@
 								)
 							)
 							(local.set $frame
-								(i32.add (global.get $call-base) (i32.mul (local.get $calls) (i32.const M4_CALL_BYTES)))
+								(i32.add (global.get $call-base) (i32.mul (local.get $calls) (global.get $call-bytes)))
 							)
 							(local.set $frame-high
-								(i32.add (global.get $call-high-base) (i32.mul (local.get $calls) (i32.const M4_LOCAL_NAME_BYTES)))
+								(i32.add (global.get $call-high-base) (i32.mul (local.get $calls) (global.get $local-bytes)))
 							)
 							(local.set $calls (i32.add (local.get $calls) (i32.const 1)))
 						)
@@ -1052,13 +1052,13 @@
 								(i64.load (i32.add (global.get $stack-high-base) (i32.sub (local.get $target) (global.get $stack-base))))
 							)
 							;; The root-label bound is identical to general entry and precedes control-record writes.
-							(if (i32.ge_u (global.get $control-count) (i32.const M4_CAP_CONTROLS))
+							(if (i32.ge_u (global.get $control-count) (global.get $control-limit))
 								(then
 									(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 									(return (i64.const 0))
 								)
 							)
-							(i32.store offset=M4_CALL_ROOT_OFFSET (local.get $frame) (global.get $control-count))
+							(i32.store (i32.add (local.get $frame) (global.get $call-root-offset)) (global.get $control-count))
 							(local.set $entry-control
 								(i32.add (global.get $control-base) (i32.mul (global.get $control-count) (i32.const M4_CONTROL_BYTES)))
 							)
@@ -1123,7 +1123,7 @@
 					(if (i32.eq (local.get $route) (i32.const M4_ROUTE_RETURN))
 						(then
 							(call $runtime-jump
-								(i32.load offset=M4_CALL_ROOT_OFFSET (local.get $frame))
+								(i32.load (i32.add (local.get $frame) (global.get $call-root-offset)))
 								(local.get $frame)
 							)
 							;; Continue from the helper-resolved label target.
@@ -1177,14 +1177,14 @@
 							(local.set $frame
 								(i32.add
 									(global.get $call-base)
-									(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const M4_CALL_BYTES))
+									(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (global.get $call-bytes))
 								)
 							)
 							;; Guest exception unwinding selects the handler frame high-half region.
 							(local.set $frame-high
 								(i32.add
 									(global.get $call-high-base)
-									(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (i32.const M4_LOCAL_NAME_BYTES))
+									(i32.mul (i32.sub (local.get $calls) (i32.const 1)) (global.get $local-bytes))
 								)
 							)
 							;; Refresh the cached cursor/end when execution selects this frame.

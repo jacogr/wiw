@@ -131,7 +131,7 @@
 		(i32.add
 			(global.get $local-name-base)
 			(i32.add
-				(i32.mul (global.get $current-function) (i32.const M4_LOCAL_NAME_BYTES))
+				(i32.mul (global.get $current-function) (global.get $local-bytes))
 				(i32.mul (local.get $index) (i32.const 8))
 			)
 		)
@@ -208,7 +208,7 @@
 					(then
 						;; Clear backing once per load; generation tags avoid clearing for every function.
 						(if (i32.eqz (global.get $local-name-generation))
-							(then (call $zero-bytes (global.get $local-name-index) (i32.const M4_LOCAL_NAME_INDEX_BYTES)))
+							(then (call $zero-bytes (global.get $local-name-index) (i32.shl (i32.add (global.get $local-name-mask) (i32.const 1)) (i32.const 4))))
 						)
 						(global.set $local-name-generation (i32.add (global.get $local-name-generation) (i32.const 1)))
 						(global.set $local-name-function (global.get $current-function))
@@ -217,7 +217,7 @@
 				)
 				(local.set $i (call $indexed-name (call $local-name (i32.const 0)) (i32.const 8)
 					(local.get $count) (global.get $locals-indexed)
-					(global.get $local-name-index) (i32.const M4_LOCAL_NAME_INDEX_MASK)
+					(global.get $local-name-index) (global.get $local-name-mask)
 					(global.get $local-name-generation) (local.get $p) (local.get $n)))
 				(global.set $locals-indexed (local.get $count))
 				(return (local.get $i))
@@ -342,7 +342,7 @@
 		(if
 			(i32.ge_u
 				(local.get $count)
-				(select (i32.const 128) (i32.const M4_CAP_LOCALS) (local.get $parameter))
+				(select (global.get $parameter-limit) (global.get $local-limit) (local.get $parameter))
 			)
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))

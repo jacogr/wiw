@@ -123,7 +123,7 @@
 			)
 		)
 		;; Bound the shared field arena before creating a descriptor.
-		(if (i32.ge_u (global.get $field-type-count) (i32.const 32768))
+		(if (i32.ge_u (global.get $field-type-count) (global.get $field-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)

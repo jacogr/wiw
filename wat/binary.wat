@@ -14,6 +14,16 @@
 	(global $bin-constant-base (mut i32) (i32.const 0))
 	(global $bin-function-map (mut i32) (i32.const 0))
 	(data (i32.const M4_BINARY_HEX_DIGITS_BASE) "0123456789abcdef")
+	;; Size the expansion buffer and disjoint decoder maps without narrowing the sum.
+	(func $binary-scratch-size
+		(result i64)
+
+		(i64.add (i64.extend_i32_u (global.get $binary-text-limit))
+			(i64.add (i64.const 4096)
+				(i64.add (i64.shl (i64.extend_i32_u (global.get $type-limit)) (i64.const 2))
+					(i64.shl (i64.extend_i32_u (global.get $syntax-limit)) (i64.const 2)))))
+	)
+
 	;; Read one byte without crossing the current section or function-body boundary.
 	(func $binary-read
 		(result i32)
@@ -182,7 +192,7 @@
 			)
 		)
 		;; Text expansion has a separate capacity from guest code and data arenas.
-		(if (i32.ge_u (global.get $bin-used) (i32.const M4_BINARY_TEXT_BYTES))
+		(if (i32.ge_u (global.get $bin-used) (global.get $binary-text-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
@@ -205,7 +215,7 @@
 			)
 		)
 		;; A complete fragment must fit before any byte in it is written.
-		(if (i32.gt_u (global.get $bin-used) (i32.sub (i32.const M4_BINARY_TEXT_BYTES) (local.get $width)))
+		(if (i32.gt_u (global.get $bin-used) (i32.sub (global.get $binary-text-limit) (local.get $width)))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
@@ -249,8 +259,8 @@
 		;; Include the trailing space in the output bound and reject oversized spans without overflow.
 		(if
 			(i32.or
-				(i32.gt_u (local.get $n) (i32.const m4_eval(M4_BINARY_TEXT_BYTES - 1)))
-				(i32.gt_u (global.get $bin-used) (i32.sub (i32.const m4_eval(M4_BINARY_TEXT_BYTES - 1)) (local.get $n)))
+				(i32.gt_u (local.get $n) (i32.sub (global.get $binary-text-limit) (i32.const 1)))
+				(i32.gt_u (global.get $bin-used) (i32.sub (i32.sub (global.get $binary-text-limit) (i32.const 1)) (local.get $n)))
 			)
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
@@ -602,12 +612,12 @@
 		(block $done
 			(br_if $done (global.get $error))
 			;; A fully reserved payload and closing quote need no per-byte cursor or capacity checks.
-			(if (i32.le_u (global.get $bin-used) (i32.const m4_eval(M4_BINARY_TEXT_BYTES - M4_BINARY_STRING_SUFFIX_BYTES)))
+			(if (i32.le_u (global.get $bin-used) (i32.sub (global.get $binary-text-limit) (i32.const M4_BINARY_STRING_SUFFIX_BYTES)))
 				(then
 					(local.set $cursor (global.get $bin-pos))
 					;; Divide remaining output space before comparing, avoiding a wrapped three-byte size.
 					(if (i32.le_u (i32.sub (local.get $end) (local.get $cursor))
-						(i32.div_u (i32.sub (i32.const m4_eval(M4_BINARY_TEXT_BYTES - M4_BINARY_STRING_SUFFIX_BYTES)) (global.get $bin-used)) (i32.const M4_BINARY_ESCAPE_BYTES)))
+						(i32.div_u (i32.sub (i32.sub (global.get $binary-text-limit) (i32.const M4_BINARY_STRING_SUFFIX_BYTES)) (global.get $bin-used)) (i32.const M4_BINARY_ESCAPE_BYTES)))
 						(then
 							(local.set $output (i32.add (global.get $bin-out) (global.get $bin-used)))
 							(local.set $padding (i32.add (global.get $bin-used)
@@ -957,7 +967,7 @@
 				)
 				(call $binary-close)
 				;; The bounded temporary constant stack cannot overwrite decoder scratch metadata.
-				(if (i32.ge_u (local.get $depth) (i32.const 256))
+				(if (i32.ge_u (local.get $depth) (global.get $syntax-limit))
 					(then
 						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 						(br $done)
@@ -2545,7 +2555,7 @@
 		(if
 			(i32.and
 				(i32.eqz (global.get $error))
-				(i64.gt_u (local.get $total) (i64.const M4_CAP_LOCALS))
+				(i64.gt_u (local.get $total) (i64.extend_i32_u (global.get $local-limit)))
 			)
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
@@ -2582,7 +2592,7 @@
 					;; Nonempty groups copy their one encoded type for each additional local slot.
 					(else
 						;; Bounded valid local counts cannot exhaust the output writer through billions of repetitions.
-						(if (i64.gt_u (local.get $total) (i64.const M4_CAP_LOCALS))
+						(if (i64.gt_u (local.get $total) (i64.extend_i32_u (global.get $local-limit)))
 							(then
 								(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 								(br $locals-done)
@@ -2830,7 +2840,7 @@
 				;; Larger function vectors use a disjoint map without moving the type or constant scratch.
 				(if (i32.gt_u (local.get $count) (i32.const M4_CAP_FUNCTIONS))
 					(then
-						(global.set $bin-function-map (i32.add (global.get $bin-out) (i32.const M4_BINARY_SCRATCH_BYTES)))
+						(global.set $bin-function-map (i32.add (global.get $bin-out) (i32.wrap_i64 (call $binary-scratch-size))))
 						(if (i32.eqz (call $ensure-bytes (i64.add (i64.extend_i32_u (global.get $bin-function-map))
 							(i64.shl (i64.extend_i32_u (local.get $count)) (i64.const 2)))))
 							(then (call $fail (i32.const M4_ERR_RESOURCE_LIMIT)) (return))
@@ -3114,7 +3124,7 @@
 		(if
 			(i32.eqz
 				(call $ensure-bytes
-					(i64.add (i64.extend_i32_u (global.get $bin-out)) (i64.const M4_BINARY_SCRATCH_BYTES))
+					(i64.add (i64.extend_i32_u (global.get $bin-out)) (call $binary-scratch-size))
 				)
 			)
 			(then
@@ -3122,11 +3132,11 @@
 				(return (global.get $error))
 			)
 		)
-		(global.set $bin-function-map (i32.add (global.get $bin-out) (i32.const M4_BINARY_TEXT_BYTES)))
+		(global.set $bin-function-map (i32.add (global.get $bin-out) (global.get $binary-text-limit)))
 		(global.set $bin-type-map (i32.add (global.get $bin-function-map) (i32.const 2048)))
-		(global.set $bin-constant-base (i32.add (global.get $bin-type-map) (i32.const 3072)))
+		(global.set $bin-constant-base (i32.add (global.get $bin-type-map) (i32.shl (global.get $type-limit) (i32.const 2))))
 		(global.set $bin-type-count (i32.const 0))
-		(call $zero-bytes (global.get $bin-type-map) (i32.const 3072))
+		(call $zero-bytes (global.get $bin-type-map) (i32.shl (global.get $type-limit) (i32.const 2)))
 		(call $binary-expect (i32.const 0))
 		(call $binary-expect (i32.const 97))
 		(call $binary-expect (i32.const 115))
@@ -3826,7 +3836,7 @@
 		(local $sub i32)
 
 		;; Expanded recursive members have the same bounded type capacity as text declarations.
-		(if (i32.ge_u (global.get $bin-type-count) (i32.const M4_CAP_TYPES))
+		(if (i32.ge_u (global.get $bin-type-count) (global.get $type-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)

@@ -162,7 +162,7 @@ console.log(consumer.invoke('answer'));
 The exported `createTag(parameters = [])` helper creates an opaque host-owned tag
 without loading a provider guest. Parameters are an array of public type names:
 `i32`, `i64`, `f32`, `f64`, `v128`, `funcref`, `externref`, `anyref` or `exnref`,
-with at most 128 parameters. Reference names describe nullable abstract types;
+with at most 65,535 parameters. Reference names describe nullable abstract types;
 concrete heap types and non-null variants still require a guest-defined tag.
 The factory copies the signature, and each call creates a distinct identity.
 
@@ -221,7 +221,7 @@ callbacks retain their cause; rejected `WiwException` values enter guest handler
 
 `exportFunctionAsync(name)` and `exportNamespaceAsync()` provide typed async host
 callbacks. Async guest calls can also await ordinary typed forwarding bindings
-and indirect calls through shared tables. The 128-instance forwarding limit
+and indirect calls through shared tables. The default 128-instance forwarding limit
 follows each call chain across awaits; independent instances can run concurrently.
 An active instance stays protected against invoke, load and garbage collection
 until guest execution finishes. Callbacks can read, mutate and grow resources
@@ -294,38 +294,84 @@ const engine = await createInterpreter(undefined, {
 
 | Budget | Default | Accepted range |
 | --- | ---: | ---: |
-| `functions` | 65,536 | 0–65,536 |
-| `exports` | 512 | 0–65,536 |
-| `globals` | 512 | 0–65,536 |
-| `callFrames` | 512 | 1–4,096 |
-| `memoryPages` | 2,048 (128 MiB) | 0–65,536 |
+| `functions` | 65,536 | 0–131,072 |
+| `exports` | 512 | 0–16,777,216 |
+| `globals` | 512 | 0–16,777,216 |
+| `callFrames` | 512 | 1–65,535 |
+| `memoryPages` | 2,048 | 0–65,536 |
+| `externalReferences` | 65,535 | 0–16,777,215 |
+| `forwardingDepth` | 128 | 1–65,535 |
+| `instructions` | 131,072 | 131,072–16,777,216 |
+| `operands` | 4,096 | 4,096–65,535 |
+| `controls` | 4,096 | 4,096–65,535 |
+| `syntaxDepth` | 256 | 256–65,535 |
+| `auxiliarySlots` | 131,072 | 131,072–16,777,216 |
+| `imports` | 1,024 | 1,024–65,536 |
+| `types` | 768 | 768–65,536 |
+| `indirectTypes` | 1,024 | 1,024–65,536 |
+| `referenceTypes` | 4,096 | 4,096–131,072 |
+| `fields` | 32,768 | 32,768–16,777,216 |
+| `tags` | 256 | 256–65,536 |
+| `memories` | 512 | 512–65,536 |
+| `tables` | 32 | 32–65,536 |
+| `tableEntries` | 4,096 | 4,096–16,777,216 |
+| `dataSegments` | 128 | 128–65,536 |
+| `elementSegments` | 128 | 128–65,536 |
+| `elementEntries` | 4,096 | 4,096–16,777,216 |
+| `dataBytes` | 65,536 | 65,536–268,435,456 |
+| `resultShapes` | 4,096 | 4,096–16,777,216 |
+| `gcHeapBytes` | 16,777,216 | 16,777,216–268,435,456 |
+| `gcMapBytes` | 4,194,304 | 4,194,304–268,435,456 |
+| `gcTemporaries` | 1,024 | 1,024–65,535 |
+| `binaryTextBytes` | 1,048,576 | 1,048,576–268,435,456 |
+| `typeComparisonDepth` | 1,024 | 1,024–65,535 |
+| `parameters` | 128 | 128–65,535 |
+| `results` | 128 | 128–65,535 |
+| `locals` | 1,088 | 1,088–65,535 |
+| `floatLiteralBytes` | 8,192 | 8,192–1,048,576 |
 
-These quotas persist across reloads. Function tables start at 512 slots and grow
-geometrically as needed, including their local/name/type metadata, declaration
-bitmap, name index and binary decoding map. Unused function quota is not
-preallocated. Larger export/global/frame budgets reserve additional arenas when
-a module loads. Memory pages are allocated and grown on demand. Invalid options
-are rejected before runtime construction. Physical allocation failure and backing
-address overflow remain explicit resource failures; a quota does not guarantee
-that other implementation limits or available memory will permit the allocation.
+These quotas persist across reloads. The additional arena quotas can be increased
+from their defaults; the original compact layout remains the minimum. Counts are
+in records or slots unless the option name ends in `Bytes`; `memoryPages` counts
+64 KiB pages, `tableEntries` applies per table, and `locals` includes parameters.
+`parameters` must not exceed `locals`. The type quotas distinguish declared and
+interned heap types (`types`), deferred inline signatures (`indirectTypes`), and
+concrete reference type uses (`referenceTypes`).
 
-Other implementation bounds remain 128 parameters and 1,088 combined
-parameter/local slots per function, 131,072 normalized instructions, 4,096
-operands/controls, 256 syntax frames, 32,768 auxiliary immediate slots (branch
-vectors and table targets), 128 data/element segments, 64 KiB decoded data/names,
-512 memory descriptors, 32 tables with 4,096 entries each, 4,096 element references
-and 768 explicit types,
-128 results per function/control, 4,096 result-shape records,
-768 total declared/interned types, 1,024 indirect/control signatures, 1,024 import
-descriptors, 8,192 bytes per float literal and 1 MiB binary text expansion.
-GC objects and exception payloads share a 16 MiB arena per loaded instance.
-A non-moving mark-and-sweep collector automatically reclaims unreachable objects
-when allocation needs space, including unreachable cycles. Live references keep
-their identity and addresses. The live heap remains bounded, and fragmentation
-can prevent a large contiguous allocation. There are 256 tag descriptors and
-32,768 field descriptors; precise operand root maps have a 4 MiB metadata bound.
-Allocation and fuel exhaustion are explicit failures. Default invocation fuel
-is 100,000; the spec runner uses 10,000,000. The interpreter uses bounded physical
+Function tables start at 512 slots and grow geometrically as needed, including
+local/name/type metadata, declaration bitmaps, name indexes and binary decoding
+maps. Unused function quota is not preallocated. Other enlarged arenas reserve
+storage when a module loads. Guest memory allocates and grows on demand. Reloads
+rebuild arena addresses and discard references owned by the previous guest.
+
+Self-hosted execution has a separate outer interpreter. For exceptionally deep
+recursive type comparisons or constant expressions, configure its resources too:
+
+```js
+const engine = await createInterpreter(undefined, {
+  limits: { types: 3000, typeComparisonDepth: 1600 },
+  parentLimits: { callFrames: 10000, operands: 20000, controls: 20000 }
+});
+```
+
+`parentLimits` uses the same quota names and is validated before constructing the
+outer interpreter. `parentFuel` independently bounds its execution work.
+
+Invalid options are rejected before runtime construction. Quotas do not guarantee
+allocation: all source, metadata, objects and guest memories share a memory32
+backing address space, and available host memory can impose a smaller bound.
+Allocation failure and address overflow report resource errors. Slot indices,
+reference encodings and memory32 addressing impose the accepted maxima above;
+recursive parser/type operations can also exhaust the host call stack.
+
+GC objects and exception payloads share the configured `gcHeapBytes` arena.
+A non-moving mark-and-sweep collector automatically reclaims unreachable objects,
+including cycles, when allocation needs space. Live references retain their
+identity and addresses; fragmentation can prevent a large contiguous allocation.
+Exception root bitmaps grow with payload arity, including positions beyond 128.
+Operand maps and constant-constructor roots use `gcMapBytes` and `gcTemporaries`.
+Allocation and fuel exhaustion are explicit failures. Default invocation fuel is
+100,000; the spec runner uses 10,000,000. The interpreter uses bounded physical
 backing for wide logical addresses.
 
 The spec submodule is pinned to `wg-3.0`, commit

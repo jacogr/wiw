@@ -164,7 +164,7 @@
 		(i32.add
 			(global.get $local-type-base)
 			(i32.mul
-				(i32.add (i32.mul (local.get $function) (i32.const M4_CAP_LOCALS)) (local.get $index))
+				(i32.add (i32.mul (local.get $function) (global.get $local-limit)) (local.get $index))
 				(i32.const 4)
 			)
 		)
@@ -765,7 +765,7 @@
 
 		;; A prior error or excessive nesting terminates this constant expression.
 		(if
-			(i32.or (global.get $error) (i32.ge_u (global.get $constant-depth) (i32.const 256)))
+			(i32.or (global.get $error) (i32.ge_u (global.get $constant-depth) (global.get $syntax-limit)))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i64.const 0))

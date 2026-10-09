@@ -160,7 +160,7 @@
 		(result i32)
 
 		;; Reject oversized actual imports before modifying their descriptor.
-		(if (i32.gt_u (local.get $size) (i32.const 4096))
+		(if (i32.gt_u (local.get $size) (global.get $table-entry-limit))
 			(then
 				(return (i32.const 6))
 			)
@@ -209,7 +209,7 @@
 		(if
 			(i32.or
 				(i32.gt_u (local.get $pages) (global.get $guest-capacity))
-				(i32.gt_u (local.get $entries) (i32.const 4096))
+				(i32.gt_u (local.get $entries) (global.get $table-entry-limit))
 			)
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
@@ -238,7 +238,7 @@
 		(if
 			(i32.or
 				(i32.ge_u (global.get $function-count) (global.get $function-limit))
-				(i32.gt_u (local.get $count) (i32.const 128))
+				(i32.gt_u (local.get $count) (global.get $parameter-limit))
 			)
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))

@@ -70,8 +70,8 @@
 		;; A nonzero carry adds exactly one high word.
 		(if (i64.ne (local.get $carry) (i64.const 0))
 			(then
-				;; The header and at most 1023 limbs must fit inside this buffer.
-				(if (i32.ge_u (local.get $n) (i32.const M4_BIG_LIMB_CAPACITY))
+				;; The header and configured limb count must fit inside this buffer.
+				(if (i32.ge_u (local.get $n) (global.get $big-limb-limit))
 					(then
 						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 						(return)
@@ -115,7 +115,7 @@
 					(i32.add (local.get $n) (local.get $words))
 					(i32.ne (local.get $shift) (i32.const 0))
 				)
-				(i32.const M4_BIG_LIMB_CAPACITY)
+				(global.get $big-limb-limit)
 			)
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
@@ -563,7 +563,7 @@
 			)
 		)
 		;; Bound literal parsing scratch work even for thousands of leading zeroes or exponent digits.
-		(if (i32.gt_u (global.get $len) (i32.const 8192))
+		(if (i32.gt_u (global.get $len) (global.get $float-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i64.const 0))

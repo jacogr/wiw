@@ -24,7 +24,7 @@
 		(local $map i32)
 		(local $end i32)
 		(local.set $map (i32.add (global.get $gc-map-base) (global.get $gc-map-used)))
-		(local.set $end (i32.add (global.get $gc-map-base) (i32.const M4_GC_MAP_BYTES)))
+		(local.set $end (i32.add (global.get $gc-map-base) (global.get $gc-map-limit)))
 		;; Empty maps require no storage, including the numeric-only interpreter's own call sites.
 		(block $done
 			;; Each reference position fits an unsigned sixteen-bit index within the operand bound.
@@ -84,7 +84,7 @@
 	(func $gc-temp-push
 		(param $value i64)
 		;; The parser's bounded nesting reserves two slots per constructor plus bulk-operation slack.
-		(if (i32.ge_u (global.get $gc-temp-count) (i32.const M4_GC_TEMP_SLOTS))
+		(if (i32.ge_u (global.get $gc-temp-count) (global.get $gc-temp-limit))
 			(then (call $fail (i32.const M4_ERR_RESOURCE_LIMIT)) (return))
 		)
 		(i64.store
@@ -103,7 +103,7 @@
 		(local $value i64)
 		(local.set $base (global.get $gc-temp-count))
 		;; Reserve both slots atomically so a failing second push cannot corrupt a parent's roots.
-		(if (i32.gt_u (i32.add (local.get $base) (i32.const 2)) (i32.const M4_GC_TEMP_SLOTS))
+		(if (i32.gt_u (i32.add (local.get $base) (i32.const 2)) (global.get $gc-temp-limit))
 			(then (call $fail (i32.const M4_ERR_RESOURCE_LIMIT)) (return (i64.const 0)))
 		)
 		(call $gc-temp-push (i64.const 0))
@@ -123,7 +123,7 @@
 		(local $rest i32)
 		(local $next i32)
 		;; The common bump path needs no free-list traversal or tracing work.
-		(if (i32.le_u (local.get $size) (i32.sub (i32.const M4_GC_ARENA_BYTES) (global.get $gc-object-used)))
+		(if (i32.le_u (local.get $size) (i32.sub (global.get $gc-heap-limit) (global.get $gc-object-used)))
 			(then
 				(local.set $object (i32.add (global.get $gc-object-base) (global.get $gc-object-used)))
 				(global.set $gc-object-used (i32.add (global.get $gc-object-used) (local.get $size)))
@@ -256,7 +256,7 @@
 		)
 	)
 
-	;; Record one reference-bearing exception payload position in its hidden 128-bit type bitmap.
+	;; Record one reference-bearing exception payload position in its hidden variable-width type bitmap.
 	(func $gc-exception-mask
 		(param $object i32)
 		(param $index i32)
@@ -413,7 +413,7 @@
 			;; Explicit guest frames bound traversal independently from the native Wasm stack.
 			(loop $frames
 				(br_if $frames-done (i32.eq (local.get $i) (global.get $gc-calls)))
-				(local.set $frame (i32.add (global.get $call-base) (i32.mul (local.get $i) (i32.const M4_CALL_BYTES))))
+				(local.set $frame (i32.add (global.get $call-base) (i32.mul (local.get $i) (global.get $call-bytes))))
 				(local.set $function (i32.load offset=M4_CALL_FUNCTION_OFFSET (local.get $frame)))
 				(local.set $j (i32.const 0))
 				(block $locals-done
@@ -444,7 +444,7 @@
 						(local.set $pc (i32.sub (i32.load (local.get $frame)) (i32.const 1)))
 						(local.set $end
 							(i32.load offset=M4_CALL_STACK_BASE_OFFSET
-								(i32.add (local.get $frame) (i32.const M4_CALL_BYTES))
+								(i32.add (local.get $frame) (global.get $call-bytes))
 							)
 						)
 					)
@@ -504,7 +504,7 @@
 							;; Skip the identity slot and inspect only mask-selected payload slots.
 							(loop $payload
 								(br_if $payload-done (i32.eq (local.get $i) (i32.sub (local.get $count) (i32.const 1))))
-								;; The bitmap has one exact bit for each of the at most 128 payload values.
+								;; The bitmap has one exact bit for each configured payload position.
 								(if (i64.ne (i64.and (i64.load (i32.add (local.get $mask)
 									(i32.shl (i32.shr_u (local.get $i) (i32.const 6)) (i32.const 3))))
 									(i64.shl (i64.const 1) (i64.extend_i32_u (local.get $i)))) (i64.const 0))

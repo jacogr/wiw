@@ -125,8 +125,9 @@ for (const [runtime, create] of runtimeFactories) {
 
 test('capacity options reject invalid budgets before either runtime is constructed', async () => {
   for (const create of [createBootstrapInterpreter, createInterpretedInterpreter]) {
-    for (const limits of [[], 1, {unknown:1}, {functions:65537}, {functions:-1}, {functions:0.5}, {exports:NaN},
-      {globals:Infinity}, {callFrames:0}, {callFrames:4097}, {memoryPages:65537}, {memoryPages:-1}]) {
+    for (const limits of [[], 1, {unknown:1}, {functions:131073}, {functions:-1}, {functions:0.5}, {exports:NaN},
+      {globals:Infinity}, {callFrames:0}, {callFrames:65536}, {memoryPages:65537}, {memoryPages:-1}, {parameters:2000,locals:1088}, {parameters:65536}, {results:127},
+      {instructions:131071}, {tables:65537}, {gcHeapBytes:268435457}, {forwardingDepth:0}, {externalReferences:-1}]) {
       await assert.rejects(create(binary, {limits}), /limit/);
     }
     const engine = await create(binary, {limits:{functions:0,exports:0,globals:0,memoryPages:0}});

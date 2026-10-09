@@ -3,7 +3,7 @@
 		(param $index i32)
 		(result i32)
 
-		(i32.add (global.get $guest-table-arena) (i32.mul (local.get $index) (i32.const 16448)))
+		(i32.add (global.get $guest-table-arena) (i32.mul (local.get $index) (global.get $table-record-bytes)))
 	)
 
 	;; Follow a trusted import alias to its canonical table descriptor within this instance.
@@ -35,7 +35,7 @@
 		(global.set $guest-table-index
 			(i32.div_u
 				(i32.sub (local.get $record) (global.get $guest-table-arena))
-				(i32.const 16448)
+				(global.get $table-record-bytes)
 			)
 		)
 		(global.set $guest-table-base (i32.add (local.get $record) (i32.const 64)))
@@ -231,7 +231,7 @@
 				(br_if $done (global.get $error))
 				(br_if $done (i32.eq (global.get $kind) (i32.const 2)))
 				;; Element entries have their own fixed capacity.
-				(if (i32.ge_u (global.get $element-entry-count) (i32.const 4096))
+				(if (i32.ge_u (global.get $element-entry-count) (global.get $element-entry-limit))
 					(then
 						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 						(return)
@@ -410,7 +410,7 @@
 		(local $record i32)
 
 		;; Segment descriptors are bounded independently from entry storage.
-		(if (i32.ge_u (global.get $element-count) (i32.const 128))
+		(if (i32.ge_u (global.get $element-count) (global.get $element-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))
@@ -567,7 +567,7 @@
 		(local $maximum i64)
 
 		;; A second table remains outside the supported single-table subset.
-		(if (i32.ge_u (global.get $guest-table-present) (i32.const 32))
+		(if (i32.ge_u (global.get $guest-table-present) (global.get $table-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
@@ -726,7 +726,7 @@
 		(if
 			(i32.and
 				(i32.eqz (global.get $validation-only))
-				(i32.gt_u (global.get $guest-table-size) (i32.const 4096))
+				(i32.gt_u (global.get $guest-table-size) (global.get $table-entry-limit))
 			)
 			(then
 				(global.set $tok (local.get $offset))
@@ -1051,7 +1051,7 @@
 		)
 		;; Four slots retain both index/name pairs without overlapping later branch vectors.
 		(if
-			(i32.gt_u (global.get $table-count) (i32.sub (i32.const M4_CAP_TABLE) (i32.const 4)))
+			(i32.gt_u (global.get $table-count) (i32.sub (global.get $auxiliary-limit) (i32.const 4)))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))
@@ -1306,7 +1306,7 @@
 		(if
 			(i32.or
 				(i64.gt_u (local.get $size) (i64.extend_i32_u (global.get $guest-table-max)))
-				(i64.gt_u (local.get $size) (i64.const 4096))
+				(i64.gt_u (local.get $size) (i64.extend_i32_u (global.get $table-entry-limit)))
 			)
 			(then
 				(return (i32.const -1))
@@ -1376,7 +1376,7 @@
 		(local $value i64)
 
 		;; Initializer entries share the bounded element-entry arena.
-		(if (i32.ge_u (global.get $element-entry-count) (i32.const 4096))
+		(if (i32.ge_u (global.get $element-entry-count) (global.get $element-entry-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))

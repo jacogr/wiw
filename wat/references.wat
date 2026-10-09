@@ -928,7 +928,7 @@
 			)
 		)
 		;; Reject exhausted type-use storage before creating a descriptor.
-		(if (i32.ge_u (local.get $i) (i32.const 4096))
+		(if (i32.ge_u (local.get $i) (global.get $reference-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))
@@ -1123,7 +1123,7 @@
 			)
 		)
 		;; Earlier group references form a bounded acyclic dependency graph.
-		(if (i32.ge_u (global.get $type-comparison-depth) (i32.const 1024))
+		(if (i32.ge_u (global.get $type-comparison-depth) (global.get $comparison-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))

@@ -13,7 +13,7 @@
 		(local $frame i32)
 
 		;; Bound abstract control records before writing the next frame.
-		(if (i32.ge_u (global.get $control-count) (i32.const M4_CAP_CONTROLS))
+		(if (i32.ge_u (global.get $control-count) (global.get $control-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
@@ -40,7 +40,7 @@
 			)
 		)
 		;; Each abstract operand has one type slot, independently from its runtime value width.
-		(if (i32.ge_u (global.get $depth) (i32.const M4_CAP_OPERANDS))
+		(if (i32.ge_u (global.get $depth) (global.get $operand-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)

@@ -19,7 +19,7 @@
 			)
 		)
 		;; Data capacity is independent from the logical memory size and source length.
-		(if (i32.ge_u (global.get $data-count) (i32.const 65536))
+		(if (i32.ge_u (global.get $data-count) (global.get $data-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
@@ -337,7 +337,7 @@
 		(local $start i32)
 
 		;; Segment metadata has its own bounded arena.
-		(if (i32.ge_u (global.get $segment-count) (i32.const 128))
+		(if (i32.ge_u (global.get $segment-count) (global.get $segment-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))
@@ -449,7 +449,7 @@
 		(local $i i32)
 
 		;; Bound the next descriptor before parsing a header into its target fields.
-		(if (i32.ge_u (global.get $segment-count) (i32.const 128))
+		(if (i32.ge_u (global.get $segment-count) (global.get $segment-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)

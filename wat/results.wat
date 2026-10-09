@@ -45,7 +45,7 @@
 		)
 		(local.set $count (call $shape-count (local.get $shape)))
 		;; Result vectors and records have independent fixed limits.
-		(if (i32.ge_u (local.get $count) (i32.const 128))
+		(if (i32.ge_u (local.get $count) (global.get $result-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (local.get $shape))
@@ -56,7 +56,7 @@
 		(if (i32.lt_u (local.get $shape) (i32.const M4_SHAPE_VECTOR_MIN))
 			(then
 				;; Avoid writing past the result-vector arena.
-				(if (i32.ge_u (global.get $result-shape-count) (i32.const 4096))
+				(if (i32.ge_u (global.get $result-shape-count) (global.get $result-shape-limit))
 					(then
 						(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 						(return (local.get $shape))
@@ -65,7 +65,7 @@
 				(local.set $record
 					(i32.add
 						(global.get $result-shape-base)
-						(i32.mul (global.get $result-shape-count) (i32.const 516))
+						(i32.mul (global.get $result-shape-count) (global.get $shape-bytes))
 					)
 				)
 				(global.set $result-shape-count (i32.add (global.get $result-shape-count) (i32.const 1)))
@@ -276,7 +276,7 @@
 		(if
 			(i32.and
 				(i32.ge_u (local.get $address) (global.get $stack-base))
-				(i32.lt_u (local.get $address) (i32.add (global.get $stack-base) (i32.const 32768)))
+				(i32.lt_u (local.get $address) (i32.add (global.get $stack-base) (i32.shl (global.get $operand-limit) (i32.const 3))))
 			)
 			(then
 				(return
@@ -303,8 +303,8 @@
 			(global.get $call-high-base)
 			(i32.add
 				(i32.mul
-					(i32.div_u (i32.sub (local.get $frame) (global.get $call-base)) (i32.const M4_CALL_BYTES))
-					(i32.const M4_LOCAL_NAME_BYTES)
+					(i32.div_u (i32.sub (local.get $frame) (global.get $call-base)) (global.get $call-bytes))
+					(global.get $local-bytes)
 				)
 				(i32.mul (local.get $index) (i32.const 8))
 			)

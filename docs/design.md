@@ -251,7 +251,7 @@ Both paths resume rejected guest exceptions through their original tag identity,
 and abort pending imports on host failure before releasing the instance guard.
 Callbacks can inspect/mutate resources and
 invoke another instance; active-instance invoke/reload is rejected. Nested host
-forwarding is bounded at 128 invocations. The WAT engine has no native Wasm imports. The bootstrap now uses native
+forwarding defaults to a configurable 128 invocations. The WAT engine has no native Wasm imports. The bootstrap now uses native
 bulk-memory, sign-extension and nontrapping float-conversion instructions; Binaryen receives
 explicit feature flags. These instructions are also supported by guest dispatch,
 so the expanded engine remains self-hosting.
@@ -488,9 +488,9 @@ common loader's arenas. The loader clears optional metadata on every reload.
 
 ## Bounds and failures
 
-Capacities: 512 functions/exports, 128 parameters, 1,088 combined local slots,
+Compact default capacities: 512 initial function slots/exports, 128 parameters, 1,088 combined local slots,
 131,072 instructions, 512 calls, 4,096 operands/controls, 256 syntax frames,
-32,768 auxiliary immediate slots, 512 globals, 128 data/element segments, 64 KiB decoded
+131,072 auxiliary immediate slots, 512 globals, 128 data/element segments, 64 KiB decoded
 data/names, 2,048 memory pages, 4,096 table entries/element references, 768 explicit
 types, 768 declared/interned types, 1,024 indirect/control signatures, 1,024 imports,
 8,192 bytes per float literal and 1 MiB binary text expansion. Memory maxima
@@ -540,7 +540,7 @@ with a purpose comment, and every if, else, block and loop with its intent.
 Describe termination and named exits so readers can follow the execution flow.
 Keep these comments current when behavior changes.
 
-Reference tables use 32 independent descriptors followed by fixed 4096-entry
+Default reference tables use 32 independent descriptors followed by 4096-entry
 arenas. Descriptor fields 0/4 are name pointer/length, 8/12 current size/maximum,
 16 reference type, and 20 optional canonical import index plus one. Table entries
 store the nullable value slot minus one for both reference types. Host synchronization
@@ -679,7 +679,7 @@ exceptions retain their tag identity across imported calls.
 ## Wide resources and 3.0 binary decoding
 
 Memory descriptors have independent names, 32/64-bit address widths, logical
-limits and physical offsets. Up to 512 memories share bounded, packed backing;
+limits and physical offsets. By default, up to 512 memories share bounded, packed backing;
 growth relocates later regions while retaining their contents. Address checks
 use full-width values before conversion to physical i32 offsets. Mixed-width
 memory copies check each selected source/destination width independently. Tables
@@ -3923,3 +3923,46 @@ skips. The native target takes 11.06 seconds and the self-hosted target takes
 The nine new capacity tests run alongside the existing GC, WASI, ownership and
 multiple-layer self-hosting regressions. These full-run timings are diagnostic
 measurements rather than paired performance comparisons.
+
+
+## Configurable arena storage
+
+The compact m4 layout supplies default storage. `configure_capacity` accepts
+named numeric quota identifiers before load; the Node adapter maps the public
+`limits` names to those identifiers. Enlarged arenas are reserved with checked
+64-bit arithmetic and 16-byte alignment before parsing retains addresses.
+Instruction, metadata and GC map indexes move together; operand low/high halves,
+validation types and call low/high records retain independent bases. Reloads
+restore compact bases before applying the same configured quotas.
+
+Parameter count determines signature width, result count determines shape width,
+and combined parameter/local count determines local arrays and call-frame
+strides. Header and root offsets therefore derive from the configured widths.
+Hash indexes grow to powers of two above their declaration namespace capacity.
+The binary decoder derives its text, function map, type map and constant stack
+regions from the same quotas. Function metadata still grows geometrically on
+actual declarations, rather than eagerly allocating its full quota.
+
+Exception allocations reserve a variable-width reference bitmap. The historical
+`import_exception` low/high-mask ABI remains available; `import_exception_bits`
+accepts a pointer to the complete bitmap. The host interns arguments before
+obtaining scratch addresses, then writes payload and mask words after any
+scratch relocation. Collection interprets the bitmap one word per 64 arguments.
+
+The interpreted engine and its outer bootstrap have independent quotas.
+`parentLimits` allows deeper outer call stacks for recursive type comparisons and
+constant expressions without increasing default construction memory. Memory32
+addressing, encoded reference indices and host allocation remain physical bounds;
+increasing a quota never bypasses checked allocation or validation.
+
+
+Validation of the configurable arena expansion passes 308 tests and all 65,199
+commands from the pinned wg-3.0 suite, with zero failures or skips in both
+optimized execution modes. The complete compiled run takes 12.44 seconds; the
+self-hosted run takes 141.01 seconds. Twenty new boundary regressions cover arena
+relocation, reloads, larger numeric/vector and exception payloads, root maps,
+constructor scratch, recursive comparisons, deep calls and allocation failures.
+Separate probes verify 65,537 functions, 65,537 globals surviving collection,
+65,536 external host identities and a 129-instance forwarding chain in both
+modes. These large probes are kept out of routine CI to avoid adding peak memory
+and construction work to every test run.

@@ -75,7 +75,7 @@ for(const [runtime,create] of runtimeFactories) {
     for(const value of [null,{},'i32',0]) assert.throws(()=>createTag(value),/must be an array/);
     for(const name of ['', 'i16','void','structref',null,1,{},'toString']) assert.throws(()=>createTag([name]),/unsupported tag parameter/);
     assert.throws(()=>createTag(new Array(1)),/unsupported tag parameter/);
-    assert.throws(()=>createTag(new Array(129).fill('i32')),/maximum 128/);
+    assert.throws(()=>createTag(new Array(65536).fill('i32')),/maximum 65535/);
     const tag=createTag(new Array(128).fill('i32')),i=await create();
     i.load(`(module (tag (import "h" "tag") (param ${new Array(128).fill('i32').join(' ')})))`,{h:{tag}});
     const values=Array.from({length:128},(_,index)=>index);

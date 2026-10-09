@@ -253,14 +253,14 @@
 		)
 	)
 
-	;; Parse the single MVP memory, its optional identifier/exports and unsigned page limits.
+	;; Parse a memory declaration, its optional identifier/exports and unsigned page limits.
 	(func $parse-memory
 		(local $bytes i32)
 		(local $index i32)
 		(local $record i32)
 
 		;; Each declaration owns one bounded descriptor, including imports and empty memories.
-		(if (i32.ge_u (global.get $memory-present) (i32.const 512))
+		(if (i32.ge_u (global.get $memory-present) (global.get $memory-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)

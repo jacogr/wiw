@@ -1,9 +1,9 @@
-	;; Locate a bounded 544-byte signature: name, parameter count/result shape, reference metadata, 128 type slots.
+	;; Locate a signature record with a fixed header and configured parameter type slots.
 	(func $signature
 		(param $index i32)
 		(result i32)
 
-		(i32.add (global.get $signature-base) (i32.mul (local.get $index) (i32.const M4_SIGNATURE_BYTES)))
+		(i32.add (global.get $signature-base) (i32.mul (local.get $index) (global.get $signature-bytes)))
 	)
 
 	;; Locate deferred function type metadata; offset 20 retains a completed non-null reference type.
@@ -29,11 +29,11 @@
 			(then
 				;; Anonymous signatures are skipped, and old source pointers are cleared on first use.
 				(if (i32.eqz (global.get $types-indexed))
-					(then (call $zero-bytes (global.get $type-name-index) (i32.const M4_TYPE_NAME_INDEX_BYTES)))
+					(then (call $zero-bytes (global.get $type-name-index) (i32.shl (i32.add (global.get $type-name-mask) (i32.const 1)) (i32.const 4))))
 				)
-				(local.set $i (call $indexed-name (global.get $signature-base) (i32.const M4_SIGNATURE_BYTES)
+				(local.set $i (call $indexed-name (global.get $signature-base) (global.get $signature-bytes)
 					(global.get $signature-count) (global.get $types-indexed)
-					(global.get $type-name-index) (i32.const M4_TYPE_NAME_INDEX_MASK)
+					(global.get $type-name-index) (global.get $type-name-mask)
 					(i32.const 1) (local.get $p) (local.get $n)))
 				(global.set $types-indexed (global.get $signature-count))
 				(return (local.get $i))
@@ -169,7 +169,7 @@
 						(if (call $named)
 							(then
 								;; Indirect call annotations cannot bind parameter names.
-								(if (i32.ge_u (local.get $s) (call $signature (i32.const M4_CAP_TYPES)))
+								(if (i32.ge_u (local.get $s) (call $signature (global.get $type-limit)))
 									(then
 										(call $fail (i32.const M4_ERR_SYNTAX))
 										(return)
@@ -179,7 +179,7 @@
 								(local.set $type (call $value-type))
 								(local.set $count (i32.load offset=8 (local.get $s)))
 								;; Enforce the parameter capacity before storing its type slot.
-								(if (i32.ge_u (local.get $count) (i32.const 128))
+								(if (i32.ge_u (local.get $count) (global.get $parameter-limit))
 									(then
 										(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 										(return)
@@ -202,7 +202,7 @@
 								(br_if $params-done (i32.eq (global.get $kind) (i32.const 2)))
 								(local.set $count (i32.load offset=8 (local.get $s)))
 								;; Avoid crossing the signature record boundary.
-								(if (i32.ge_u (local.get $count) (i32.const 128))
+								(if (i32.ge_u (local.get $count) (global.get $parameter-limit))
 									(then
 										(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 										(return)
@@ -252,14 +252,14 @@
 		(local $sub i32)
 
 		;; Explicit types reserve the first 256 records; indirect signatures occupy the second prefix.
-		(if (i32.ge_u (global.get $signature-count) (i32.const M4_CAP_TYPES))
+		(if (i32.ge_u (global.get $signature-count) (global.get $type-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return)
 			)
 		)
 		(local.set $s (call $signature (global.get $signature-count)))
-		(call $zero-bytes (local.get $s) (i32.const M4_SIGNATURE_BYTES))
+		(call $zero-bytes (local.get $s) (global.get $signature-bytes))
 		(i32.store offset=16 (local.get $s) (global.get $tok))
 		(call $next)
 		;; An optional identifier participates only in the explicit type namespace.
@@ -324,18 +324,18 @@
 		(local $open i32)
 
 		;; Bound anonymous signatures independently from explicit type declarations.
-		(if (i32.ge_u (global.get $indirect-type-count) (i32.const 1024))
+		(if (i32.ge_u (global.get $indirect-type-count) (global.get $indirect-limit))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))
 			)
 		)
-		(local.set $index (i32.add (i32.const M4_CAP_TYPES) (global.get $indirect-type-count)))
+		(local.set $index (i32.add (global.get $type-limit) (global.get $indirect-type-count)))
 		(global.set $indirect-type-count
 			(i32.add (global.get $indirect-type-count) (i32.const 1))
 		)
 		(local.set $s (call $signature (local.get $index)))
-		(call $zero-bytes (local.get $s) (i32.const M4_SIGNATURE_BYTES))
+		(call $zero-bytes (local.get $s) (global.get $signature-bytes))
 		;; Indirect signatures have no type name, so their first pair retains the optional table target.
 		(drop (call $table-reference (local.get $s)))
 		(i32.store offset=16 (local.get $s) (global.get $tok))
@@ -516,7 +516,7 @@
 						(if (i32.eq (local.get $j) (global.get $signature-count))
 							(then
 								;; Keep implicit types separate from the indirect-call signature arena.
-								(if (i32.ge_u (local.get $j) (i32.const M4_CAP_TYPES))
+								(if (i32.ge_u (local.get $j) (global.get $type-limit))
 									(then
 										(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 										(return)
@@ -525,7 +525,7 @@
 								(local.set $f (call $function (local.get $i)))
 								(local.set $s (call $signature (local.get $j)))
 								;; Anonymous canonical types must reset optional headers and unused parameter words on reload.
-								(call $zero-bytes (local.get $s) (i32.const M4_SIGNATURE_BYTES))
+								(call $zero-bytes (local.get $s) (global.get $signature-bytes))
 								(call $initialize-heap-type (local.get $j))
 								(i32.store offset=8 (local.get $s) (i32.load offset=16 (local.get $f)))
 								(i32.store offset=12 (local.get $s) (i32.load offset=24 (local.get $f)))
@@ -614,7 +614,7 @@
 								(local.set $count (i32.load offset=8 (local.get $s)))
 								(local.set $old (i32.load offset=20 (local.get $f)))
 								;; Parameters and declared locals share the same bounded frame.
-								(if (i32.gt_u (i32.add (local.get $old) (local.get $count)) (i32.const M4_CAP_LOCALS))
+								(if (i32.gt_u (i32.add (local.get $old) (local.get $count)) (global.get $local-limit))
 									(then
 										(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 										(return)
@@ -672,7 +672,7 @@
 			(loop $calls
 				(br_if $calls-done (global.get $error))
 				(br_if $calls-done (i32.eq (local.get $i) (global.get $indirect-type-count)))
-				(local.set $s (call $signature (i32.add (i32.const M4_CAP_TYPES) (local.get $i))))
+				(local.set $s (call $signature (i32.add (global.get $type-limit) (local.get $i))))
 				;; An indirect call with no explicit type use already contains its inline signature.
 				(if (i32.and (i32.load offset=28 (local.get $s)) (i32.const 1))
 					(then

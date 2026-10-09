@@ -42,7 +42,7 @@
 		)
 		;; Literal storage shares the bounded immediate arena with branch and table operands.
 		(if
-			(i32.gt_u (global.get $table-count) (i32.sub (i32.const M4_CAP_TABLE) (i32.const 4)))
+			(i32.gt_u (global.get $table-count) (i32.sub (global.get $auxiliary-limit) (i32.const 4)))
 			(then
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 				(return (i32.const 0))

@@ -381,7 +381,7 @@
 		(local.set $size (i64.add (i64.const M4_GC_HEADER_BYTES)
 			(i64.mul (i64.extend_i32_u (local.get $count)) (i64.const M4_GC_SLOT_BYTES))))
 		;; An individually oversized allocation cannot benefit from collection.
-		(if (i64.gt_u (local.get $size) (i64.const M4_GC_ARENA_BYTES))
+		(if (i64.gt_u (local.get $size) (i64.extend_i32_u (global.get $gc-heap-limit)))
 			(then (call $fail (i32.const M4_ERR_RESOURCE_LIMIT)) (return (i32.const 0)))
 		)
 		(local.set $object (call $gc-take (i32.wrap_i64 (local.get $size))))
@@ -612,7 +612,7 @@
 			(then
 				(local.set $i (i32.load offset=4 (local.get $immediate)))
 				;; Element counts cannot exceed the bounded operand stack.
-				(if (i32.gt_u (local.get $i) (i32.const M4_CAP_OPERANDS))
+				(if (i32.gt_u (local.get $i) (global.get $operand-limit))
 					(then
 						(call $fail (i32.const M4_ERR_OPERAND_STACK))
 						(return)

@@ -28,7 +28,7 @@
 		(local $frame i32)
 
 		;; Bound all nested syntax, including flat controls and folded expressions.
-		(if (i32.ge_u (global.get $syntax-count) (i32.const 256))
+		(if (i32.ge_u (global.get $syntax-count) (global.get $syntax-limit))
 			(then
 				(global.set $tok (local.get $offset))
 				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
@@ -604,7 +604,7 @@
 							)
 						)
 						;; Bound the shared branch-target arena before the host scratch region.
-						(if (i32.ge_u (global.get $table-count) (i32.const M4_CAP_TABLE))
+						(if (i32.ge_u (global.get $table-count) (global.get $auxiliary-limit))
 							(then
 								(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
 								(return (i32.const 0))
