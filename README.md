@@ -114,12 +114,43 @@ consumer.load(`(module
 console.log(consumer.invoke('answer'));
 ```
 
-Plain function bindings are synchronous callbacks under module/field keys.
+Function bindings live under module/field keys. `load`/`loadBinary` and
+`invoke`/`invokeRaw` execute synchronously and reject asynchronous callbacks.
+Use `await loadAsync(source, imports)`, `await loadBinaryAsync(bytes, imports)`,
+`await invokeAsync(name, ...args)` or `await invokeRawAsync(name, ...args)` to
+await Promise/thenable imports, including a module's start function. Guest frames,
+operands, references and the active fuel budget survive suspension. Rejected
+callbacks retain their cause; rejected `WiwException` values enter guest handlers.
+
+`exportFunctionAsync(name)` and `exportNamespaceAsync()` provide typed async host
+callbacks. Async guest calls can also await ordinary typed forwarding bindings
+and indirect calls through shared tables. The 128-instance forwarding limit
+follows each call chain across awaits; independent instances can run concurrently.
+An active instance stays protected against invoke, load and garbage collection
+until guest execution finishes. Callbacks can read, mutate and grow resources
+before or after an await. Shared resources synchronize at suspension/resumption
+boundaries; guest execution remains serialized between those boundaries.
+
+A Promise is also a valid opaque `externref`. Such imports remain unawaited by
+default; wrap a callback with the exported `asyncImport(callback)` helper when its
+Promise resolves to the desired reference. `invokeRawAsync` returns reference
+slots as `{type, value}`, preserving even Promise values and hostile `then`
+getters. Ordinary `invokeAsync` results follow JavaScript Promise assimilation;
+use the raw API when the result itself must remain an opaque Promise/thenable.
+
+```js
+const engine = await createInterpreter();
+await engine.loadAsync(`(module
+  (import "host" "answer" (func $answer (result i32)))
+  (export "answer" (func $answer)))`,
+  {host: {answer: async () => 42}});
+console.log(await engine.invokeAsync('answer')); // 42
+```
 Typed bindings check full signatures. Callback failures retain their cause.
 A callback can access resources and invoke a different instance; reentry into
 its own active instance fails. Each active segment checks its complete bounds before writing. Earlier completed
 segments and writes made by a trapping start remain observable, as specified in 2.0. Resource sharing is
-synchronized at synchronous call boundaries.
+synchronized at guest/host call boundaries.
 
 `funcref` and `externref` work in function signatures, locals, globals and block
 results. `ref.null`, `ref.is_null` and typed `select` preserve reference types.
@@ -231,7 +262,7 @@ with zero skips. See `test/spec/README.md` for the upgrade workflow and
 `docs/design.md` for architecture and ABI details.
 
 Multivalue functions and controls support ordered result vectors, block parameters,
-loop inputs and explicit type uses. Node invocations and synchronous callbacks
+loop inputs and explicit type uses. Node invocations and callbacks
 return arrays for multiple results; raw arrays preserve individual numeric bits
 and reference identity. SIMD supports all pinned lane, arithmetic, comparison, shuffle, conversion and
 memory instructions. Storage and the public ABI retain parallel 64-bit halves.
@@ -247,7 +278,7 @@ support from its WebAssembly host.
 The hosted runtime loads optimized `build/wiw-opt.wat` into a bootstrap interpreter, then executes the
 copy's exported ABI through that parent. Text/binary guest loading, validation,
 execution and trap handling run inside the interpreted WAT copy; the shared
-Node frontend continues to handle synchronous callbacks and resource bindings.
+Node frontend continues to handle synchronous/asynchronous callbacks and resource bindings.
 The handwritten WAT and readable m4 expansion remain available for development
 and private probes. `options.source` still allows an explicit interpreter source.
 All three factories also accept a caller-owned `WebAssembly.Module` as their

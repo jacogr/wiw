@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { pathToFileURL } from 'node:url';
 
 const messages = ['', 'invalid syntax', 'unsupported feature', 'integer out of range', 'unknown export', 'invalid buffer', 'resource limit', 'invalid operand stack', 'divide by zero', 'integer overflow', 'invalid or duplicate reference', 'argument mismatch', 'exhausted fuel', 'executed unreachable', 'memory out of bounds', 'invalid memory limits', 'immutable global', 'interpreter error', 'export kind mismatch', 'invalid alignment', 'host import failed', 'invalid resume', 'invocation already suspended', 'host value type mismatch', 'undefined element', 'indirect call type mismatch', 'invalid table limits', 'element out of bounds', 'invalid conversion to integer', 'instance not initialized', 'table out of bounds', 'null reference', 'cast failure', 'array out of bounds', 'uncaught exception'];
@@ -12,7 +13,19 @@ export class WiwException extends Error {
 /** @type {WeakMap<Function, {params: number[], results: number | number[], valid: () => boolean}>} */
 const functionTypes = new WeakMap();
 const resourceTypes = new WeakMap();
-let invocationDepth = 0;
+const invocationContext = new AsyncLocalStorage();
+const currentDepth = () => invocationContext.getStore() ?? 0;
+const asynchronousImports = new WeakSet();
+const asynchronousFunctions = new WeakMap();
+// Explicitly distinguish an asynchronous externref import from an opaque Promise value.
+export function asyncImport(callback) {
+  if (typeof callback !== 'function') throw new Error('async import must be a function');
+  const binding = (...args) => callback(...args);
+  asynchronousImports.add(binding);
+  const metadata = functionTypes.get(callback);
+  if (metadata) functionTypes.set(binding, metadata);
+  return binding;
+}
 const maxInvocationDepth = 128;
 
 // Backing memory and address origins stay private to the host adapters.
@@ -428,17 +441,23 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     const callback = (...args) => {
       requireIdle();
       if (!valid()) throw new Error('stale forwarded function');
-      if (backend.countsForwardingDepth && invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
+      if (backend.countsForwardingDepth && currentDepth() >= maxInvocationDepth) throw new Error('forwarding depth limit');
       if (args.length !== signature.params.length) throw new Error('argument mismatch');
       return invokeValues('', args.map((value, slot) => typedValue(value, signature.params[slot])), false, index);
     };
     const raw = args => {
       requireIdle();
       if (!valid()) throw new Error('stale forwarded function');
-      if (backend.countsForwardingDepth && invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
+      if (backend.countsForwardingDepth && currentDepth() >= maxInvocationDepth) throw new Error('forwarding depth limit');
       return invokeValues('', args.map((arg, slot) => rawSlot(arg, signature.params[slot])), true, index);
     };
-    functionTypes.set(callback, {...signature, valid, raw, reference: () => reference});
+    const rawAsync = async args => {
+      requireIdle();
+      if (!valid()) throw new Error('stale forwarded function');
+      if (backend.countsForwardingDepth && currentDepth() >= maxInvocationDepth) throw new Error('forwarding depth limit');
+      return invokeValues('', args.map((arg, slot) => rawSlot(arg, signature.params[slot])), true, index, true);
+    };
+    functionTypes.set(callback, {...signature, valid, raw, rawAsync, reference: () => reference});
     const reference = {owner, index, callback: exportedFunctions.get(index) ?? callback, signature};
     tableFunctions.set(index, reference);
     return reference;
@@ -486,7 +505,20 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     resourceTypes.set(handle, state); exportedResources.set(key, handle);
     return handle;
   }
-  function drive(/** @type {bigint} */ value, raw = false) {
+  // The synchronous runner never yields; async imports resume this same state machine.
+  function drive(value, raw = false) { return driveSteps(value, raw, false).next().value; }
+  async function driveAsync(value, raw = false) {
+    const steps = driveSteps(value, raw, true);
+    let step = steps.next();
+    while (!step.done) {
+      let returned;
+      try { returned = await step.value; }
+      catch (error) { step = steps.throw(error); continue; }
+      step = steps.next(returned);
+    }
+    return {value: step.value};
+  }
+  function* driveSteps(/** @type {bigint} */ value, raw, asynchronous) {
     while (e.pending_import() >= 0) {
       const binding = bindings[e.pending_import()];
       let result = 0n;
@@ -505,16 +537,25 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
         const args = rawArgs.map((value, index) => isHostReference(binding.params[index]) ? value.value : decodedValue(value.bits, binding.params[index]));
         synchronizeOut();
         const forwarding = functionTypes.get(binding.callback);
-        const returned = forwarding?.raw ? forwarding.raw(rawArgs) : binding.callback(...args);
-        synchronizeIn();
-        if (binding.results !== 6 && returned && typeof returned.then === 'function') {
+        const forward = asynchronous && forwarding?.rawAsync ? forwarding.rawAsync : forwarding?.raw;
+        // Promise externrefs are ordinary values unless the binding explicitly opts into awaiting.
+        const awaitable = binding.results !== 6 || asynchronousImports.has(binding.callback) || (asynchronous && forwarding?.rawAsync);
+        let returned;
+        try {
+          returned = forward ? forward(rawArgs) : binding.callback(...args);
+          if (asynchronous && awaitable && returned && typeof returned.then === 'function') returned = yield returned;
+        } finally {
+          // Import side effects remain visible even when a rejected guest exception enters a handler.
+          synchronizeIn();
+        }
+        if (!asynchronous && awaitable && returned && typeof returned.then === 'function') {
           // Consume rejected promises while rejecting asynchronous callbacks for this synchronous ABI.
           Promise.resolve(returned).catch(() => {});
           throw new Error('import callbacks must be synchronous');
         }
         if (Array.isArray(binding.results)) {
           if (!Array.isArray(returned) || returned.length !== binding.results.length) throw new Error('import result count mismatch');
-          const slots = returned.map((value, slot) => forwarding?.raw ? rawSlot(value, binding.results[slot]) : typedValue(value, binding.results[slot]));
+          const slots = returned.map((value, slot) => forward ? rawSlot(value, binding.results[slot]) : typedValue(value, binding.results[slot]));
           const resultAt = e.pending_args(); ensure(resultAt + slots.length * 8);
           const output = new DataView(e.memory.buffer, memoryOffset);
           slots.forEach((value, slot) => {
@@ -523,7 +564,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
           });
           result = slots[0];
         } else if (binding.results) {
-          result = forwarding?.raw ? rawSlot(returned, binding.results) : typedValue(returned, binding.results);
+          result = forward ? rawSlot(returned, binding.results) : typedValue(returned, binding.results);
           if (binding.results === 7) {
             new DataView(e.memory.buffer, memoryOffset).setBigInt64(e.pending_high_args(), BigInt.asIntN(64, result >> 64n), true);
             result = BigInt.asIntN(64, result);
@@ -579,7 +620,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
     return raw ? rawResult(value, resultType) : decodedValue(value, resultType);
   }
   // Run either public scalar values or exact raw slots through the same protected invocation.
-  function invokeValues(name, values, raw = false, index = undefined) {
+  function invokeValues(name, values, raw = false, index = undefined, asynchronous = false) {
       synchronizeIn();
       refreshHostRoots();
       const at = e.host_base();
@@ -594,19 +635,53 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
         view.setBigInt64(highAt + index * 8, value > 0n ? BigInt.asIntN(64, value >> 64n) : 0n, true);
       });
       invoking = true;
-      if (backend.countsForwardingDepth) invocationDepth++;
-      try {
-        return drive(index === undefined ? e.invoke64(at, n, argumentsAt, values.length) : e.invoke_index64(index, argumentsAt, values.length), raw);
-      } finally {
-        // An interrupted host operation must not strand protected execution state.
+      const cleanup = () => {
         try {
           if (e.pending_import() >= 0) e.resume64(0n, 1);
           synchronizeOut();
-        } finally {
-          if (backend.countsForwardingDepth) invocationDepth--;
-          invoking = false;
-        }
+        } finally { invoking = false; }
+      };
+      const start = () => index === undefined ? e.invoke64(at, n, argumentsAt, values.length) : e.invoke_index64(index, argumentsAt, values.length);
+      if (asynchronous) {
+        const depth = currentDepth() + (backend.countsForwardingDepth ? 1 : 0);
+        return invocationContext.run(depth, async () => {
+          try { return (await driveAsync(start(), raw)).value; }
+          finally { cleanup(); }
+        });
       }
+      const run = () => {
+        try { return drive(start(), raw); }
+        finally { cleanup(); }
+      };
+      return backend.countsForwardingDepth ? invocationContext.run(currentDepth() + 1, run) : run();
+  }
+
+  function invokePublic(name, args, asyncInvocation) {
+      requireIdle();
+      requireLoaded();
+      if (backend.countsForwardingDepth && currentDepth() >= maxInvocationDepth) throw new Error('forwarding depth limit');
+      if (args.length > 128) throw new Error('too many arguments (maximum 128)');
+      const signature = functionSignature(name, false);
+      if (args.length !== signature.params.length) throw new Error('argument mismatch');
+      const values = args.map((arg, index) => {
+        try { return typedValue(arg, signature.params[index]); }
+        catch (error) {
+          if (signature.params[index] >= 5) throw error;
+          throw new Error(signature.params[index] === 2 ? 'arguments must be i64 BigInt integers' : signature.params[index] === 1 ? 'arguments must be i32 integers' : `arguments must be ${scalarNames[signature.params[index]]} Numbers`);
+        }
+      });
+      return invokeValues('', values, false, signature.index, asyncInvocation);
+  }
+  function invokeRawPublic(name, args, asyncInvocation) {
+      requireIdle();
+      requireLoaded();
+      if (backend.countsForwardingDepth && currentDepth() >= maxInvocationDepth) throw new Error('forwarding depth limit');
+      const signature = functionSignature(name, false);
+      if (args.length !== signature.params.length) throw new Error('argument mismatch');
+      const values = args.map((arg, index) => {
+        return rawSlot(arg, signature.params[index]);
+      });
+      return invokeValues('', values, true, signature.index, asyncInvocation);
   }
   const api = {
     // Parse and validate a module without imports, resource allocation, segment effects or start execution.
@@ -620,7 +695,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       finally { e.validation_only(0); }
       return api;
     },
-    load(/** @type {string} */ source, /** @type {Record<string, Record<string, Function>>} */ imports = {}, binarySource = false) {
+    load(/** @type {string} */ source, /** @type {Record<string, Record<string, Function>>} */ imports = {}, binarySource = false, asynchronous = false) {
       requireIdle();
       loaded = false;
       generation++;
@@ -693,60 +768,51 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       }
       check(e.prepare_resource_imports(pages, maximum, entries, tableMaximum));
       synchronizeIn();
-      if (backend.countsForwardingDepth && invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
+      if (backend.countsForwardingDepth && currentDepth() >= maxInvocationDepth) throw new Error('forwarding depth limit');
       // Start callbacks may inspect initialized resources while invocation/reload remain guarded.
       loaded = true;
       invoking = true;
-      if (backend.countsForwardingDepth) invocationDepth++;
-      try {
-        check(e.initialize());
-        drive(0n);
+      const finish = () => {
         synchronizeOut();
-      } catch (error) {
+      };
+      const failed = error => {
         if (e.segments_ready()) synchronizeOut();
         loaded = false;
         throw error;
-      } finally {
-        try {
-          if (e.pending_import() >= 0) e.resume64(0n, 1);
-        } finally {
-          if (backend.countsForwardingDepth) invocationDepth--;
-          invoking = false;
-        }
+      };
+      const cleanup = () => {
+        try { if (e.pending_import() >= 0) e.resume64(0n, 1); }
+        finally { invoking = false; }
+      };
+      if (asynchronous) {
+        const depth = currentDepth() + (backend.countsForwardingDepth ? 1 : 0);
+        return invocationContext.run(depth, async () => {
+          try { check(e.initialize()); await driveAsync(0n); finish(); }
+          catch (error) { failed(error); }
+          finally { cleanup(); }
+        });
       }
+      const run = () => {
+        try { check(e.initialize()); drive(0n); finish(); }
+        catch (error) { failed(error); }
+        finally { cleanup(); }
+      };
+      return backend.countsForwardingDepth ? invocationContext.run(currentDepth() + 1, run) : run();
+    },
+    async loadAsync(source, imports = {}) { return api.load(source, imports, false, true); },
+    async loadBinaryAsync(bytes, imports = {}) {
+      if (!(bytes instanceof Uint8Array)) throw new Error('binary source must be a Uint8Array');
+      return api.load(bytes, imports, true, true);
     },
     loadBinary(bytes, imports = {}) {
       if (!(bytes instanceof Uint8Array)) throw new Error('binary source must be a Uint8Array');
       return api.load(bytes, imports, true);
     },
-    invoke(/** @type {string} */ name, /** @type {(number | bigint)[]} */ ...args) {
-      requireIdle();
-      requireLoaded();
-      if (backend.countsForwardingDepth && invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
-      if (args.length > 128) throw new Error('too many arguments (maximum 128)');
-      const signature = functionSignature(name, false);
-      if (args.length !== signature.params.length) throw new Error('argument mismatch');
-      const values = args.map((arg, index) => {
-        try { return typedValue(arg, signature.params[index]); }
-        catch (error) {
-          if (signature.params[index] >= 5) throw error;
-          throw new Error(signature.params[index] === 2 ? 'arguments must be i64 BigInt integers' : signature.params[index] === 1 ? 'arguments must be i32 integers' : `arguments must be ${scalarNames[signature.params[index]]} Numbers`);
-        }
-      });
-      return invokeValues('', values, false, signature.index);
-    },
-    // Raw scalar slots preserve signaling NaNs and payloads for conformance assertions.
-    invokeRaw(name, ...args) {
-      requireIdle();
-      requireLoaded();
-      if (backend.countsForwardingDepth && invocationDepth >= maxInvocationDepth) throw new Error('forwarding depth limit');
-      const signature = functionSignature(name, false);
-      if (args.length !== signature.params.length) throw new Error('argument mismatch');
-      const values = args.map((arg, index) => {
-        return rawSlot(arg, signature.params[index]);
-      });
-      return invokeValues('', values, true, signature.index);
-    },
+    invoke(name, ...args) { return invokePublic(name, args, false); },
+    async invokeAsync(name, ...args) { return invokePublic(name, args, true); },
+    // Raw async slots also protect Promise externrefs from JavaScript promise assimilation.
+    async invokeRawAsync(name, ...args) { return invokeRawPublic(name, args, true); },
+    invokeRaw(name, ...args) { return invokeRawPublic(name, args, false); },
     // Return bytes reclaimed from the guest's private object arena; collection preserves live reference identity.
     collectGarbage() {
       requireIdle(); requireLoaded();
@@ -778,6 +844,10 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
           if (!loaded || generation !== currentGeneration) throw new Error('stale forwarded function');
           return api.invokeRaw(name, ...args);
         },
+        rawAsync: async args => {
+          if (!loaded || generation !== currentGeneration) throw new Error('stale forwarded function');
+          return api.invokeRawAsync(name, ...args);
+        },
         reference: () => {
           if (!loaded || generation !== currentGeneration) throw new Error('stale forwarded function');
           return functionReference(signature.index);
@@ -786,14 +856,28 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory} = {}) {
       exportedFunctions.set(signature.index, callback);
       return callback;
     },
-    exportNamespace() {
+    exportFunctionAsync(name) {
+      const synchronous = api.exportFunction(name);
+      if (asynchronousFunctions.has(synchronous)) return asynchronousFunctions.get(synchronous);
+      const metadata = functionTypes.get(synchronous);
+      const callback = async (...args) => {
+        if (!metadata.valid()) throw new Error('stale forwarded function');
+        return api.invokeAsync(name, ...args);
+      };
+      functionTypes.set(callback, metadata);
+      asynchronousFunctions.set(synchronous, callback);
+      asynchronousImports.add(callback);
+      return callback;
+    },
+    exportNamespaceAsync() { return api.exportNamespace(true); },
+    exportNamespace(asynchronous = false) {
       requireLoaded(); synchronizeIn();
       const namespace = Object.create(null);
       for (let index = 0; index < e.exports_count(); index++) {
         const view = new DataView(e.memory.buffer, memoryOffset), at = e.export_info(index);
         const name = readText(view.getUint32(at, true), view.getUint32(at + 4, true));
         const target = view.getInt32(at + 8, true), kind = view.getInt32(at + 20, true);
-        namespace[name] = kind ? exportResource(target, kind) : api.exportFunction(name);
+        namespace[name] = kind ? exportResource(target, kind) : asynchronous ? api.exportFunctionAsync(name) : api.exportFunction(name);
       }
       return namespace;
     },

@@ -3,7 +3,7 @@
 wiw implements an interpreter in WAT, advancing from its completed 1.0 baseline
 for the pinned WebAssembly 3.0 suite. m4 assembles readable
 source modules; wat2wasm builds the bootstrap and wasm-opt optimizes it. Node
-transports bytes, binds synchronous callbacks and coordinates shared resources.
+transports bytes, binds host callbacks and coordinates shared resources.
 The engine parses and validates guest text and binary modules itself.
 
 ## Parsing and validation
@@ -218,12 +218,14 @@ Imported immutable globals can initialize globals and active segment offsets.
 Exports use decoded UTF-8 names and retain resource kinds.
 
 Node namespaces expose typed functions and opaque resources. Aliased exports
-share handles. Resource state synchronizes before/after synchronous invocations
+share handles. Resource state synchronizes before/after invocations
 and host callbacks, including trap paths. Table entries retain their owning
 instance and internal function index, so unexported functions are callable.
 Forwarded entries collapse to their original reference to avoid artificial
 reentry cycles. Reload makes old function/resource generations stale.
-Concurrent invocation of a shared resource is outside this synchronous protocol.
+Async host waits yield after publishing resource state and import current shared
+state before guest resumption. Guest execution is serialized between boundaries;
+this is cooperative synchronization, not concurrent access to guest memory.
 
 Standalone load initializes storage directly. A load with resource imports defers
 initialization until storage is prepared and bindings are installed. Active elements
@@ -235,7 +237,19 @@ functions; public invocation of the failed instance remains unavailable.
 Start state is 0 completed/absent, 1 pending, 2 running/suspended or 3 failed.
 
 Imports suspend through pending argument slots and resume with a value or host
-failure. Callbacks must be synchronous. They can inspect/mutate resources and
+failure. Synchronous APIs reject Promise-returning callbacks. `loadAsync`,
+`loadBinaryAsync`, `invokeAsync` and `invokeRawAsync` use the same host drive
+state machine, yielding only for awaitable imports. Start initialization remains
+protected until its last import resumes. Result decoding is boxed internally so
+an opaque Promise externref cannot delay cleanup; public non-raw async results
+then follow normal JavaScript Promise assimilation. Externref import promises
+are opaque unless explicitly wrapped with `asyncImport`. Typed async forwarding
+uses raw slots, including indirect function references, retaining NaN payloads,
+vector halves and reference identity. An AsyncLocalStorage call depth bounds
+forwarding across awaits without charging unrelated concurrent invocations.
+Both paths resume rejected guest exceptions through their original tag identity,
+and abort pending imports on host failure before releasing the instance guard.
+Callbacks can inspect/mutate resources and
 invoke another instance; active-instance invoke/reload is rejected. Nested host
 forwarding is bounded at 128 invocations. The WAT engine has no native Wasm imports. The bootstrap now uses native
 bulk-memory, sign-extension and nontrapping float-conversion instructions; Binaryen receives
