@@ -4071,3 +4071,27 @@ mode, in either order with `--wasi`. Host option parsing stops at the filename,
 so guest arguments remain verbatim. `--wasi` is an optional, documented mode
 switch; ordinary invocation still requires a named export. The API factories,
 WASI helper defaults and `make check` retain their existing self-hosted selection.
+
+
+### Export CLI input, fuel and result parity
+
+Ordinary CLI export invocation reads guest files as bytes, recognizes Wasm magic
+through the same private helper used by WASI loading, and otherwise decodes
+strict UTF-8 WAT. Filename extensions do not determine the decoder. The common
+CLI fuel default is 100,000,000, with exact unsigned 64-bit parsing; the budget
+is set before load so automatic start functions cannot escape it. These changes
+do not alter the public API factories or their fuel defaults.
+
+Argument decoding follows each declared parameter kind: i64 and v128 retain
+BigInt precision, explicit infinity/NaN spellings remain numeric, and malformed
+numeric text is rejected. CLI reference arguments support null; live wrappers
+remain an embedding API facility. Single numeric results retain plain output,
+with signed zero preserved, while vectors use labeled 32-digit hex patterns.
+Multi-value exports print one typed result per line. Opaque reference markers
+communicate that output is not a transferable host handle.
+
+The CLI regressions cover text and binary inputs with misleading extensions,
+wide integer and vector boundaries, mixed results, void exports, reference nulls,
+malformed input/arguments, fuel exhaustion during invocation and automatic
+start, and u64 fuel limits. Both compiled and self-hosted check targets execute
+the matrix at their selected runtime.

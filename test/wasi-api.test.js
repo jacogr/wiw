@@ -373,7 +373,7 @@ test('CLI defaults to compiled Wasm and bootstrap selects self-hosted WAT', asyn
     }
 
     // WASI-only options must not silently configure ordinary export invocation.
-    const wrongMode = invoke(['--fuel', '1', file, 'answer']);
+    const wrongMode = invoke(['--env', 'TEST=value', file, 'answer']);
 
     assert.equal(wrongMode.status, 1);
     assert.match(wrongMode.stderr, /WASI options require --wasi/);

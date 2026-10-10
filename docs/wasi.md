@@ -23,7 +23,9 @@ node wiw.js --wasi --reactor reactor.wasm
 export. Guest arguments follow the filename; no export name is required.
 `--runtime wasm|wat` selects the interpreter mode. Compiled Wasm is the CLI
 default; `--bootstrap` aliases `--runtime wat` for self-hosted inception.
-The default fuel is 100,000,000 instructions per invocation.
+The shared `--fuel` option accepts unsigned 64-bit budgets in both CLI modes.
+The default is 100,000,000 instructions per invocation, applied before loading
+to bound automatic module starts as well as the requested entry point.
 `--env NAME=VALUE` and `--dir GUEST=HOST` are repeatable. Environment entries and
 preopens default to empty; the CLI does not inherit the process environment or
 working directory into the guest. Arguments start with the guest filename as

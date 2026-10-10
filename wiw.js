@@ -2949,6 +2949,11 @@ export function createWasiHost(engine, options = {}) {
   });
 }
 
+// Recognize Wasm by its magic bytes so guest loading does not depend on the filename extension.
+function isWasmBinary(bytes) {
+  return bytes[0] === 0 && bytes[1] === 0x61 && bytes[2] === 0x73 && bytes[3] === 0x6d;
+}
+
 /** Load WAT or Wasm with fresh Preview 1 imports; the caller owns the returned host. */
 export async function loadWasi(source, options = {}) {
   const {
@@ -2990,8 +2995,7 @@ export async function loadWasi(source, options = {}) {
     // Detect binary bytes explicitly and decode other byte input as strict UTF-8 WAT.
     if (source instanceof Uint8Array) {
       // Use the binary decoder only when the input begins with the Wasm magic bytes.
-      if (source[0] === 0 && source[1] === 97 && source[2] === 115 && source[3] === 109)
-        await engine.loadBinaryAsync(source, bindings);
+      if (isWasmBinary(source)) await engine.loadBinaryAsync(source, bindings);
       else await engine.loadAsync(new TextDecoder('utf-8', { fatal: true }).decode(source), bindings);
     }
     // Load string input directly as WAT without a byte-decoding round trip.
@@ -3035,21 +3039,23 @@ export async function runWasi(source, options = {}) {
   }
 }
 
-const cliUsage = `Usage: node wiw.js [options] <file.wat> <export> [scalar arguments...]
+const cliUsage = `Usage: node wiw.js [options] <guest.wat|guest.wasm> <export> [arguments...]
   --runtime wasm|wat   Compiled Wasm (default, faster) or self-hosted WAT
   --bootstrap          Alias for --runtime wat (inception: wiw interprets itself)
   --wasi               Run a WASI Preview 1 guest; omit <export> and pass guest arguments
                        Accepts WAT or Wasm; guest filename becomes argv[0]
-  --fuel INTEGER       WASI per-invocation fuel (default 100000000)
+  --fuel INTEGER       Unsigned 64-bit per-invocation fuel (default 100000000)
   --env NAME=VALUE     WASI guest environment entry; repeatable
   --dir GUEST=HOST     WASI preopened directory mapping; repeatable
   --reactor            WASI: initialize _initialize instead of invoking _start
   --help               Show usage
-Place host options before the guest filename. WASI environment and preopens default to empty.`;
+Place host options before the guest filename. WASI environment and preopens default to empty.
+i64 and v128 arguments accept decimal or hexadecimal integers with an optional n suffix.
+Multiple results use one typed line per value; vectors use a fixed-width 128-bit hex pattern.`;
 
 // Parse shared CLI options before the filename, retaining the remaining guest arguments verbatim.
 function parseCli(arguments_) {
-  const options = { runtime: 'wasm', env: Object.create(null), preopens: Object.create(null) };
+  const options = { runtime: 'wasm', fuel: 100_000_000n, env: Object.create(null), preopens: Object.create(null) };
   let wasi = false,
     wasiOptions = false;
 
@@ -3100,31 +3106,30 @@ function parseCli(arguments_) {
       // Runtime selection applies equally to export and WASI invocation.
       if (argument === '--runtime') {
         options.runtime = value;
+      } else if (argument === '--fuel') {
+        // Preserve the complete unsigned 64-bit budget without converting through a Number.
+        if (!/^\d+$/.test(value)) throw new Error('fuel must be an unsigned integer');
+
+        options.fuel = BigInt(value);
+
+        // Reject an unrepresentable budget before loading either the guest or its interpreter.
+        if (options.fuel > (1n << 64n) - 1n) throw new Error('fuel must be an unsigned i64 integer');
       } else {
-        // Remaining valued options configure the WASI host rather than export invocation.
+        // Environment and preopen mappings configure only the WASI host.
         wasiOptions = true;
 
-        // Preserve large fuel budgets without converting through a Number.
-        if (argument === '--fuel') {
-          // Require an unsigned decimal integer before constructing a BigInt.
-          if (!/^\d+$/.test(value)) throw new Error('fuel must be an unsigned integer');
+        const split = value.indexOf('=');
 
-          options.fuel = BigInt(value);
-        } else {
-          // Preserve equals signs in environment values and directory paths.
-          const split = value.indexOf('=');
+        // Require a nonempty guest-side name before separating the mapping value.
+        if (split < 1) throw new Error(`${argument} requires NAME=VALUE`);
 
-          // Require a nonempty guest-side name for environment and preopen mappings.
-          if (split < 1) throw new Error(`${argument} requires NAME=VALUE`);
+        const key = value.slice(0, split),
+          content = value.slice(split + 1);
 
-          const key = value.slice(0, split),
-            content = value.slice(split + 1);
+        // Reject preopen mappings without a host directory target.
+        if (argument === '--dir' && !content) throw new Error('--dir requires a host directory');
 
-          // Reject a preopen mapping with no host directory target.
-          if (argument === '--dir' && !content) throw new Error('--dir requires a host directory');
-
-          options[argument === '--env' ? 'env' : 'preopens'][key] = content;
-        }
+        options[argument === '--env' ? 'env' : 'preopens'][key] = content;
       }
 
       continue;
@@ -3156,31 +3161,100 @@ async function runWasiCli(arguments_, options) {
   process.exitCode = (await runWasi(await readFile(file), options)) & 255;
 }
 
-// Invoke a named export through the selected compiled or self-hosted interpreter.
-async function runExportCli(arguments_, { runtime }) {
+// Convert a CLI value to its declared guest kind without rounding wide integer or vector patterns.
+function cliArgument(argument, type) {
+  // Wide numeric values must remain BigInts throughout parsing and invocation.
+  if (type === 'i64' || type === 'v128') {
+    const literal = argument.endsWith('n') ? argument.slice(0, -1) : argument;
+
+    const integer = literal.match(/^([+-]?)(\d+|0[xX][0-9a-fA-F]+)$/);
+
+    // Require a complete integer spelling; empty arguments must not silently become zero.
+    if (!integer) throw new Error(`${type} argument must be a decimal or hexadecimal integer`);
+
+    // BigInt does not parse signed hexadecimal text directly, so retain the sign separately from its magnitude.
+    const magnitude = BigInt(integer[2]);
+
+    return integer[1] === '-' ? -magnitude : magnitude;
+  }
+
+  // CLI references can express null; live function and object handles belong to the embedding API.
+  if (type.endsWith('ref')) {
+    // Reject arbitrary strings rather than constructing an untyped or forged host handle.
+    if (argument !== 'null') throw new Error(`${type} CLI argument must be null; use the API for live references`);
+
+    return null;
+  }
+
+  // Preserve the familiar infinity spellings while leaving declared-width rounding to the interpreter.
+  const value =
+    argument === 'inf' || argument === '+inf' ? Infinity : argument === '-inf' ? -Infinity : Number(argument);
+
+  // Only explicit NaN spellings may become NaN; malformed numeric text must not silently turn into one.
+  if (!argument.length || argument.trim() !== argument || (Number.isNaN(value) && !/^[+-]?nan$/i.test(argument))) {
+    throw new Error(`${type} argument must be a number`);
+  }
+
+  return value;
+}
+
+// Format one result while retaining signed zero and the complete raw vector width.
+function cliResult(value, type) {
+  // A lane-independent hex pattern exposes both vector halves without interpreting them as an integer result.
+  if (type === 'v128') return `0x${BigInt.asUintN(128, value).toString(16).padStart(32, '0')}`;
+
+  // Opaque host handles have no reusable CLI spelling, but null reference results remain inspectable.
+  if (type.endsWith('ref')) return value === null ? 'null' : '<opaque reference>';
+
+  return Object.is(value, -0) ? '-0' : String(value);
+}
+
+// Invoke a named export from WAT or binary input using the selected runtime and instruction budget.
+async function runExportCli(arguments_, { runtime, fuel }) {
   const [file, name, ...values] = arguments_;
 
-  // Require both a guest file and a named export for scalar invocation.
+  // Require both a guest file and a named export before constructing the interpreter.
   if (!file || name === undefined) throw new Error(cliUsage);
 
   const interpreter = await (runtime === 'wat' ? createInterpreter() : createBootstrapInterpreter());
 
-  interpreter.load(await readFile(file, 'utf8'));
+  // Apply fuel before loading so automatic module start functions cannot escape the requested budget.
+  interpreter.setFuel64(fuel);
+
+  const source = await readFile(file);
+
+  // Use content detection for both formats, including files with unconventional or misleading extensions.
+  if (isWasmBinary(source)) {
+    interpreter.loadBinary(source);
+  } else {
+    // Reject malformed UTF-8 instead of silently replacing bytes in the WAT source.
+    interpreter.load(new TextDecoder('utf-8', { fatal: true }).decode(source));
+  }
 
   const signature = interpreter.signature(name);
-  const args = values.map((arg, index) =>
-    signature.params[index] === 'i64'
-      ? BigInt(arg.endsWith('n') ? arg.slice(0, -1) : arg)
-      : arg === 'inf' || arg === '+inf'
-      ? Infinity
-      : arg === '-inf'
-      ? -Infinity
-      : Number(arg)
-  );
+
+  // Check arity before interpreting any argument using its declared guest kind.
+  if (values.length !== signature.params.length) throw new Error('argument mismatch');
+
+  // Parse each value at its own width; mixed scalar and vector signatures must not share Number coercion.
+  const args = values.map((argument, index) => cliArgument(argument, signature.params[index]));
   const value = interpreter.invoke(name, ...args);
 
-  // Print a returned value while leaving void export calls silent.
-  if (value !== undefined) console.log(String(value));
+  // Void exports produce no output in either text or binary mode.
+  if (value === undefined) return;
+
+  // Multi-value returns retain order and an explicit type on every output line.
+  if (Array.isArray(signature.result)) {
+    // Format each result using its corresponding declared type rather than coercing the array to a comma-separated string.
+    value.forEach((result, index) =>
+      console.log(`${signature.result[index]}: ${cliResult(result, signature.result[index])}`)
+    );
+  } else {
+    // Keep single numeric scalar output compatible; vectors and references require their type label.
+    const typed = signature.result === 'v128' || signature.result.endsWith('ref');
+
+    console.log(`${typed ? signature.result + ': ' : ''}${cliResult(value, signature.result)}`);
+  }
 }
 
 // Run the CLI only when this module is the process entry point, allowing side-effect-free library imports.

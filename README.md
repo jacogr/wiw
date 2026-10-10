@@ -22,6 +22,32 @@ These examples print `42`, `120`, and `2.5`. Use
 `node wiw.js --bootstrap test/constant.wat answer` for self-hosted inception.
 `--runtime wasm` explicitly selects the faster compiled engine; `--runtime wat`
 is equivalent to `--bootstrap`. Runtime selection is independent of `DEBUG`.
+
+Ordinary export invocation accepts WAT and Wasm files. Input is detected from
+Wasm magic bytes, not the extension; WAT bytes must be valid UTF-8. `--fuel`
+sets an unsigned 64-bit per-invocation budget in either CLI mode, defaulting to
+100,000,000. It is applied before loading to bound automatic module starts too.
+The self-hosted parent retains its separate execution budget.
+
+i64 and v128 arguments accept decimal or hexadecimal integer patterns, with an
+optional `n` suffix. Floats accept numeric literals, `inf`, `-inf` and `NaN`;
+invalid numeric text is rejected. Reference arguments can be `null`; use the API
+for live handles. Single numeric results retain plain output, including `-0`,
+and void exports stay silent. Vectors print `v128: 0x` followed by all 32 hex
+digits. Multiple results print one line per slot in declaration order, for
+example:
+
+```text
+i32: -7
+i64: -9223372036854775808
+f32: -0
+f64: Infinity
+v128: 0xfedcba98765432100123456789abcdef
+```
+
+Reference results use their type followed by `null` or `<opaque reference>`;
+the printed opaque marker is not a reusable handle.
+
 `make` produces readable expanded `build/wiw.wat`, the intermediate bootstrap
 binary, and optimized `build/wiw-opt.wasm`. It also emits compact `build/wiw-opt.wat`
 from that optimized binary for the interpreted copy. Guest text and binary
