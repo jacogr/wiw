@@ -31,6 +31,11 @@
 		(global.set $gc-map-used (i32.const 0))
 		(global.set $gc-temp-count (i32.const 0))
 		(global.set $gc-calls (i32.const 0))
+		(global.set $reentry-floor (i32.const 0))
+		(global.set $reentry-stack (i32.const 0))
+		(global.set $reentry-control (i32.const 0))
+		(global.set $reentry-context (i32.const 0))
+
 		(global.set $gc-replacing-global (i32.const -1))
 		(global.set $exception-value (i64.const 0))
 		(global.set $gc-initializing (i32.const 1))

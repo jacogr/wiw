@@ -175,12 +175,12 @@ for (const binary of ['wiw-opt.wasm']) {
     assert.equal(caller.readMemory(128, 1)[0], 0); // Equal pointer values never imply shared memory.
   });
 
-  test(`${binary}: reentry, cyclic forwarding and missing bindings fail without stranding an invocation`, async () => {
+  test(`${binary}: callback reentry, bounded cyclic forwarding and missing bindings recover cleanly`, async () => {
     const i = await createInterpreter(url);
-    const source = '(module (import "env" "f" (func $f (result i32))) (func (export "run") (result i32) call $f))';
+    const source = '(module (import "env" "f" (func $f (result i32))) (func (export "inner") (result i32) i32.const 42) (func (export "run") (result i32) call $f))';
     let observed = 0;
     i.load(source, { env: { f: () => {
-      assert.throws(() => i.invoke('run'), /already invoking/);
+      assert.equal(i.invoke('inner'),42);
       assert.throws(() => i.load('(module)'), /already invoking/);
       observed++;
       return 42;

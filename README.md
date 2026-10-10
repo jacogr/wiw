@@ -223,10 +223,31 @@ callbacks retain their cause; rejected `WiwException` values enter guest handler
 callbacks. Async guest calls can also await ordinary typed forwarding bindings
 and indirect calls through shared tables. The default 128-instance forwarding limit
 follows each call chain across awaits; independent instances can run concurrently.
-An active instance stays protected against invoke, load and garbage collection
+An active instance accepts nested invocations from its own host callback chain.
+Unrelated overlapping calls, reloads and explicit garbage collection stay guarded
 until guest execution finishes. Callbacks can read, mutate and grow resources
 before or after an await. Shared resources synchronize at suspension/resumption
 boundaries; guest execution remains serialized between those boundaries.
+
+Nested calls retain the outer frames, operand values, control regions and fuel.
+Their exceptions return to the host callback first; throwing that exception from
+the callback enters the outer guest's handlers. Each nested invocation starts
+with the configured fuel limit, while the outer invocation retains its remaining
+budget. Nested calls share the instance's call, operand and control quotas. Each
+reentry reserves one boundary call-frame slot in addition to guest frames.
+
+Use `invoke`/`invokeRaw` for synchronous reentry, and await
+`invokeAsync`/`invokeRawAsync` from callbacks of asynchronous invocations.
+Asynchronous reentry requires an asynchronous outer invocation. Start callbacks
+can invoke already initialized exports and table functions. Resource writes and
+growth made by nested calls remain visible to their caller, including trap paths.
+
+Only the active callback chain can reenter an instance; expired callback scopes
+and sibling calls while another nested call owns the instance are rejected.
+Async children that a callback starts without awaiting are joined before its
+outer guest resumes, including when the callback throws. Reload and explicit
+collection remain unavailable during callbacks; automatic collection traces
+all suspended and nested guest frames.
 
 A Promise is also a valid opaque `externref`. Such imports remain unawaited by
 default; wrap a callback with the exported `asyncImport(callback)` helper when its
@@ -244,8 +265,7 @@ await engine.loadAsync(`(module
 console.log(await engine.invokeAsync('answer')); // 42
 ```
 Typed bindings check full signatures. Callback failures retain their cause.
-A callback can access resources and invoke a different instance; reentry into
-its own active instance fails. Each active segment checks its complete bounds before writing. Earlier completed
+A callback can access resources and invoke its own or a different instance. Each active segment checks its complete bounds before writing. Earlier completed
 segments and writes made by a trapping start remain observable, as specified in 2.0. Resource sharing is
 synchronized at guest/host call boundaries.
 

@@ -156,7 +156,7 @@
 		(global.set $pending-offset (global.get $tok))
 		(global.set $saved-calls (local.get $calls))
 		;; Imported exception allocation uses the same precise roots as the suspended call site.
-		(global.set $gc-calls (local.get $calls))
+		(global.set $gc-calls (select (local.get $calls) (global.get $reentry-floor) (local.get $calls)))
 		(global.set $gc-stack-end (global.get $sp))
 		;; The caller has already published its instruction following the call.
 		(if (local.get $calls)
@@ -174,8 +174,8 @@
 		(local $i i32)
 		(local $count i32)
 
-		(global.set $sp (i32.const 0))
-		(global.set $control-count (i32.const 0))
+		(global.set $sp (global.get $reentry-stack))
+		(global.set $control-count (global.get $reentry-control))
 		(global.set $tok (i32.load offset=28 (call $function (local.get $index))))
 		;; A root import consumes one fuel unit just like an imported call instruction.
 		(if (i64.eqz (global.get $fuel-limit))
@@ -185,17 +185,24 @@
 			)
 		)
 		(local.set $count (i32.load offset=16 (call $function (local.get $index))))
+		;; Nested exported imports must not write arguments beyond the shared operand arena.
+		(if (i32.gt_u (i32.add (global.get $reentry-stack) (local.get $count)) (global.get $operand-limit))
+			(then
+				(call $fail (i32.const M4_ERR_RESOURCE_LIMIT))
+				(return (i64.const 0))
+			)
+		)
 		;; Finish after copying every declared parameter into protected operand slots.
 		(block $done
 			;; Arguments must survive memory growth and scratch writes while the host handles the call.
 			(loop $args
 				(br_if $done (i32.eq (local.get $i) (local.get $count)))
 				(i64.store
-					(i32.add (global.get $stack-base) (i32.mul (local.get $i) (i32.const 8)))
+					(i32.add (global.get $stack-base) (i32.mul (i32.add (global.get $reentry-stack) (local.get $i)) (i32.const 8)))
 					(i64.load (i32.add (local.get $args) (i32.mul (local.get $i) (i32.const 8))))
 				)
 				(i64.store
-					(i32.add (global.get $stack-high-base) (i32.mul (local.get $i) (i32.const 8)))
+					(i32.add (global.get $stack-high-base) (i32.mul (i32.add (global.get $reentry-stack) (local.get $i)) (i32.const 8)))
 					(i64.load
 						(i32.add (global.get $argument-high-base) (i32.mul (local.get $i) (i32.const 8)))
 					)
@@ -438,4 +445,10 @@
 		)
 		(call $use-memory (i32.const 0))
 		(call $guest-grow (local.get $delta))
+	)
+
+
+	;; Bound trusted host result writes before they can overwrite a retained operand or another arena.
+	(func (export "pending_result_capacity") (result i32)
+		(i32.sub (global.get $operand-limit) (global.get $sp))
 	)

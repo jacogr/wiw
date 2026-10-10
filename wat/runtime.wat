@@ -212,16 +212,16 @@
 						(return (call $root-import (local.get $index) (local.get $args)))
 					)
 				)
-				(global.set $sp (i32.const 0))
-				(global.set $control-count (i32.const 0))
-				(local.set $frame (global.get $call-base))
-				(local.set $calls (i32.const 1))
+				(global.set $sp (global.get $reentry-stack))
+				(global.set $control-count (global.get $reentry-control))
+				(local.set $frame (i32.add (global.get $call-base) (i32.mul (global.get $reentry-floor) (global.get $call-bytes))))
+				(local.set $calls (i32.add (global.get $reentry-floor) (i32.const 1)))
 				(local.set $fuel (global.get $fuel-limit))
 				(call $enter
 					(local.get $index)
 					(local.get $frame)
-					(global.get $call-high-base)
-					(i32.const 0)
+					(i32.add (global.get $call-high-base) (i32.mul (global.get $reentry-floor) (global.get $local-bytes)))
+					(global.get $reentry-stack)
 					(local.get $args)
 				)
 			)
@@ -307,12 +307,12 @@
 					;; Function completion removes its implicit root and any remaining callee labels.
 					(global.set $control-count (i32.load (i32.add (local.get $frame) (global.get $call-root-offset))))
 					;; Returning from the root finishes the invocation, with zero as a void placeholder.
-					(if (i32.eq (local.get $calls) (i32.const 1))
+					(if (i32.eq (local.get $calls) (i32.add (global.get $reentry-floor) (i32.const 1)))
 						(then
 							;; A declared scalar result occupies the first operand slot.
 							(if (global.get $last-results)
 								(then
-									(return (i64.load (global.get $stack-base)))
+									(return (i64.load (call $result-base)))
 								)
 							)
 							(return (i64.const 0))

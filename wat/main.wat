@@ -38,4 +38,5 @@ m4_include(<!m4/encodings.m4!>)m4_dnl
 	m4_include(<!instructions.wat!>)
 	m4_include(<!parser.wat!>)
 	m4_include(<!runtime.wat!>)
+	m4_include(<!reentry.wat!>)
 )

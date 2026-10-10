@@ -747,7 +747,7 @@
 		(block $uncaught
 			;; Inner regions and earlier clauses take precedence over outer handlers.
 			(loop $controls
-				(br_if $uncaught (i32.eqz (local.get $i)))
+				(br_if $uncaught (i32.le_u (local.get $i) (global.get $reentry-control)))
 				(local.set $i (i32.sub (local.get $i) (i32.const 1)))
 				(local.set $control (call $control (local.get $i)))
 				;; Ordinary blocks and function roots cannot catch an exception.

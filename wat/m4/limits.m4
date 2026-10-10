@@ -195,3 +195,27 @@ m4_define(<!M4_LIMIT_MAX_EXPORTS!>,<!16777216!>)m4_dnl
 m4_define(<!M4_LIMIT_MAX_GLOBALS!>,<!16777216!>)m4_dnl
 m4_define(<!M4_LIMIT_MAX_CALL_FRAMES!>,<!65535!>)m4_dnl
 m4_define(<!M4_LIMIT_MAX_MEMORY_PAGES!>,<!65536!>)m4_dnl
+
+m4_dnl Suspended callback boundary fields live in an otherwise unused call-frame slot.
+m4_define(<!M4_REENTRY_ERROR_OFFSET!>,<!16!>)m4_dnl
+m4_define(<!M4_REENTRY_OFFSET_OFFSET!>,<!24!>)m4_dnl
+m4_define(<!M4_REENTRY_TOK_OFFSET!>,<!32!>)m4_dnl
+m4_define(<!M4_REENTRY_LAST_RESULTS_OFFSET!>,<!40!>)m4_dnl
+m4_define(<!M4_REENTRY_SP_OFFSET!>,<!48!>)m4_dnl
+m4_define(<!M4_REENTRY_CONTROL_COUNT_OFFSET!>,<!56!>)m4_dnl
+m4_define(<!M4_REENTRY_SAVED_CALLS_OFFSET!>,<!64!>)m4_dnl
+m4_define(<!M4_REENTRY_SAVED_FRAME_OFFSET!>,<!72!>)m4_dnl
+m4_define(<!M4_REENTRY_SAVED_FUEL_OFFSET!>,<!80!>)m4_dnl
+m4_define(<!M4_REENTRY_RESUMING_OFFSET!>,<!88!>)m4_dnl
+m4_define(<!M4_REENTRY_PENDING_IMPORT_OFFSET!>,<!96!>)m4_dnl
+m4_define(<!M4_REENTRY_PENDING_OFFSET_OFFSET!>,<!104!>)m4_dnl
+m4_define(<!M4_REENTRY_GC_CALLS_OFFSET!>,<!112!>)m4_dnl
+m4_define(<!M4_REENTRY_GC_PC_OFFSET!>,<!120!>)m4_dnl
+m4_define(<!M4_REENTRY_GC_STACK_END_OFFSET!>,<!128!>)m4_dnl
+m4_define(<!M4_REENTRY_EXCEPTION_PENDING_OFFSET!>,<!136!>)m4_dnl
+m4_define(<!M4_REENTRY_EXCEPTION_VALUE_OFFSET!>,<!144!>)m4_dnl
+m4_define(<!M4_REENTRY_START_STATE_OFFSET!>,<!152!>)m4_dnl
+m4_define(<!M4_REENTRY_REENTRY_FLOOR_OFFSET!>,<!160!>)m4_dnl
+m4_define(<!M4_REENTRY_REENTRY_STACK_OFFSET!>,<!168!>)m4_dnl
+m4_define(<!M4_REENTRY_REENTRY_CONTROL_OFFSET!>,<!176!>)m4_dnl
+m4_define(<!M4_REENTRY_REENTRY_CONTEXT_OFFSET!>,<!184!>)m4_dnl

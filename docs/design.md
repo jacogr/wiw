@@ -239,8 +239,8 @@ Start state is 0 completed/absent, 1 pending, 2 running/suspended or 3 failed.
 Imports suspend through pending argument slots and resume with a value or host
 failure. Synchronous APIs reject Promise-returning callbacks. `loadAsync`,
 `loadBinaryAsync`, `invokeAsync` and `invokeRawAsync` use the same host drive
-state machine, yielding only for awaitable imports. Start initialization remains
-protected until its last import resumes. Result decoding is boxed internally so
+state machine, yielding only for awaitable imports. Start initialization protects reloads until its last import resumes; initialized
+functions can be invoked from a start callback. Result decoding is boxed internally so
 an opaque Promise externref cannot delay cleanup; public non-raw async results
 then follow normal JavaScript Promise assimilation. Externref import promises
 are opaque unless explicitly wrapped with `asyncImport`. Typed async forwarding
@@ -250,7 +250,7 @@ forwarding across awaits without charging unrelated concurrent invocations.
 Both paths resume rejected guest exceptions through their original tag identity,
 and abort pending imports on host failure before releasing the instance guard.
 Callbacks can inspect/mutate resources and
-invoke another instance; active-instance invoke/reload is rejected. Nested host
+invoke their own or another instance; reloads and unrelated overlapping calls remain guarded. Nested host
 forwarding defaults to a configurable 128 invocations. The WAT engine has no native Wasm imports. The bootstrap now uses native
 bulk-memory, sign-extension and nontrapping float-conversion instructions; Binaryen receives
 explicit feature flags. These instructions are also supported by guest dispatch,
@@ -3966,3 +3966,59 @@ Separate probes verify 65,537 functions, 65,537 globals surviving collection,
 65,536 external host identities and a 129-instance forwarding chain in both
 modes. These large probes are kept out of routine CI to avoid adding peak memory
 and construction work to every test run.
+
+
+## Same-instance host callback reentry
+
+`begin_reentry` records suspended execution fields in one unused call-frame
+slot. A sentinel function index marks this synthetic boundary. It saves import
+identity, continuation, error/exception state, control and operand cursors,
+precise collector cursors, start lifecycle, and the preceding boundary. Inner
+frames append above it; operands append above the outer import's arguments.
+The ordinary call, operand and control quotas apply to the complete active chain.
+No arena copies, new interpreter instance, or metadata allocation are required.
+`end_reentry` restores the saved fields after result decoding or failure cleanup.
+Guest memory/global/table writes, heap allocations and module metadata changes
+remain visible, while the outer continuation and its fuel remain intact.
+
+Root completion and result addresses use the current boundary's call/operand
+floor. Imported roots preserve outer frames when publishing collector state.
+The collector skips synthetic frame locals, marks their saved exception values,
+and traces every ordinary outer and inner frame with its existing precise maps.
+Exception search stops at the current control floor; uncaught inner exceptions
+reach the host callback before any outer guest handler can catch a rethrow.
+
+The Node adapter tracks invocation ownership separately from callback scope.
+AsyncLocalStorage retains callback capabilities across awaits and typed
+forwarding cycles, including A-to-B-to-A. A live scope must match the instance's
+current invocation owner. Unrelated callers and siblings cannot overwrite a
+running child, and expired scopes cannot authorize later reentry. A synchronous
+outer invocation rejects asynchronous children because it cannot await their
+completion. Async callback cleanup joins children, including unawaited children
+and children left running after a callback failure, before restoring the outer
+continuation. Reload and explicit collection remain guarded throughout.
+
+
+The shared operand ceiling is checked before exported-import argument copies and
+host result writes. Enlarged parameter/result quotas and nested callbacks can
+otherwise place a vector beyond the current operand arena before resume has a
+chance to reject it. Boundary regressions verify that these failures preserve
+the outer operands and leave the instance reusable.
+
+
+Child joining tracks boxed guest-completion promises separately from public
+async result promises. This keeps cleanup independent of Promise assimilation:
+an opaque Promise returned as externref can remain pending after its guest call
+finishes. A callback that awaits the public result still opts into JavaScript's
+normal assimilation; unawaited children cannot delay outer cleanup solely due
+to that opaque result. Raw async slots retain the reference without assimilation.
+
+
+Final validation passes 324 tests and all 65,199 pinned wg-3.0 commands in both
+optimized execution modes, with zero failures or skips. The compiled suite takes
+11.37 seconds; self-hosted execution takes 137.73 seconds. Sixteen new callback
+reentry regressions cover sync/async nesting, native-Wasm text/binary comparison,
+precise GC roots, raw NaN/vector values, imported/tail roots, start callbacks,
+exception boundaries, cross-instance callback cycles, child joining, expired
+scopes, sibling exclusion, fuel/call quotas and operand write ceilings. These
+full-run timings are diagnostic measurements rather than paired speedups.

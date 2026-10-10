@@ -391,3 +391,9 @@
 	(global $shape-bytes (mut i32) (i32.const 516))
 	(global $local-name-mask (mut i32) (i32.const M4_LOCAL_NAME_INDEX_MASK))
 	(global $big-limb-limit (mut i32) (i32.const M4_BIG_LIMB_CAPACITY))
+
+	;; Each host callback reentry retains its caller below one synthetic boundary frame.
+	(global $reentry-floor (mut i32) (i32.const 0))
+	(global $reentry-stack (mut i32) (i32.const 0))
+	(global $reentry-control (mut i32) (i32.const 0))
+	(global $reentry-context (mut i32) (i32.const 0))

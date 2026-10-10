@@ -42,7 +42,7 @@ for (const binary of ['wiw-opt.wasm']) {
       assert.equal(engine.getGlobal('g'), 0);
       engine.setGlobal('g', 7);
       engine.writeMemory(1, new Uint8Array([99]));
-      assert.throws(() => engine.invoke('missing'), /already invoking/);
+      assert.throws(() => engine.invoke('missing'), /unknown export/);
       assert.throws(() => engine.load(basic), /already invoking/);
       return 999; // A start's void return ignores callback values.
     };

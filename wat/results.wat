@@ -204,10 +204,10 @@
 	)
 
 	;; Expose completed result slots to the trusted host adapter for multivalue returns.
-	(func (export "result_base")
+	(func $result-base (export "result_base")
 		(result i32)
 
-		(global.get $stack-base)
+		(i32.add (global.get $stack-base) (i32.shl (global.get $reentry-stack) (i32.const 3)))
 	)
 
 	;; Resolve deferred control signatures into result and parameter shapes after all type declarations.
@@ -326,10 +326,10 @@
 	)
 
 	;; Expose completed result high halves in declaration order.
-	(func (export "result_high_base")
+	(func $result-high-base (export "result_high_base")
 		(result i32)
 
-		(global.get $stack-high-base)
+		(i32.add (global.get $stack-high-base) (i32.shl (global.get $reentry-stack) (i32.const 3)))
 	)
 
 	;; Check whether every actual result satisfies the enclosing expected result vector.
@@ -414,8 +414,8 @@
 			)
 		)
 		(i32.store (local.get $at) (local.get $count))
-		(i32.store offset=M4_HOST_RESULT_BASE_OFFSET (local.get $at) (global.get $stack-base))
-		(i32.store offset=M4_HOST_RESULT_HIGH_OFFSET (local.get $at) (global.get $stack-high-base))
+		(i32.store offset=M4_HOST_RESULT_BASE_OFFSET (local.get $at) (call $result-base))
+		(i32.store offset=M4_HOST_RESULT_HIGH_OFFSET (local.get $at) (call $result-high-base))
 		(call $write-shape-kinds (global.get $last-results) (i32.add (local.get $at) (i32.const M4_HOST_RESULT_TYPES_OFFSET)))
 		(local.get $at)
 	)

@@ -415,44 +415,51 @@
 				(br_if $frames-done (i32.eq (local.get $i) (global.get $gc-calls)))
 				(local.set $frame (i32.add (global.get $call-base) (i32.mul (local.get $i) (global.get $call-bytes))))
 				(local.set $function (i32.load offset=M4_CALL_FUNCTION_OFFSET (local.get $frame)))
-				(local.set $j (i32.const 0))
-				(block $locals-done
-					;; Stale inactive frames and undeclared local slots are never scanned.
-					(loop $locals
-						(br_if $locals-done
-							(i32.eq
-								(local.get $j)
-								(i32.load offset=M4_FUNCTION_LOCALS_OFFSET
-									(call $function (local.get $function))
+				;; Synthetic boundaries retain their saved exception without pretending to be guest functions.
+				(if (i32.eq (local.get $function) (i32.const -1))
+					(then (call $gc-mark (i64.load offset=M4_REENTRY_EXCEPTION_VALUE_OFFSET (local.get $frame))))
+					;; Ordinary guest frames use their precise declared local and operand maps.
+					(else
+						(local.set $j (i32.const 0))
+						(block $locals-done
+							;; Stale inactive frames and undeclared local slots are never scanned.
+							(loop $locals
+								(br_if $locals-done
+									(i32.eq
+										(local.get $j)
+										(i32.load offset=M4_FUNCTION_LOCALS_OFFSET
+											(call $function (local.get $function))
+										)
+									)
+								)
+								;; Declared reference locals remain roots even when their bits resemble scalar values.
+								(if (call $is-reference (i32.load (call $local-type (local.get $function) (local.get $j))))
+									(then (call $gc-mark (i64.load offset=M4_CALL_LOCALS_OFFSET
+										(i32.add (local.get $frame) (i32.shl (local.get $j) (i32.const 3))))))
+								)
+								(local.set $j (i32.add (local.get $j) (i32.const 1)))
+								(br $locals)
+							)
+						)
+						(local.set $pc (global.get $gc-pc))
+						(local.set $end (global.get $gc-stack-end))
+						;; Suspended caller PCs point just after the call whose pre-stack map we saved.
+						(if (i32.lt_u (i32.add (local.get $i) (i32.const 1)) (global.get $gc-calls))
+							(then
+								(local.set $pc (i32.sub (i32.load (local.get $frame)) (i32.const 1)))
+								(local.set $end
+									(i32.load offset=M4_CALL_STACK_BASE_OFFSET
+										(i32.add (local.get $frame) (global.get $call-bytes))
+									)
 								)
 							)
 						)
-						;; Declared reference locals remain roots even when their bits resemble scalar values.
-						(if (call $is-reference (i32.load (call $local-type (local.get $function) (local.get $j))))
-							(then (call $gc-mark (i64.load offset=M4_CALL_LOCALS_OFFSET
-								(i32.add (local.get $frame) (i32.shl (local.get $j) (i32.const 3))))))
-						)
-						(local.set $j (i32.add (local.get $j) (i32.const 1)))
-						(br $locals)
-					)
-				)
-				(local.set $pc (global.get $gc-pc))
-				(local.set $end (global.get $gc-stack-end))
-				;; Suspended caller PCs point just after the call whose pre-stack map we saved.
-				(if (i32.lt_u (i32.add (local.get $i) (i32.const 1)) (global.get $gc-calls))
-					(then
-						(local.set $pc (i32.sub (i32.load (local.get $frame)) (i32.const 1)))
-						(local.set $end
-							(i32.load offset=M4_CALL_STACK_BASE_OFFSET
-								(i32.add (local.get $frame) (global.get $call-bytes))
-							)
+						(call $gc-frame-stack
+							(local.get $pc)
+							(i32.load offset=M4_CALL_STACK_BASE_OFFSET (local.get $frame))
+							(local.get $end)
 						)
 					)
-				)
-				(call $gc-frame-stack
-					(local.get $pc)
-					(i32.load offset=M4_CALL_STACK_BASE_OFFSET (local.get $frame))
-					(local.get $end)
 				)
 				(local.set $i (i32.add (local.get $i) (i32.const 1)))
 				(br $frames)

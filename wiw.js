@@ -51,6 +51,8 @@ export function createTag(parameters = []) {
 }
 
 const invocationContext = new AsyncLocalStorage();
+// Callback scopes authorize their own suspended instance, including across awaits and forwarding cycles.
+const callbackContext = new AsyncLocalStorage();
 const currentDepth = () => invocationContext.getStore() ?? 0;
 const asynchronousImports = new WeakSet();
 const asynchronousFunctions = new WeakMap();
@@ -182,6 +184,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory, limits} = {})
   const backend = {exports: e, memoryOffset, countsForwardingDepth: true};
   let loaded = false;
   let invoking = false;
+  let activeInvocation;
   let generation = 0;
   /** @type {{module: string, name: string, params: number[], results: number | number[], callback: Function}[]} */
   let bindings = [];
@@ -357,6 +360,16 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory, limits} = {})
   }
   function requireIdle() {
     if (invoking) throw new Error('interpreter is already invoking');
+  }
+  function reentryOwner(asynchronous) {
+    if (!invoking) return;
+    for (let scope = callbackContext.getStore(); scope; scope = scope.parent) {
+      if (scope.backend === backend && scope.invocation === activeInvocation && scope.active) {
+        if (asynchronous && !scope.asynchronous) throw new Error('async reentry requires an asynchronous outer invocation');
+        return scope;
+      }
+    }
+    throw new Error('interpreter is already invoking');
   }
   function u32(/** @type {number} */ value) {
     if (!Number.isInteger(value) || value < 0 || value > 4294967295) {
@@ -622,20 +635,20 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory, limits} = {})
     const signature = signatureAt(index), currentGeneration = generation;
     const valid = () => e.segments_ready() && generation === currentGeneration;
     const callback = (...args) => {
-      requireIdle();
+      reentryOwner(false);
       if (!valid()) throw new Error('stale forwarded function');
       if (backend.countsForwardingDepth && currentDepth() >= limits.forwardingDepth) throw new Error('forwarding depth limit');
       if (args.length !== signature.params.length) throw new Error('argument mismatch');
       return invokeValues('', args.map((value, slot) => typedValue(value, signature.params[slot])), false, index);
     };
     const raw = args => {
-      requireIdle();
+      reentryOwner(false);
       if (!valid()) throw new Error('stale forwarded function');
       if (backend.countsForwardingDepth && currentDepth() >= limits.forwardingDepth) throw new Error('forwarding depth limit');
       return invokeValues('', args.map((arg, slot) => rawSlot(arg, signature.params[slot])), true, index);
     };
     const rawAsync = async args => {
-      requireIdle();
+      reentryOwner(true);
       if (!valid()) throw new Error('stale forwarded function');
       if (backend.countsForwardingDepth && currentDepth() >= limits.forwardingDepth) throw new Error('forwarding depth limit');
       return invokeValues('', args.map((arg, slot) => rawSlot(arg, signature.params[slot])), true, index, true);
@@ -725,10 +738,15 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory, limits} = {})
         // Promise externrefs are ordinary values unless the binding explicitly opts into awaiting.
         const awaitable = binding.results !== 6 || asynchronousImports.has(binding.callback) || (asynchronous && forwarding?.rawAsync);
         let returned;
+        const scope = {backend, invocation: activeInvocation, asynchronous, active:true,
+          children:new Set(), parent:callbackContext.getStore()};
         try {
-          returned = forward ? forward(rawArgs) : binding.callback(...args);
+          returned = callbackContext.run(scope, () => forward ? forward(rawArgs) : binding.callback(...args));
           if (asynchronous && awaitable && returned && typeof returned.then === 'function') returned = yield returned;
         } finally {
+          scope.active = false;
+          // Even an unawaited nested call must finish before its caller can resume the guest.
+          if (asynchronous && scope.children.size) yield Promise.allSettled([...scope.children]);
           // Import side effects remain visible even when a rejected guest exception enters a handler.
           synchronizeIn();
         }
@@ -737,6 +755,8 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory, limits} = {})
           Promise.resolve(returned).catch(() => {});
           throw new Error('import callbacks must be synchronous');
         }
+        const resultCount = Array.isArray(binding.results) ? binding.results.length : binding.results ? 1 : 0;
+        if (resultCount && resultCount > e.pending_result_capacity()) throw new Error('operand stack resource limit');
         if (Array.isArray(binding.results)) {
           if (!Array.isArray(returned) || returned.length !== binding.results.length) throw new Error('import result count mismatch');
           const slots = returned.map((value, slot) => forward ? rawSlot(value, binding.results[slot]) : typedValue(value, binding.results[slot]));
@@ -805,33 +825,56 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory, limits} = {})
   }
   // Run either public scalar values or exact raw slots through the same protected invocation.
   function invokeValues(name, values, raw = false, index = undefined, asynchronous = false) {
-      synchronizeIn();
-      refreshHostRoots();
-      const at = e.host_base();
-      // Indexed calls already resolved their export and need no second name write.
-      const n = index === undefined ? write(name, at) : 0;
-      const argumentsAt = Math.ceil((at + n) / 8) * 8;
-      ensure(argumentsAt + values.length * 8);
-      const view = new DataView(e.memory.buffer, memoryOffset);
-      const highAt = values.length ? e.argument_high_base() : 0;
-      values.forEach((value, index) => {
-        view.setBigInt64(argumentsAt + index * 8, BigInt.asIntN(64, value), true);
-        view.setBigInt64(highAt + index * 8, value > 0n ? BigInt.asIntN(64, value >> 64n) : 0n, true);
-      });
+      const ownerScope = reentryOwner(asynchronous);
+      const previousInvocation = activeInvocation;
+      const nested = invoking;
+      if (nested) check(e.begin_reentry(index));
+      activeInvocation = {};
       invoking = true;
+      let at, n, argumentsAt;
+      try {
+        synchronizeIn();
+        refreshHostRoots();
+        at = e.host_base();
+        // Indexed calls already resolved their export and need no second name write.
+        n = index === undefined ? write(name, at) : 0;
+        argumentsAt = Math.ceil((at + n) / 8) * 8;
+        ensure(argumentsAt + values.length * 8);
+        const view = new DataView(e.memory.buffer, memoryOffset);
+        const highAt = values.length ? e.argument_high_base() : 0;
+        values.forEach((value, index) => {
+          view.setBigInt64(argumentsAt + index * 8, BigInt.asIntN(64, value), true);
+          view.setBigInt64(highAt + index * 8, value > 0n ? BigInt.asIntN(64, value >> 64n) : 0n, true);
+        });
+      } catch (error) {
+        if (nested) check(e.end_reentry());
+        activeInvocation = previousInvocation;
+        invoking = !!previousInvocation;
+        throw error;
+      }
       const cleanup = () => {
         try {
           if (e.pending_import() >= 0) e.resume64(0n, 1);
           synchronizeOut();
-        } finally { invoking = false; }
+        } finally {
+          if (nested) check(e.end_reentry());
+          activeInvocation = previousInvocation;
+          invoking = !!previousInvocation;
+        }
       };
       const start = () => index === undefined ? e.invoke64(at, n, argumentsAt, values.length) : e.invoke_index64(index, argumentsAt, values.length);
       if (asynchronous) {
         const depth = currentDepth() + (backend.countsForwardingDepth ? 1 : 0);
-        return invocationContext.run(depth, async () => {
-          try { return (await driveAsync(start(), raw)).value; }
+        // Track guest completion separately from public Promise assimilation of an externref result.
+        const completion = invocationContext.run(depth, async () => {
+          try { return await driveAsync(start(), raw); }
           finally { cleanup(); }
         });
+        if (ownerScope) {
+          ownerScope.children.add(completion);
+          completion.then(() => ownerScope.children.delete(completion), () => ownerScope.children.delete(completion));
+        }
+        return completion.then(result => result.value);
       }
       const run = () => {
         try { return drive(start(), raw); }
@@ -841,7 +884,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory, limits} = {})
   }
 
   function invokePublic(name, args, asyncInvocation) {
-      requireIdle();
+      reentryOwner(asyncInvocation);
       requireLoaded();
       if (backend.countsForwardingDepth && currentDepth() >= limits.forwardingDepth) throw new Error('forwarding depth limit');
       if (args.length > limits.parameters) throw new Error(`too many arguments (maximum ${limits.parameters})`);
@@ -857,7 +900,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory, limits} = {})
       return invokeValues('', values, false, signature.index, asyncInvocation);
   }
   function invokeRawPublic(name, args, asyncInvocation) {
-      requireIdle();
+      reentryOwner(asyncInvocation);
       requireLoaded();
       if (backend.countsForwardingDepth && currentDepth() >= limits.forwardingDepth) throw new Error('forwarding depth limit');
       const signature = functionSignature(name, false);
@@ -955,9 +998,10 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory, limits} = {})
       check(e.prepare_resource_imports(pages, maximum, entries, tableMaximum));
       synchronizeIn();
       if (backend.countsForwardingDepth && currentDepth() >= limits.forwardingDepth) throw new Error('forwarding depth limit');
-      // Start callbacks may inspect initialized resources while invocation/reload remain guarded.
+      // Start callbacks may reenter initialized functions while reloads remain guarded.
       loaded = true;
       invoking = true;
+      activeInvocation = {};
       const finish = () => {
         synchronizeOut();
       };
@@ -968,7 +1012,7 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory, limits} = {})
       };
       const cleanup = () => {
         try { if (e.pending_import() >= 0) e.resume64(0n, 1); }
-        finally { invoking = false; }
+        finally { invoking = false; activeInvocation = undefined; }
       };
       if (asynchronous) {
         const depth = currentDepth() + (backend.countsForwardingDepth ? 1 : 0);
