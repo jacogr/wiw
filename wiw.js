@@ -38,7 +38,8 @@ const messages = [
   'null reference',
   'cast failure',
   'array out of bounds',
-  'uncaught exception'
+  'uncaught exception',
+  'guest execution aborted'
 ];
 // Stable symbolic names mirror the interpreter ABI independently of message wording.
 const errorCodes = [
@@ -76,7 +77,8 @@ const errorCodes = [
   'NULL_REFERENCE',
   'CAST_FAILURE',
   'ARRAY_BOUNDS',
-  'UNCAUGHT_EXCEPTION'
+  'UNCAUGHT_EXCEPTION',
+  'ABORTED'
 ];
 
 export class WiwError extends Error {
@@ -898,6 +900,8 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
     );
   const backend = { exports: e, memoryOffset, countsForwardingDepth: true };
   let loaded = false;
+  let cooperative;
+  let executionQuantum = 0;
   let invoking = false;
   let activeInvocation;
   let generation = 0;
@@ -2101,6 +2105,45 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
     return handle;
   }
 
+  // Reject an already aborted request before it can execute guest instructions or initialization side effects.
+  function preflightCancellation(asynchronous) {
+    // Synchronous APIs retain their existing uninterrupted execution contract.
+    if (asynchronous && cooperative?.signal?.aborted) {
+      throw new WiwError(
+        'guest execution aborted',
+        {
+          code: 'ABORTED',
+          phase: 'request'
+        },
+        { cause: cooperative.signal.reason }
+      );
+    }
+  }
+
+  // Cancel retained runtime frames at a safe boundary after any callback-owned children have settled.
+  function checkCancellation(asynchronous) {
+    const signal = asynchronous && activeInvocation?.cooperative?.signal;
+
+    // A host callback remains responsible for its own operation until it has finished.
+    if (signal?.aborted) {
+      e.cancel_execution();
+
+      throw statusError(35, undefined, undefined, { cause: signal.reason });
+    }
+  }
+
+  // Select the async quantum for this invocation, leaving synchronous nested calls uninterrupted.
+  function configureExecution() {
+    const quantum = activeInvocation?.cooperative?.quantum ?? 0;
+
+    // Ordinary calls need no extra ABI round trip when the quantum remains disabled.
+    if (quantum !== executionQuantum) {
+      e.set_execution_quantum(quantum);
+
+      executionQuantum = quantum;
+    }
+  }
+
   // The synchronous runner never yields; async imports resume this same state machine.
   function drive(value, raw = false) {
     return driveSteps(value, raw, false).next().value;
@@ -2133,7 +2176,26 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
   // Yield pending imports and resume guest execution with translated results or exceptions.
   function* driveSteps(/** @type {bigint} */ value, raw, asynchronous) {
     // Service each pending guest import before resuming instruction execution.
-    while (e.pending_import() >= 0) {
+    while (e.pending_import() >= 0 || (activeInvocation?.cooperative && e.execution_paused())) {
+      // Dispatch suspensions yield a macrotask so timers, IO and abort listeners can run without a host import.
+      if (activeInvocation?.cooperative && e.execution_paused()) {
+        synchronizeOut();
+
+        yield new Promise((resolve) => setImmediate(resolve));
+
+        synchronizeIn();
+
+        checkCancellation(asynchronous);
+        configureExecution();
+
+        value = e.resume_execution();
+
+        check(e.error_code());
+        continue;
+      }
+
+      checkCancellation(asynchronous);
+
       const binding = bindings[e.pending_import()];
       let result = 0n;
       /** @type {unknown} */
@@ -2254,6 +2316,9 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
         failed = true;
       }
 
+      checkCancellation(asynchronous);
+      configureExecution();
+
       // Guest exceptions retain their tag identity and unwind through the caller's own handlers.
       if (failed && exceptionTypes.has(failure)) {
         value = e.resume_exception(importException(failure));
@@ -2352,6 +2417,8 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
 
   // Run either public scalar values or exact raw slots through the same protected invocation.
   function invokeValues(name, values, raw = false, index = undefined, asynchronous = false) {
+    preflightCancellation(asynchronous);
+
     const ownerScope = reentryOwner(asynchronous);
     const previousInvocation = activeInvocation;
     const nested = invoking;
@@ -2359,7 +2426,7 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
     // Save the suspended guest state before entering a callback-owned nested invocation.
     if (nested) check(e.begin_reentry(index));
 
-    activeInvocation = { phase: 'invoke' };
+    activeInvocation = { phase: 'invoke', cooperative: asynchronous ? cooperative : undefined };
     invoking = true;
 
     let at, n, argumentsAt;
@@ -2401,7 +2468,8 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
       // Publish resource changes and abort any remaining suspended import before restoring ownership.
       try {
         // Cancel a still-pending import so the engine cannot remain suspended after cleanup.
-        if (e.pending_import() >= 0) e.resume64(0n, 1);
+        if (activeInvocation?.cooperative && e.execution_paused()) e.cancel_execution();
+        else if (e.pending_import() >= 0) e.resume64(0n, 1);
 
         synchronizeOut();
       } finally {
@@ -2414,10 +2482,13 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
     };
 
     // Enter the prepared guest function by export name or resolved function index.
-    const start = () =>
-      index === undefined
+    const start = () => {
+      configureExecution();
+
+      return index === undefined
         ? e.invoke64(at, n, argumentsAt, values.length)
         : e.invoke_index64(index, argumentsAt, values.length);
+    };
 
     // Use the asynchronous driver and retain the callback-owned completion obligation.
     if (asynchronous) {
@@ -2559,6 +2630,7 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
       asynchronous = false
     ) {
       requireIdle();
+      preflightCancellation(asynchronous);
 
       loaded = false;
       generation++;
@@ -2757,7 +2829,7 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
       // Start callbacks may reenter initialized functions while reloads remain guarded.
       loaded = true;
       invoking = true;
-      activeInvocation = { phase: 'initialize' };
+      activeInvocation = { phase: 'initialize', cooperative: asynchronous ? cooperative : undefined };
 
       // Finish module initialization and publish its loaded state and resource changes.
       const finish = () => {
@@ -2779,7 +2851,8 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
         // Abort a pending initialization import before releasing invocation ownership.
         try {
           // Cancel a still-pending import left by a failed start callback.
-          if (e.pending_import() >= 0) e.resume64(0n, 1);
+          if (activeInvocation?.cooperative && e.execution_paused()) e.cancel_execution();
+          else if (e.pending_import() >= 0) e.resume64(0n, 1);
         } finally {
           // Release initialization ownership even when aborting a suspended import fails.
           invoking = false;
@@ -2795,6 +2868,7 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
         return invocationContext.run(depth, async () => {
           // Initialize resources and run the automatic start while guaranteeing cleanup.
           try {
+            configureExecution();
             check(e.initialize());
             await driveAsync(0n);
             finish();
@@ -2812,6 +2886,7 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
       const run = () => {
         // Initialize resources and run the automatic start through the synchronous driver.
         try {
+          configureExecution();
           check(e.initialize());
           drive(0n);
           finish();
@@ -3209,6 +3284,33 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
       synchronizeOut();
 
       return result;
+    },
+
+    // Enable cooperative async dispatch and optional AbortSignal cancellation; null restores ordinary execution.
+    setCooperativeExecution(options = {}) {
+      requireIdle();
+
+      // Explicit disabling leaves synchronous and asynchronous calls on the existing driver contract.
+      if (options === null) {
+        cooperative = undefined;
+
+        return api;
+      }
+
+      hostResourceOptions(options, ['quantum', 'signal'], 'cooperative execution');
+
+      const { quantum = 10000, signal } = options;
+
+      // The quantum is an instruction-fuel target rather than a wall-clock deadline.
+      if (!Number.isInteger(quantum) || quantum < 1 || quantum > 0xffffffff)
+        throw new Error('quantum must be an integer from 1 to 4294967295');
+
+      // Native signals provide reason and aborted state without user-defined awaitable behavior.
+      if (signal !== undefined && !(signal instanceof AbortSignal)) throw new Error('signal must be an AbortSignal');
+
+      cooperative = Object.freeze({ quantum, signal });
+
+      return api;
     },
 
     // Set the unsigned 32-bit instruction budget for subsequent guest invocations.

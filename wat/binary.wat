@@ -3091,7 +3091,7 @@
 		(local $code-seen i32)
 
 		;; A pending invocation retains exclusive ownership of the interpreter state.
-		(if (i32.ge_s (global.get $pending-import) (i32.const 0))
+		(if (i32.or (global.get $execution-paused) (i32.ge_s (global.get $pending-import) (i32.const 0)))
 			(then
 				(call $fail (i32.const M4_ERR_SUSPENDED_REENTRY))
 				(return (global.get $error))

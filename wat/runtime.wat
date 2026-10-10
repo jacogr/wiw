@@ -189,6 +189,7 @@
 		(local $frame-high i32)
 		(local $callee i32)
 		(local $fuel i64)
+		(local $slice-floor i64)
 		(local $meta i32)
 		(local $target i32)
 		(local $selector i32)
@@ -224,6 +225,16 @@
 					(global.get $reentry-stack)
 					(local.get $args)
 				)
+			)
+		)
+		;; Bound this dispatch segment by remaining fuel; zero quantum preserves uninterrupted execution.
+		;; Disabled slicing leaves a zero floor, which cannot yield after the preceding exhausted-fuel check.
+		(if (i64.ne (global.get $execution-quantum) (i64.const 0))
+			(then
+				(local.set $slice-floor
+					(i64.sub (local.get $fuel)
+						(select (global.get $execution-quantum) (local.get $fuel)
+							(i64.lt_u (global.get $execution-quantum) (local.get $fuel)))))
 			)
 		)
 		;; Derive the active frame high-half base after fresh entry or import resumption.
@@ -377,6 +388,19 @@
 			(if (i64.eqz (local.get $fuel))
 				(then
 					(call $fail (i32.const M4_ERR_EXHAUSTED_FUEL))
+					(return (i64.const 0))
+				)
+			)
+			;; Yield before executing the next record; fused handlers may finish their bounded instruction group first.
+			(if (i64.le_u (local.get $fuel) (local.get $slice-floor))
+				(then
+					(i32.store (local.get $frame)
+						(i32.shr_u (i32.sub (local.get $next) (local.get $code)) (i32.const M4_INSTRUCTION_SHIFT)))
+					(global.set $saved-calls (local.get $calls))
+					(global.set $saved-frame (local.get $frame))
+					(global.set $saved-fuel (local.get $fuel))
+					(call $gc-snapshot (local.get $calls) (local.get $record))
+					(global.set $execution-paused (i32.const 1))
 					(return (i64.const 0))
 				)
 			)
@@ -2093,4 +2117,41 @@
 			)
 		)
 		(global.set $sp (i32.add (i32.shr_u (local.get $base) (i32.const M4_SLOT_SHIFT)) (local.get $count)))
+	)
+
+	;; Configure a dispatch quantum; zero keeps synchronous and ordinary async calls uninterrupted.
+	(func (export "set_execution_quantum") (param $quantum i32)
+		(global.set $execution-quantum (i64.extend_i32_u (local.get $quantum)))
+	)
+
+	;; Report a cooperative suspension independently of pending host imports.
+	(func (export "execution_paused") (result i32)
+		(global.get $execution-paused)
+	)
+
+	;; Continue saved frames and operand/control stacks with the original invocation's remaining fuel.
+	(func (export "resume_execution") (result i64)
+		;; Only a dispatch suspension can be resumed through this ABI.
+		(if (i32.eqz (global.get $execution-paused))
+			(then
+				(call $fail (i32.const M4_ERR_INVALID_RESUME))
+				(return (i64.const 0))
+			)
+		)
+		(global.set $execution-paused (i32.const 0))
+		(global.set $resuming (i32.const 1))
+		(call $finish-start (call $run (i32.const 0) (i32.const 0)))
+	)
+
+	;; Abandon a suspended execution only after host callback completion, retaining committed resource writes.
+	(func (export "cancel_execution")
+		;; Imported suspension locations refer to their original call instruction.
+		(if (i32.ge_s (global.get $pending-import) (i32.const 0))
+			(then (global.set $tok (global.get $pending-offset)))
+		)
+		(global.set $execution-paused (i32.const 0))
+		(global.set $pending-import (i32.const -1))
+		(global.set $resuming (i32.const 0))
+		(call $fail (i32.const M4_ERR_ABORTED))
+		(drop (call $finish-start (i64.const 0)))
 	)

@@ -71,7 +71,8 @@
 		(if
 			(i32.and
 				(i32.eq (global.get $start-state) (i32.const 2))
-				(i32.lt_s (global.get $pending-import) (i32.const 0))
+				(i32.and (i32.lt_s (global.get $pending-import) (i32.const 0))
+					(i32.eqz (global.get $execution-paused)))
 			)
 			(then
 				(global.set $ready (i32.eqz (global.get $error)))
@@ -86,7 +87,7 @@
 		(result i32)
 
 		;; A host cannot restart initialization while a guest call is suspended.
-		(if (i32.ge_s (global.get $pending-import) (i32.const 0))
+		(if (i32.or (global.get $execution-paused) (i32.ge_s (global.get $pending-import) (i32.const 0)))
 			(then
 				(call $fail (i32.const M4_ERR_SUSPENDED_REENTRY))
 				(return (i32.const 22))

@@ -178,13 +178,49 @@ engine.growTable(2, null, 'functions');
 console.log(engine.tableSize('functions'));
 ```
 
+Async execution can opt into cooperative dispatch:
+
+```js
+const controller = new AbortController();
+engine.setCooperativeExecution({quantum: 10000, signal: controller.signal});
+const result = engine.invokeAsync('run');
+setTimeout(() => controller.abort('deadline reached'), 100);
+await result;
+```
+
+`setCooperativeExecution({quantum = 10000, signal} = {})` configures subsequent
+async invocations and automatic starts in `loadAsync`/`loadBinaryAsync`. It returns
+the engine. The quantum must be an integer from 1 to 4,294,967,295; the optional
+signal must be an `AbortSignal`. Configuration is allowed only while idle and is
+snapshotted for each invocation. Call `setCooperativeExecution(null)` to disable
+it. Synchronous APIs continue to run uninterrupted and ignore the signal.
+
+Cooperative execution yields through `setImmediate` between dispatch segments,
+allowing timers, IO and cancellation listeners to run even without guest imports.
+It preserves call frames, control/operand stacks, references, vector bits and
+remaining instruction fuel. A quantum is a scheduling target measured in fuel;
+a bounded fused instruction group can finish before yielding. Parsing,
+validation, segment initialization, individual bulk/GC operations and host
+callbacks are not preempted, so a quantum is not a wall-clock deadline. Configure
+each interpreter instance that should cooperate, including forwarding providers.
+
+Cancellation rejects with `WiwError.code === 'ABORTED'` and retains the signal's
+reason as `cause`. Already-aborted async requests reject before guest side effects,
+with phase `request` and no source location. Running calls use status 35, their
+current phase and recorded source position. Completed guest and host writes remain
+visible. Cancelled ordinary invocations leave the engine usable; cancelled starts
+leave the load unsuccessful and require another load. Pending host callbacks and
+callback-owned children must settle before cancellation releases their invocation;
+a signal does not stop or abandon their JavaScript operations. Cancellation ends
+the invocation rather than injecting a catchable guest exception.
+
 Interpreter status failures throw an exported `WiwError` (an `Error` subclass).
 Existing message text stays unchanged. Its read-only diagnostic fields are:
 
 - `code`: a symbolic status such as `SYNTAX`, `OPERAND_STACK`, `UNREACHABLE`,
   `MEMORY_BOUNDS` or `EXHAUSTED_FUEL`, matching the `M4_ERR_*` ABI names.
 - `status`: the numeric interpreter status, when the runtime reports one.
-- `phase`: `load`, `validate`, `link`, `initialize`, `invoke` or `access`.
+- `phase`: `load`, `validate`, `link`, `initialize`, `invoke`, `access` or `request`.
   Loading combines parsing and validation; initialization includes automatic start.
 - `sourceFormat`: `wat` or `wasm` for the most recent load/validation attempt.
 - `byteOffset`: the existing byte coordinate used in the error message.

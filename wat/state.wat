@@ -83,6 +83,9 @@
 	(global $saved-calls (mut i32) (i32.const 0))
 	(global $saved-frame (mut i32) (i32.const 0))
 	(global $saved-fuel (mut i64) (i64.const 0))
+	;; Cooperative slices suspend between dispatch records without spending or renewing fuel.
+	(global $execution-quantum (mut i64) (i64.const 0))
+	(global $execution-paused (mut i32) (i32.const 0))
 	(global $pending-offset (mut i32) (i32.const 0))
 	(global $resuming (mut i32) (i32.const 0))
 	(global $local-type-base (mut i32) (i32.const 0))

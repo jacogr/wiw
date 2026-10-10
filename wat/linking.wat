@@ -288,7 +288,7 @@
 		;; Suspended invocations and unfinished starts retain exclusive use of execution state.
 		(if
 			(i32.or
-				(i32.ge_s (global.get $pending-import) (i32.const 0))
+				(i32.or (global.get $execution-paused) (i32.ge_s (global.get $pending-import) (i32.const 0)))
 				(i32.and
 					(i32.ne (global.get $start-state) (i32.const 3))
 					(i32.ne (global.get $start-state) (i32.const 0))

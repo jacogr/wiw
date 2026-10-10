@@ -399,7 +399,7 @@
 		(result i32)
 
 		;; Loading must not overwrite a suspended invocation.
-		(if (i32.ge_s (global.get $pending-import) (i32.const 0))
+		(if (i32.or (global.get $execution-paused) (i32.ge_s (global.get $pending-import) (i32.const 0)))
 			(then
 				(call $fail (i32.const M4_ERR_SUSPENDED_REENTRY))
 				(return (i32.const 22))
@@ -591,7 +591,7 @@
 		(local $value i64)
 
 		;; Another invoke cannot replace call/control stacks awaiting an import result.
-		(if (i32.ge_s (global.get $pending-import) (i32.const 0))
+		(if (i32.or (global.get $execution-paused) (i32.ge_s (global.get $pending-import) (i32.const 0)))
 			(then
 				(call $fail (i32.const M4_ERR_SUSPENDED_REENTRY))
 				(return (i64.const 0))

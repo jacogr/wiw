@@ -36,6 +36,7 @@ m4_define(<!M4_ERR_NULL_REFERENCE!>,<!31!>)m4_dnl
 m4_define(<!M4_ERR_CAST_FAILURE!>,<!32!>)m4_dnl
 m4_define(<!M4_ERR_ARRAY_BOUNDS!>,<!33!>)m4_dnl
 m4_define(<!M4_ERR_UNCAUGHT_EXCEPTION!>,<!34!>)m4_dnl
+m4_define(<!M4_ERR_ABORTED!>,<!35!>)m4_dnl
 m4_dnl
 m4_dnl Generated runtime dispatch families; zero uses the general path.
 m4_define(<!M4_ROUTE_GENERAL!>,<!0!>)m4_dnl
