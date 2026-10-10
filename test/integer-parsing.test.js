@@ -1,18 +1,24 @@
-import {runtimeNames} from './runtime.js';
+import { runtimeNames } from './runtime.js';
 import assert from 'node:assert/strict';
-import {after,before,test} from 'node:test';
-import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
-import {execFileSync} from 'node:child_process';
-import {createBootstrapInterpreter} from './runtime.js';
+import { after, before, test } from 'node:test';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { createBootstrapInterpreter } from './runtime.js';
 
-let directory,source,binary;
-before(async()=>{
-  directory=await mkdtemp(join(tmpdir(),'wiw-integer-'));
-  const engine=await readFile(new URL('../build/wiw.wat',import.meta.url),'utf8'),end=engine.lastIndexOf(')');
+let directory, source, binary;
+
+before(async () => {
+  directory = await mkdtemp(join(tmpdir(), 'wiw-integer-'));
+
+  const engine = await readFile(new URL('../build/wiw.wat', import.meta.url), 'utf8'),
+    end = engine.lastIndexOf(')');
+
   // Private probes use an atom ending exactly at memory's boundary; production exports stay unchanged.
-  source=engine.slice(0,end)+`
+  source =
+    engine.slice(0, end) +
+    `
     ;; Install an independent atom and leave the following cursor at EOF.
     (func $probe-token (param $p i32) (param $n i32)
       (global.set $tok (local.get $p)) (global.set $len (local.get $n))
@@ -29,67 +35,159 @@ before(async()=>{
     (func (export "decode_hex") (param $c i32) (result i32) (call $hex (local.get $c)))
     ;; Observe advancement to EOF after successful decoding.
     (func (export "parse_kind") (result i32) (global.get $kind))
-  `+engine.slice(end);
-  const wat=join(directory,'probe.wat');binary=join(directory,'probe-opt.wasm');
-  await writeFile(wat,source);execFileSync('wat2wasm',[wat,'-o',binary]);
-  execFileSync('wasm-opt',['--enable-simd','--enable-bulk-memory','--enable-sign-ext','--enable-nontrapping-float-to-int','-O4','--converge','--strip-debug','--strip-producers',binary,'-o',binary]);
-});
-after(async()=>{if(directory) await rm(directory,{recursive:true,force:true});});
+  ` +
+    engine.slice(end);
 
-for(const runtime of runtimeNames) test(`${runtime}: integer digit paths preserve exact ranges and syntax at memory end`,async()=>{
-  let call,write;
-  if(runtime==='bootstrap') {
-    const {instance}=await WebAssembly.instantiate(await readFile(binary));
-    call=(name,...args)=>instance.exports[name](...args);
-    write=(p,bytes)=>new Uint8Array(instance.exports.memory.buffer).set(bytes,p);
-  } else {
-    const parent=await createBootstrapInterpreter(new URL('../build/wiw-opt.wasm',import.meta.url));
-    parent.load(source);parent.setFuel(10000000);
-    call=(name,...args)=>parent.invoke(name,...args);
-    write=(p,bytes)=>parent.writeMemory(p,bytes);
-  }
-  // The shared helper must recognize exactly the ASCII digit set, with -1 for every other value.
-  for(let byte=0;byte<256;byte++) {
-    const expected=byte>=48&&byte<=57?byte-48:byte>=97&&byte<=102?byte-87:byte>=65&&byte<=70?byte-55:-1;
-    assert.equal(call('decode_hex',byte),expected,`hex byte ${byte}`);
-  }
-  for(const value of [-1,256,257,2147483647,-2147483648]) assert.equal(call('decode_hex',value),-1);
-  const check=(width,text,expected,code=0)=>{
-    const bytes=Buffer.from(text),pointer=65536-bytes.length;write(pointer,bytes);
-    const result=call(`parse${width}`,pointer,bytes.length);
-    assert.equal(call('error_code'),code,`${width}/${text.toString()}`);
-    if(code) {assert.equal(call('error_offset'),pointer);return;}
-    const signed=BigInt.asIntN(width,expected);
-    assert.equal(result,width===32?Number(signed):signed,`${width}/${text.toString()}`);
-    assert.equal(call('parse_kind'),0,'successful decoding advances to EOF');
-  };
-  for(const width of [32,64]) {
-    const unsigned=(1n<<BigInt(width))-1n,signed=1n<<BigInt(width-1);
-    const magnitudes=[0n,1n,9n,10n,15n,16n,signed-1n,signed,signed+1n,unsigned-1n,unsigned,unsigned+1n];
-    let seed=0x6f3219ab;
-    for(let n=0;n<32;n++) {
-      seed=(Math.imul(seed,1664525)+1013904223)>>>0;const high=BigInt(seed);
-      seed=(Math.imul(seed,1664525)+1013904223)>>>0;
-      magnitudes.push(width===32?BigInt(seed):(high<<32n)|BigInt(seed));
-    }
-    for(const magnitude of magnitudes) for(const sign of ['', '+', '-']) {
-      const decimal=magnitude.toString(),hex=magnitude.toString(16);
-      const literals=[sign+decimal,sign+'0x'+hex,sign+'0x'+hex.toUpperCase(),
-        sign+decimal.split('').join('_'),sign+'0x'+hex.split('').join('_')];
-      const code=magnitude>(sign==='-'?signed:unsigned)?3:0;
-      for(const literal of literals) check(width,literal,sign==='-'?-magnitude:magnitude,code);
-    }
-    for(const text of ['+', '-', '0x', '0X1', '_1', '1_', '1__2', '0x_1', '0xG', '1a', '1.0', '--1', '0x1g']) check(width,text,0n,1);
-    for(const text of ['000000000000000000000000000001','+0x0000000000000000000000001','-0x0']) {
-      check(width,text,text==='-0x0'?0n:1n);
-    }
-    // Independently classify every byte as a sole decimal digit and as a hexadecimal digit.
-    for(let byte=0;byte<256;byte++) {
-      const decimal=byte>=48&&byte<=57,lower=byte>=97&&byte<=102,upper=byte>=65&&byte<=70;
-      check(width,Buffer.from([byte]),BigInt(decimal?byte-48:0),decimal?0:1);
-      const digit=decimal?byte-48:lower?byte-87:upper?byte-55:0;
-      check(width,Buffer.from([48,120,byte]),BigInt(digit),decimal||lower||upper?0:1);
-    }
-    check(width,'7',7n); // A valid direct-path literal must recover after rejected input.
-  }
+  const wat = join(directory, 'probe.wat');
+
+  binary = join(directory, 'probe-opt.wasm');
+
+  await writeFile(wat, source);
+  execFileSync('wat2wasm', [wat, '-o', binary]);
+  execFileSync('wasm-opt', [
+    '--enable-simd',
+    '--enable-bulk-memory',
+    '--enable-sign-ext',
+    '--enable-nontrapping-float-to-int',
+    '-O4',
+    '--converge',
+    '--strip-debug',
+    '--strip-producers',
+    binary,
+    '-o',
+    binary
+  ]);
 });
+after(async () => {
+  // Remove temporary compiler fixtures only when setup created their directory.
+  if (directory) await rm(directory, { recursive: true, force: true });
+});
+
+for (const runtime of runtimeNames)
+  test(`${runtime}: integer digit paths preserve exact ranges and syntax at memory end`, async () => {
+    let call, write;
+
+    // Use the native optimized probe for the compiled runtime and its interpreted ABI for hosted coverage.
+    if (runtime === 'bootstrap') {
+      const { instance } = await WebAssembly.instantiate(await readFile(binary));
+
+      call = (name, ...args) => instance.exports[name](...args);
+      write = (p, bytes) => new Uint8Array(instance.exports.memory.buffer).set(bytes, p);
+    } else {
+      const parent = await createBootstrapInterpreter(new URL('../build/wiw-opt.wasm', import.meta.url));
+
+      parent.load(source);
+      parent.setFuel(10000000);
+
+      call = (name, ...args) => parent.invoke(name, ...args);
+      write = (p, bytes) => parent.writeMemory(p, bytes);
+    }
+
+    // The shared helper must recognize exactly the ASCII digit set, with -1 for every other value.
+    for (let byte = 0; byte < 256; byte++) {
+      const expected =
+        byte >= 48 && byte <= 57
+          ? byte - 48
+          : byte >= 97 && byte <= 102
+          ? byte - 87
+          : byte >= 65 && byte <= 70
+          ? byte - 55
+          : -1;
+
+      assert.equal(call('decode_hex', byte), expected, `hex byte ${byte}`);
+    }
+
+    for (const value of [-1, 256, 257, 2147483647, -2147483648]) assert.equal(call('decode_hex', value), -1);
+
+    // Assert the operation result and its expected regression invariants.
+    const check = (width, text, expected, code = 0) => {
+      const bytes = Buffer.from(text),
+        pointer = 65536 - bytes.length;
+
+      write(pointer, bytes);
+
+      const result = call(`parse${width}`, pointer, bytes.length);
+
+      assert.equal(call('error_code'), code, `${width}/${text.toString()}`);
+
+      // Verify the error offset before returning from an expected parser failure.
+      if (code) {
+        assert.equal(call('error_offset'), pointer);
+
+        return;
+      }
+
+      const signed = BigInt.asIntN(width, expected);
+
+      assert.equal(result, width === 32 ? Number(signed) : signed, `${width}/${text.toString()}`);
+      assert.equal(call('parse_kind'), 0, 'successful decoding advances to EOF');
+    };
+
+    for (const width of [32, 64]) {
+      const unsigned = (1n << BigInt(width)) - 1n,
+        signed = 1n << BigInt(width - 1);
+      const magnitudes = [
+        0n,
+        1n,
+        9n,
+        10n,
+        15n,
+        16n,
+        signed - 1n,
+        signed,
+        signed + 1n,
+        unsigned - 1n,
+        unsigned,
+        unsigned + 1n
+      ];
+      let seed = 0x6f3219ab;
+
+      for (let n = 0; n < 32; n++) {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+
+        const high = BigInt(seed);
+
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+
+        magnitudes.push(width === 32 ? BigInt(seed) : (high << 32n) | BigInt(seed));
+      }
+
+      for (const magnitude of magnitudes)
+        for (const sign of ['', '+', '-']) {
+          const decimal = magnitude.toString(),
+            hex = magnitude.toString(16);
+          const literals = [
+            sign + decimal,
+            sign + '0x' + hex,
+            sign + '0x' + hex.toUpperCase(),
+            sign + decimal.split('').join('_'),
+            sign + '0x' + hex.split('').join('_')
+          ];
+          const code = magnitude > (sign === '-' ? signed : unsigned) ? 3 : 0;
+
+          for (const literal of literals) check(width, literal, sign === '-' ? -magnitude : magnitude, code);
+        }
+
+      for (const text of ['+', '-', '0x', '0X1', '_1', '1_', '1__2', '0x_1', '0xG', '1a', '1.0', '--1', '0x1g'])
+        check(width, text, 0n, 1);
+
+      for (const text of ['000000000000000000000000000001', '+0x0000000000000000000000001', '-0x0']) {
+        check(width, text, text === '-0x0' ? 0n : 1n);
+      }
+
+      // Independently classify every byte as a sole decimal digit and as a hexadecimal digit.
+      for (let byte = 0; byte < 256; byte++) {
+        const decimal = byte >= 48 && byte <= 57,
+          lower = byte >= 97 && byte <= 102,
+          upper = byte >= 65 && byte <= 70;
+
+        check(width, Buffer.from([byte]), BigInt(decimal ? byte - 48 : 0), decimal ? 0 : 1);
+
+        const digit = decimal ? byte - 48 : lower ? byte - 87 : upper ? byte - 55 : 0;
+
+        check(width, Buffer.from([48, 120, byte]), BigInt(digit), decimal || lower || upper ? 0 : 1);
+      }
+
+      check(width, '7', 7n); // A valid direct-path literal must recover after rejected input.
+    }
+  });

@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
-import {test} from 'node:test';
-import {runtimeFactories} from './runtime.js';
+import { execFileSync } from 'node:child_process';
+import { test } from 'node:test';
+import { runtimeFactories } from './runtime.js';
 
 for (const [runtime, create] of runtimeFactories) {
   test(`${runtime}: allocation pressure reclaims dead arrays within one call and across calls`, async () => {
     const engine = await create();
+
     engine.load(`(module (type $A (array i32))
       (func (export "run") (param i32) (local $i i32)
         loop $again i32.const 262144 array.new_default $A drop
@@ -13,15 +14,19 @@ for (const [runtime, create] of runtimeFactories) {
       (func (export "large") i32.const 1048575 array.new_default $A drop))`);
     engine.setFuel(1000000);
     engine.invoke('run', 20);
+
     for (let i = 0; i < 10; i++) engine.invoke('run', 3);
+
     assert.ok(engine.collectGarbage() > 0);
     assert.equal(engine.collectGarbage(), 0);
-    engine.invoke('large'); engine.invoke('large');
+    engine.invoke('large');
+    engine.invoke('large');
     assert.equal(engine.collectGarbage(), 16777216);
   });
 
   test(`${runtime}: precise roots preserve locals, saved caller operands, constructor inputs and numeric lookalikes`, async () => {
     const engine = await create();
+
     engine.load(`(module (type $S (struct (field i32))) (type $A (array (ref null $S)))
       (type $D (array i32)) (type $P (struct (field (ref $S))))
       (global $numeric (mut i64) (i64.const 0x40000000))
@@ -42,17 +47,26 @@ for (const [runtime, create] of runtimeFactories) {
       (func (export "numbers") (result i64)
         i64.const 0x40000000 i32.const 262144 array.new_default $D drop call $pressure)
       (func (export "clear") i32.const 262144 array.new_default $D drop))`);
-    for (const [name, value] of [['local',42], ['operand',43], ['caller',44], ['array',46], ['struct',47]]) {
+
+    for (const [name, value] of [
+      ['local', 42],
+      ['operand', 43],
+      ['caller', 44],
+      ['array', 46],
+      ['struct', 47]
+    ]) {
       assert.equal(engine.invoke(name), value);
       assert.ok(engine.collectGarbage() > 0);
       assert.equal(engine.collectGarbage(), 0);
     }
+
     assert.equal(engine.invoke('numbers'), 0x40000000n);
     assert.ok(engine.collectGarbage() > 0);
   });
 
   test(`${runtime}: collection traces cycles and shared fields, coalesces holes, preserves table/global roots and clears reload state`, async () => {
     const engine = await create();
+
     engine.load(`(module (type $N (struct (field (mut (ref null $N))) (field (mut i32))))
       (type $A (array (mut (ref null $N)))) (type $D (array i32))
       (global $root (mut (ref null $N)) (ref.null $N))
@@ -73,16 +87,23 @@ for (const [runtime, create] of runtimeFactories) {
         ref.null $N i32.const 123 struct.new $N local.tee $n local.get $n struct.set $N 0)
       (func (export "garbage") i32.const 262144 array.new_default $D drop))`);
     engine.invoke('setup');
+
     for (let i = 0; i < 10; i++) engine.invoke('garbage');
+
     assert.ok(engine.collectGarbage() > 0);
     assert.equal(engine.invoke('read'), 77);
-    engine.invoke('mutate'); assert.equal(engine.invoke('read'), 99);
-    engine.invoke('dropGlobal'); assert.ok(engine.collectGarbage() > 0);
+    engine.invoke('mutate');
+    assert.equal(engine.invoke('read'), 99);
+    engine.invoke('dropGlobal');
+    assert.ok(engine.collectGarbage() > 0);
     assert.equal(engine.invoke('readTable'), 99);
-    engine.invoke('dropTable'); assert.equal(engine.collectGarbage(), 48);
-    engine.invoke('deadCycle'); assert.equal(engine.collectGarbage(), 48);
+    engine.invoke('dropTable');
+    assert.equal(engine.collectGarbage(), 48);
+    engine.invoke('deadCycle');
+    assert.equal(engine.collectGarbage(), 48);
     engine.load('(module (func (export "answer") (result i32) i32.const 42))');
-    assert.equal(engine.collectGarbage(), 0); assert.equal(engine.invoke('answer'), 42);
+    assert.equal(engine.collectGarbage(), 0);
+    assert.equal(engine.invoke('answer'), 42);
   });
 
   test(`${runtime}: GC preserves JavaScript handles, conversion identity, host callbacks and rejects stale references`, async () => {
@@ -96,20 +117,46 @@ for (const [runtime, create] of runtimeFactories) {
         i32.const 262144 array.new_default $D drop)
       (func (export "callback") i32.const 99 struct.new $S call $keep))`;
     let saved;
-    engine.load(source, {h:{keep: value => {saved = value; assert.throws(() => engine.collectGarbage(), /already invoking/);}}});
+
+    engine.load(source, {
+      h: {
+        // Retain the guest object in a host wrapper for the collection regression.
+        keep: (value) => {
+          saved = value;
+
+          assert.throws(() => engine.collectGarbage(), /already invoking/);
+        }
+      }
+    });
+
     const reference = engine.invoke('new');
-    engine.invoke('pressure'); engine.collectGarbage();
+
+    engine.invoke('pressure');
+    engine.collectGarbage();
     assert.equal(engine.invoke('read', reference), 42);
     assert.equal(engine.invoke('external', reference), reference);
-    engine.invoke('callback'); engine.invoke('pressure'); engine.collectGarbage();
+    engine.invoke('callback');
+    engine.invoke('pressure');
+    engine.collectGarbage();
     assert.equal(engine.invoke('read', saved), 99);
-    engine.load(source, {h:{keep(){}}});
+    engine.load(source, {
+      h: {
+        // Accept the callback without retaining a handle from the reloaded guest.
+        keep() {}
+      }
+    });
     assert.throws(() => engine.invoke('read', reference), /live opaque/);
   });
 
   test(`${runtime}: weak host caches allow unreachable JavaScript handles to be reclaimed`, () => {
     // Explicit V8 collection makes the host-lifetime check independent from automatic GC scheduling.
-    execFileSync(process.execPath, ['--expose-gc', '--input-type=module', '-e', `
+    execFileSync(
+      process.execPath,
+      [
+        '--expose-gc',
+        '--input-type=module',
+        '-e',
+        `
       import assert from 'node:assert/strict';
       import {setImmediate} from 'node:timers/promises';
       import {runtimeFactories} from './test/runtime.js';
@@ -127,13 +174,17 @@ for (const [runtime, create] of runtimeFactories) {
       assert.equal(dead.deref(), undefined);
       assert.equal(reclaimed, 1048592);
       assert.equal(engine.invoke('len', live), 65536);
-    `], {cwd: new URL('..', import.meta.url), stdio: 'pipe'});
+    `
+      ],
+      { cwd: new URL('..', import.meta.url), stdio: 'pipe' }
+    );
   });
 }
 
 for (const [runtime, create] of runtimeFactories) {
   test(`${runtime}: exception references retain typed payload graphs and uncaught host payloads across collection`, async () => {
     const engine = await create();
+
     engine.load(`(module (type $S (struct (field i32))) (type $D (array i32))
       (tag $tag (param (ref $S) v128 i64))
       (global $caught (mut exnref) (ref.null exn))
@@ -150,10 +201,19 @@ for (const [runtime, create] of runtimeFactories) {
         end drop drop struct.get $S 0)
       (func (export "uncaught") global.get $caught throw_ref)
       (func (export "clear") ref.null exn global.set $caught))`);
-    engine.invoke('capture'); assert.equal(engine.collectGarbage(), 0);
-    assert.equal(engine.invoke('check'), 42); engine.collectGarbage();
+    engine.invoke('capture');
+    assert.equal(engine.collectGarbage(), 0);
+    assert.equal(engine.invoke('check'), 42);
+    engine.collectGarbage();
+
     let caught;
-    try { engine.invoke('uncaught'); } catch (error) {caught = error;}
+
+    try {
+      engine.invoke('uncaught');
+    } catch (error) {
+      caught = error;
+    }
+
     assert.equal(caught?.name, 'WiwException');
     engine.invoke('clear');
     // The copied host exception owns its struct handle, but the guest exception itself is now dead.
@@ -163,6 +223,7 @@ for (const [runtime, create] of runtimeFactories) {
 
   test(`${runtime}: non-moving collection reuses and coalesces interior holes with live objects on both sides`, async () => {
     const engine = await create();
+
     engine.load(`(module (type $A (array (mut i32)))
       (global $first (mut (ref null $A)) (ref.null $A))
       (global $last (mut (ref null $A)) (ref.null $A))
@@ -177,15 +238,21 @@ for (const [runtime, create] of runtimeFactories) {
       (func (export "clear") ref.null $A global.set $first ref.null $A global.set $last))`);
     engine.invoke('setup');
     assert.equal(engine.collectGarbage(), 8388640);
+
     for (let i = 0; i < 6; i++) {
-      engine.invoke('reuse'); engine.collectGarbage();
-      assert.equal(engine.invoke('first'), 11); assert.equal(engine.invoke('last'), 22);
+      engine.invoke('reuse');
+      engine.collectGarbage();
+      assert.equal(engine.invoke('first'), 11);
+      assert.equal(engine.invoke('last'), 22);
     }
-    engine.invoke('clear'); assert.equal(engine.collectGarbage(), 8388576);
+
+    engine.invoke('clear');
+    assert.equal(engine.collectGarbage(), 8388576);
   });
 
   test(`${runtime}: nested constants and live passive elements remain rooted during initialization and collection`, async () => {
     const engine = await create();
+
     engine.load(`(module (type $S (struct (field i32))) (type $A (array (ref $S))) (type $D (array i32))
       (global $root (mut (ref null $A))
         (array.new $A (struct.new $S (i32.const 42)) (i32.const 3)))
@@ -196,9 +263,12 @@ for (const [runtime, create] of runtimeFactories) {
       (func (export "drop") elem.drop $objects ref.null $A global.set $root))`);
     assert.equal(engine.invoke('read'), 42);
     assert.equal(engine.invoke('element'), 77);
-    engine.invoke('pressure'); engine.collectGarbage();
-    assert.equal(engine.invoke('read'), 42); assert.equal(engine.invoke('element'), 77);
-    engine.invoke('drop'); assert.ok(engine.collectGarbage() > 0);
+    engine.invoke('pressure');
+    engine.collectGarbage();
+    assert.equal(engine.invoke('read'), 42);
+    assert.equal(engine.invoke('element'), 77);
+    engine.invoke('drop');
+    assert.ok(engine.collectGarbage() > 0);
     assert.equal(engine.collectGarbage(), 0);
   });
 }
@@ -209,6 +279,7 @@ for (const [runtime, create] of runtimeFactories) {
     const numericParams = Array(64).fill('i64').join(' ');
     const numericValues = Array(64).fill('i64.const 0x40000000').join(' ');
     const drops = Array(64).fill('drop').join(' ');
+
     engine.load(`(module (type $N (struct (field (ref null $N)) (field i32)))
       (type $D (array i32)) (type $S (struct (field i64)))
       (global $root (mut (ref null $N)) (ref.null $N))
@@ -234,13 +305,18 @@ for (const [runtime, create] of runtimeFactories) {
           try_table (catch $tag $caught) global.get $exception throw_ref end unreachable
         end struct.get $N 1 local.set $result ${drops} local.get $result))`);
     engine.setFuel(1000000);
-    engine.invoke('numeric'); assert.equal(engine.collectGarbage(), 4194320);
-    engine.invoke('build', 20000); assert.equal(engine.collectGarbage(), 0);
+    engine.invoke('numeric');
+    assert.equal(engine.collectGarbage(), 4194320);
+    engine.invoke('build', 20000);
+    assert.equal(engine.collectGarbage(), 0);
     assert.equal(engine.invoke('count'), 20000);
-    engine.invoke('clear'); assert.equal(engine.collectGarbage(), 960000);
-    engine.invoke('capture'); assert.equal(engine.collectGarbage(), 0);
+    engine.invoke('clear');
+    assert.equal(engine.collectGarbage(), 960000);
+    engine.invoke('capture');
+    assert.equal(engine.collectGarbage(), 0);
     assert.equal(engine.invoke('payload'), 77);
-    engine.invoke('clear'); assert.ok(engine.collectGarbage() > 0);
+    engine.invoke('clear');
+    assert.ok(engine.collectGarbage() > 0);
     assert.equal(engine.collectGarbage(), 0);
   });
 
@@ -248,8 +324,10 @@ for (const [runtime, create] of runtimeFactories) {
     const engine = await create();
     // Deferred initializers execute again after binding, forcing collection while a nested parent is incomplete.
     const provider = await create();
+
     provider.load('(module (tag (export "t")))');
-    engine.load(`(module (type $D (array i32))
+    engine.load(
+      `(module (type $D (array i32))
       (type $S (struct (field (ref $D)) (field (ref $D))))
       (tag (import "p" "t"))
       (global $g (mut (ref null $S))
@@ -257,31 +335,76 @@ for (const [runtime, create] of runtimeFactories) {
       (func $start i32.const 262144 array.new_default $D drop i32.const 262144 array.new_default $D drop i32.const 262144 array.new_default $D drop)
       (start $start)
       (func (export "read") (result i32) global.get $g struct.get $S 0 array.len)
-      (func (export "other") (result i32) global.get $g struct.get $S 1 array.len))`, {p: provider.exportNamespace()});
-    assert.equal(engine.invoke('read'), 262144); assert.equal(engine.invoke('other'), 262144);
+      (func (export "other") (result i32) global.get $g struct.get $S 1 array.len))`,
+      { p: provider.exportNamespace() }
+    );
+    assert.equal(engine.invoke('read'), 262144);
+    assert.equal(engine.invoke('other'), 262144);
     assert.ok(engine.collectGarbage() > 0);
     assert.equal(engine.collectGarbage(), 0);
   });
 }
 
 // Standard GC wire encoding: array i32 plus a void function allocating and dropping five 4 MiB arrays.
-const instructions = Array.from({length:5}, () => [0x41,0x80,0x80,0x10,0xfb,0x07,0x00,0x1a]).flat();
-const body = [0,...instructions,0x0b];
-const collectionBinary = Uint8Array.from([0,97,115,109,1,0,0,0,
-  1,7,2,0x5e,0x7f,0,0x60,0,0, 3,2,1,1,
-  7,7,1,3,114,117,110,0,0, 10,body.length+2,1,body.length,...body]);
+const instructions = Array.from({ length: 5 }, () => [0x41, 0x80, 0x80, 0x10, 0xfb, 0x07, 0x00, 0x1a]).flat();
+const body = [0, ...instructions, 0x0b];
+const collectionBinary = Uint8Array.from([
+  0,
+  97,
+  115,
+  109,
+  1,
+  0,
+  0,
+  0,
+  1,
+  7,
+  2,
+  0x5e,
+  0x7f,
+  0,
+  0x60,
+  0,
+  0,
+  3,
+  2,
+  1,
+  1,
+  7,
+  7,
+  1,
+  3,
+  114,
+  117,
+  110,
+  0,
+  0,
+  10,
+  body.length + 2,
+  1,
+  body.length,
+  ...body
+]);
+
 for (const [runtime, create] of runtimeFactories) {
   test(`${runtime}: binary guests collect under exact fuel and preserve native results`, async () => {
     const native = (await WebAssembly.instantiate(collectionBinary)).instance;
+
     assert.equal(native.exports.run(), undefined);
-    const engine = await create(); engine.loadBinary(collectionBinary);
+
+    const engine = await create();
+
+    engine.loadBinary(collectionBinary);
     engine.setFuel(15);
+
     for (let i = 0; i < 5; i++) assert.equal(engine.invoke('run'), undefined);
+
     assert.ok(engine.collectGarbage() > 0);
     engine.setFuel(14);
     assert.throws(() => engine.invoke('run'), /exhausted fuel/);
     assert.ok(engine.collectGarbage() > 0);
-    engine.setFuel(15); assert.equal(engine.invoke('run'), undefined);
+    engine.setFuel(15);
+    assert.equal(engine.invoke('run'), undefined);
   });
 }
 
@@ -289,7 +412,9 @@ for (const [runtime, create] of runtimeFactories) {
   test(`${runtime}: imported exception allocation collects safely while preserving suspended caller locals and payload identity`, async () => {
     const engine = await create();
     let saved;
-    engine.load(`(module (type $S (struct (field i32))) (type $D (array i32))
+
+    engine.load(
+      `(module (type $S (struct (field i32))) (type $D (array i32))
       (import "h" "throw" (func $host)) (tag $tag (param (ref $S)))
       (func (export "capture") i32.const 42 struct.new $S throw $tag)
       (func (export "forward") (param i32) (result i32) (local $live (ref null $S))
@@ -297,8 +422,23 @@ for (const [runtime, create] of runtimeFactories) {
         local.get 0 array.new_default $D drop
         block $payload (result (ref $S))
           try_table (catch $tag $payload) call $host end unreachable
-        end struct.get $S 0 local.get $live struct.get $S 0 i32.add))`, {h:{throw(){throw saved;}}});
-    try {engine.invoke('capture');} catch (error) {saved = error;}
+        end struct.get $S 0 local.get $live struct.get $S 0 i32.add))`,
+      {
+        h: {
+          // Throw the tagged exception used to exercise guest exception handling.
+          throw() {
+            throw saved;
+          }
+        }
+      }
+    );
+
+    try {
+      engine.invoke('capture');
+    } catch (error) {
+      saved = error;
+    }
+
     assert.equal(saved?.name, 'WiwException');
     assert.equal(engine.invoke('forward', 1048566), 141);
     engine.collectGarbage();
@@ -308,12 +448,26 @@ for (const [runtime, create] of runtimeFactories) {
 
 for (const [runtime, create] of runtimeFactories) {
   test(`${runtime}: failed allocations stop before later host effects and explicit collection recovers from traps`, async () => {
-    const engine = await create(); let effects = 0;
-    engine.load(`(module (type $A (array i32)) (import "h" "effect" (func $effect))
+    const engine = await create();
+    let effects = 0;
+
+    engine.load(
+      `(module (type $A (array i32)) (import "h" "effect" (func $effect))
       (func (export "trap") i32.const -1 array.new_default $A drop call $effect)
-      (func (export "run") i32.const 262144 array.new_default $A drop))`, {h:{effect(){effects++;}}});
+      (func (export "run") i32.const 262144 array.new_default $A drop))`,
+      {
+        h: {
+          // Record the host effect reached by the guest after the checked allocation.
+          effect() {
+            effects++;
+          }
+        }
+      }
+    );
     assert.throws(() => engine.invoke('trap'), /resource limit/);
-    assert.equal(effects, 0); assert.equal(engine.collectGarbage(), 0);
-    engine.invoke('run'); assert.equal(engine.collectGarbage(), 4194320);
+    assert.equal(effects, 0);
+    assert.equal(engine.collectGarbage(), 0);
+    engine.invoke('run');
+    assert.equal(engine.collectGarbage(), 4194320);
   });
 }

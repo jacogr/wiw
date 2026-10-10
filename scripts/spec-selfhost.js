@@ -1,42 +1,73 @@
 import assert from 'node:assert/strict';
-import {readFile, rename, writeFile} from 'node:fs/promises';
-import {runSuite} from './spec-runner.js';
+import { readFile, rename, writeFile } from 'node:fs/promises';
+import { runSuite } from './spec-runner.js';
 
 // Every script instance, including spectest and isolated negative assertions,
 // runs in its own WAT interpreter copy. Persist progress without accepting gaps.
 const coverage = JSON.parse(await readFile(new URL('../test/spec/capabilities.json', import.meta.url), 'utf8'));
+
 // Readers always see a complete JSON snapshot, including during a running audit.
 async function saveReport(output, report) {
   const temporary = new URL(output.href + '.tmp');
+
   await writeFile(temporary, JSON.stringify(report, null, 2) + '\n');
   await rename(temporary, output);
 }
 
 let incomplete = false;
+
+// Run the frozen full spec inventory through the selected optimized hosted interpreter.
 for (const binary of ['wiw-opt.wasm']) {
   const output = new URL(`../build/spec-selfhost-${binary}.json`, import.meta.url);
   const report = await runSuite(new URL(`../build/${binary}`, import.meta.url), undefined, {
     audit: true,
     interpreted: true,
     profile: true,
+
+    // Report the completed spec file and its execution counts.
     async onFile(counts, partial) {
       const timing = partial.timings.at(-1);
-      console.log(`${binary}/${counts.file}: ${counts.passed} passed, ${counts.skipped} skipped, ${counts.failed} failed (${(timing.elapsedMs / 1000).toFixed(2)}s)`);
-      await saveReport(output, {...partial, complete: false});
+
+      console.log(
+        `${binary}/${counts.file}: ${counts.passed} passed, ${counts.skipped} skipped, ${counts.failed} failed (${(
+          timing.elapsedMs / 1000
+        ).toFixed(2)}s)`
+      );
+      await saveReport(output, { ...partial, complete: false });
     }
   });
-  await saveReport(output, {...report, complete: true});
-  console.log(`${report.tag}/${binary}/interpreted: ${report.passed} passed, ${report.skipped} skipped, ${report.failed} failed across ${report.files.length} files in ${(report.elapsedMs / 1000).toFixed(1)}s`);
-  for (const [name,phase] of Object.entries(report.phases)) {
-    console.log(`  ${name}: ${(phase.elapsedMs/1000).toFixed(2)}s${phase.count === undefined ? '' : ` (${phase.count} calls)`}`);
+
+  await saveReport(output, { ...report, complete: true });
+  console.log(
+    `${report.tag}/${binary}/interpreted: ${report.passed} passed, ${report.skipped} skipped, ${
+      report.failed
+    } failed across ${report.files.length} files in ${(report.elapsedMs / 1000).toFixed(1)}s`
+  );
+
+  // Report phase timings alongside the complete self-hosted suite result.
+  for (const [name, phase] of Object.entries(report.phases)) {
+    console.log(
+      `  ${name}: ${(phase.elapsedMs / 1000).toFixed(2)}s${phase.count === undefined ? '' : ` (${phase.count} calls)`}`
+    );
   }
+
   incomplete ||= report.failed !== 0 || report.skipped !== 0;
-  assert.deepEqual(report.files.map(({file, passed, skipped, failed}) => ({file, commands: passed + skipped + failed})),
-    coverage.expectedCoverage.map(({file, passed}) => ({file, commands: passed})),
-    'self-hosted audit did not execute the complete frozen command inventory');
+
+  assert.deepEqual(
+    report.files.map(({ file, passed, skipped, failed }) => ({ file, commands: passed + skipped + failed })),
+    coverage.expectedCoverage.map(({ file, passed }) => ({ file, commands: passed })),
+    'self-hosted audit did not execute the complete frozen command inventory'
+  );
+
+  // Compare successful full coverage against the frozen inventory to detect missing commands.
   if (!report.failed && !report.skipped) {
-    assert.deepEqual(report.files.map(({failed, ...file}) => file), coverage.expectedCoverage,
-      'self-hosted coverage differs from the frozen full-suite counts');
+    assert.deepEqual(
+      report.files.map(({ failed, ...file }) => file),
+      coverage.expectedCoverage,
+      'self-hosted coverage differs from the frozen full-suite counts'
+    );
   }
 }
+
+// Mark an incomplete run as failed for shell and CI callers.
 if (incomplete) process.exitCode = 1;

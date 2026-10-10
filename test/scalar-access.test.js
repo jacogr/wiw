@@ -1,11 +1,13 @@
-import {runtimeFactories} from './runtime.js';
+import { runtimeFactories } from './runtime.js';
 import assert from 'node:assert/strict';
-import {test} from 'node:test';
+import { test } from 'node:test';
 
 for (const [runtime, create] of runtimeFactories) {
   test(`${runtime}: scalar selection follows growth, callbacks and bulk transitions between memory widths`, async () => {
     const engine = await create();
-    engine.load(`(module
+
+    engine.load(
+      `(module
       (import "env" "grow" (func $grow))
       (memory $first 1 2) (memory $wide i64 1 2)
       (func (export "run") (result i64)
@@ -20,7 +22,8 @@ for (const [runtime, create] of runtimeFactories) {
       (func (export "wideSize") (result i64) memory.size $wide)
       (func (export "wideGrow") (result i64) i64.const 1 memory.grow $wide)
       (func (export "firstSize") (result i32) memory.size $first))`,
-      {env: {grow: () => assert.equal(engine.growMemory(1), 1)}});
+      { env: { grow: () => assert.equal(engine.growMemory(1), 1) } }
+    );
     assert.equal(engine.invoke('run'), 0x123456789abcdefn);
     assert.equal(engine.invoke('firstSize'), 2);
     assert.equal(engine.invoke('wideSize'), 1n);

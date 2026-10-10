@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
-import {readFile,writeFile} from 'node:fs/promises';
-import {createHash} from 'node:crypto';
-import {execFileSync} from 'node:child_process';
-import {createBootstrapInterpreter,createInterpreter} from '../wiw.js';
+import { readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { createBootstrapInterpreter, createInterpreter } from '../wiw.js';
 
 // Measure repeated parsing/validation separately from invocation, with no guest compilation.
 const repeats = Number(process.env.BENCH_LOAD_REPEATS ?? 5);
 const samples = Number(process.env.BENCH_SAMPLES ?? 5);
+
 assert.ok(Number.isSafeInteger(repeats) && repeats > 0 && repeats <= 100);
 assert.ok(Number.isSafeInteger(samples) && samples > 0 && samples <= 20);
+
 const cases = {
   integers: `(module (func (export "run") (result i64)
     ${'i64.const 1 i64.const 2 i64.xor drop '.repeat(512)} i64.const 0))`,
@@ -17,21 +19,29 @@ const cases = {
   vectors: `(module (func (export "run") (result i32)
     ${'v128.const i64x2 1 2 v128.const i64x2 3 4 i64x2.extmul_low_i32x4_u drop '.repeat(256)} i32.const 0))`,
   functions: `(module
-    ${Array.from({length:64},(_,index) => `(func $f${index} (result i32)
-      ${'i32.const 1 i32.const 2 i32.xor drop '.repeat(16)} i32.const 0)`).join('\n')}
+    ${Array.from(
+      { length: 64 },
+      (_, index) => `(func $f${index} (result i32)
+      ${'i32.const 1 i32.const 2 i32.xor drop '.repeat(16)} i32.const 0)`
+    ).join('\n')}
     (func (export "run") (result i32) call $f63))`
 };
+
 // Wide integer magnitudes exercise decimal/hex digit scans and exact overflow thresholds.
 cases.integersWide = `(module (func (export "run") (result i64)
   ${'i64.const 18446744073709551615 i64.const 0xfedcba9876543210 i64.xor drop '.repeat(256)} i64.const 0))`;
 
 // Exercise both exact ratio sides and a full chunk boundary, beyond small-ratio rounding.
 cases.decimalScales = `(module (func (export "run") (result f64)
-  ${'f64.const 1e-300 drop f64.const 123456789e100 drop f64.const 3.4028234663852886e38 drop f64.const 1e-9 drop '.repeat(128)} f64.const 0))`;
+  ${'f64.const 1e-300 drop f64.const 123456789e100 drop f64.const 3.4028234663852886e38 drop f64.const 1e-9 drop '.repeat(
+    128
+  )} f64.const 0))`;
 
 // Long compensated significands isolate digit accumulation from extreme range classification.
 cases.decimalDigits = `(module (func (export "run") (result f64)
-  ${`f64.const 1${'234567890'.repeat(28)}e-252 drop f64.const -${'9'.repeat(256)}e-256 drop `.repeat(32)} f64.const 0))`;
+  ${`f64.const 1${'234567890'.repeat(28)}e-252 drop f64.const -${'9'.repeat(256)}e-256 drop `.repeat(
+    32
+  )} f64.const 0))`;
 
 // Nontrivial dyadic ratios exercise hexadecimal parsing and multiword rounding in both directions.
 cases.floatsHex = `(module (func (export "run") (result f64)
@@ -39,136 +49,259 @@ cases.floatsHex = `(module (func (export "run") (result f64)
 
 // Long compensated hex significands exercise chunk accumulation across many words.
 cases.hexDigits = `(module (func (export "run") (result f64)
-  ${`f64.const 0x1${'23456789abcdef0'.repeat(18)}p-1008 drop f64.const -0x${'f'.repeat(256)}p-1024 drop `.repeat(32)} f64.const 0))`;
+  ${`f64.const 0x1${'23456789abcdef0'.repeat(18)}p-1008 drop f64.const -0x${'f'.repeat(256)}p-1024 drop `.repeat(
+    32
+  )} f64.const 0))`;
 
 // Mixed-case byte escapes exercise the shared digit helper through data decoding.
-const dataBytes=Uint8Array.from({length:4096},(_,index)=>index&255);
+const dataBytes = Uint8Array.from({ length: 4096 }, (_, index) => index & 255);
+
 cases.dataBytes = `(module (memory 1)
-  (data (i32.const 0) "${Array.from(dataBytes,byte=>String.fromCharCode(92)+(byte&1?byte.toString(16).toUpperCase():byte.toString(16)).padStart(2,'0')).join('')}")
+  (data (i32.const 0) "${Array.from(
+    dataBytes,
+    (byte) =>
+      String.fromCharCode(92) + (byte & 1 ? byte.toString(16).toUpperCase() : byte.toString(16)).padStart(2, '0')
+  ).join('')}")
   (func (export "run") (result i32) i32.const 0))`;
 
 // Trivia-heavy modules isolate whitespace runs and both comment forms around real instructions.
-for(const [name,trivia] of [
-  ['whitespace',' \t\r\n'.repeat(16)],
-  ['lineComments',';; A line comment with (delimiters), quotes " and UTF-8 λ.\r\n'],
-  ['blockComments','(; An outer comment (; nested parentheses () ;) with quotes " and UTF-8 λ. ;)']
-]) cases[name]=`(module (func (export "run") (result i32)
+for (const [name, trivia] of [
+  ['whitespace', ' \t\r\n'.repeat(16)],
+  ['lineComments', ';; A line comment with (delimiters), quotes " and UTF-8 λ.\r\n'],
+  ['blockComments', '(; An outer comment (; nested parentheses () ;) with quotes " and UTF-8 λ. ;)']
+])
+  cases[name] = `(module (func (export "run") (result i32)
   ${`i32.const 1 ${trivia} drop ${trivia}`.repeat(256)} i32.const 0))`;
 
 // Long shared prefixes and mixed lengths exercise exact matching and rejected candidate guards.
-const longName=index=>`$shared_function_prefix_${String(index).padStart(4,'0')}`;
-cases.namesPrefix=`(module
-  ${Array.from({length:96},(_,index)=>`(func ${longName(index)} (result i32) i32.const 0)`).join('\n')}
+const longName = (index) => `$shared_function_prefix_${String(index).padStart(4, '0')}`;
+
+cases.namesPrefix = `(module
+  ${Array.from({ length: 96 }, (_, index) => `(func ${longName(index)} (result i32) i32.const 0)`).join('\n')}
   (func (export "run") (result i32)
-    ${Array.from({length:192},(_,index)=>`call ${longName(index%96)} drop`).join(' ')} i32.const 0))`;
-cases.namesLengths=`(module
-  ${Array.from({length:96},(_,index)=>`(func $${'x'.repeat(index+1)} (result i32) i32.const 0)`).join('\n')}
+    ${Array.from({ length: 192 }, (_, index) => `call ${longName(index % 96)} drop`).join(' ')} i32.const 0))`;
+cases.namesLengths = `(module
+  ${Array.from({ length: 96 }, (_, index) => `(func $${'x'.repeat(index + 1)} (result i32) i32.const 0)`).join('\n')}
   (func (export "run") (result i32)
-    ${Array.from({length:192},(_,index)=>`call $${'x'.repeat(index%96+1)} drop`).join(' ')} i32.const 0))`;
+    ${Array.from({ length: 192 }, (_, index) => `call $${'x'.repeat((index % 96) + 1)} drop`).join(' ')} i32.const 0))`;
 
 // Wide local and type namespaces isolate source-name resolution from execution.
-cases.locals=`(module (func (export "run") (result i32)
-  ${Array.from({length:128},(_,index)=>`(local $local_${index} i32)`).join(' ')}
-  ${Array.from({length:512},(_,index)=>`i32.const 0 local.set $local_${index%128} local.get $local_${index%128} drop`).join(' ')}
+cases.locals = `(module (func (export "run") (result i32)
+  ${Array.from({ length: 128 }, (_, index) => `(local $local_${index} i32)`).join(' ')}
+  ${Array.from(
+    { length: 512 },
+    (_, index) => `i32.const 0 local.set $local_${index % 128} local.get $local_${index % 128} drop`
+  ).join(' ')}
   i32.const 0))`;
-cases.types=`(module
-  ${Array.from({length:128},(_,index)=>`(type $type_${index} (func (result i32)))`).join(' ')}
-  ${Array.from({length:128},(_,index)=>`(func $fn_${index} (type $type_${index}) i32.const 0)`).join(' ')}
+cases.types = `(module
+  ${Array.from({ length: 128 }, (_, index) => `(type $type_${index} (func (result i32)))`).join(' ')}
+  ${Array.from({ length: 128 }, (_, index) => `(func $fn_${index} (type $type_${index}) i32.const 0)`).join(' ')}
   (func (export "run") (result i32) call $fn_127))`;
 
 // Crowded implicit signatures measure structural type reuse separately from named lookup.
-cases.repeatedSignatures=`(module
-  ${Array.from({length:128},(_,index)=>`(type (func (param ${'i32 '.repeat(index)}) (result i32)))`).join(' ')}
-  ${Array.from({length:256},()=>`(func (param ${'i32 '.repeat(127)}) (result i32) i32.const 0)`).join(' ')}
+cases.repeatedSignatures = `(module
+  ${Array.from({ length: 128 }, (_, index) => `(type (func (param ${'i32 '.repeat(index)}) (result i32)))`).join(' ')}
+  ${Array.from({ length: 256 }, () => `(func (param ${'i32 '.repeat(127)}) (result i32) i32.const 0)`).join(' ')}
   (func (export "run") (result i32) i32.const 0))`;
-cases.mixedSignatures=`(module
-  ${Array.from({length:256},(_,index)=>`(func (param ${'i32 '.repeat(index%128)}) (result i32) i32.const 0)`).join(' ')}
+cases.mixedSignatures = `(module
+  ${Array.from(
+    { length: 256 },
+    (_, index) => `(func (param ${'i32 '.repeat(index % 128)}) (result i32) i32.const 0)`
+  ).join(' ')}
   (func (export "run") (result i32) i32.const 0))`;
 
 // Large plain and mixed UTF-8 payloads expose bulk decoding separately from byte escapes.
-const dataPayloads={plainData:'abcdefghijklmnop'.repeat(1024),
-  unicodeData:'λ中😀'.repeat(1536),mixedData:'abcdefghijklmnopλ中😀'.repeat(512)};
-for(const [name,payload] of Object.entries(dataPayloads)) cases[name]=`(module (memory 1)
+const dataPayloads = {
+  plainData: 'abcdefghijklmnop'.repeat(1024),
+  unicodeData: 'λ中😀'.repeat(1536),
+  mixedData: 'abcdefghijklmnopλ中😀'.repeat(512)
+};
+
+// Build text data workloads that exercise the selected byte and Unicode payloads.
+for (const [name, payload] of Object.entries(dataPayloads))
+  cases[name] = `(module (memory 1)
   (data (i32.const 0) "${payload}") (func (export "run") (result i32) i32.const 0))`;
-cases.longBlock=`(module (;${'ordinary comment text '.repeat(512)};) (func (export "run") (result i32) i32.const 0))`;
-const checkData=(name,engine)=>{
-  const expected=['dataBytes','dataBytesBinary'].includes(name)?dataBytes:dataPayloads[name]===undefined?undefined:new TextEncoder().encode(dataPayloads[name]);
-  if(expected) assert.deepEqual(engine.readMemory(0,expected.length),expected);
+
+cases.longBlock = `(module (;${'ordinary comment text '.repeat(512)};) (func (export "run") (result i32) i32.const 0))`;
+
+// Verify that a benchmark guest retained its expected data bytes.
+const checkData = (name, engine) => {
+  const expected = ['dataBytes', 'dataBytesBinary'].includes(name)
+    ? dataBytes
+    : dataPayloads[name] === undefined
+    ? undefined
+    : new TextEncoder().encode(dataPayloads[name]);
+
+  // Verify data bytes for workloads that declare an expected memory payload.
+  if (expected) assert.deepEqual(engine.readMemory(0, expected.length), expected);
 };
 
 // Scope exits should scale with changed non-null locals rather than unrelated numeric slots.
-cases.scopeLocals=`(module (func (export "run") (result i32) (local ${'i32 '.repeat(256)})
+cases.scopeLocals = `(module (func (export "run") (result i32) (local ${'i32 '.repeat(256)})
   ${'block i32.const 0 drop end '.repeat(512)} i32.const 0))`;
-cases.scopeSparse=`(module (type $S (struct)) (func (export "run") (result i32)
+cases.scopeSparse = `(module (type $S (struct)) (func (export "run") (result i32)
   (local ${'i32 '.repeat(256)}) (local $a (ref $S))
   ${'block struct.new $S local.set $a local.get $a drop end '.repeat(256)} i32.const 0))`;
 
 // Hand-encode binary equivalents so the benchmark never compiles guest modules.
-const uleb=value=>{
-  const bytes=[];
-  do {const byte=value&127;value=Math.floor(value/128);bytes.push(byte|(value?128:0));} while(value);
+const uleb = (value) => {
+  const bytes = [];
+
+  // Emit unsigned LEB128 groups until the entire value has been encoded.
+  do {
+    const byte = value & 127;
+
+    value = Math.floor(value / 128);
+
+    bytes.push(byte | (value ? 128 : 0));
+  } while (value);
+
   return bytes;
 };
-const section=(id,bytes)=>[id,...uleb(bytes.length),...bytes];
-const floatBytes=value=>{
-  const bytes=new Uint8Array(8);new DataView(bytes.buffer).setFloat64(0,value,true);return [...bytes];
+
+// Wrap a binary section payload with its kind and encoded byte length.
+const section = (id, bytes) => [id, ...uleb(bytes.length), ...bytes];
+
+// Encode floating-point constants as little-endian binary bytes.
+const floatBytes = (value) => {
+  const bytes = new Uint8Array(8);
+
+  new DataView(bytes.buffer).setFloat64(0, value, true);
+
+  return [...bytes];
 };
-const vectorBytes=(a,b)=>{
-  const bytes=new Uint8Array(16),view=new DataView(bytes.buffer);
-  view.setBigUint64(0,BigInt(a),true);view.setBigUint64(8,BigInt(b),true);
-  return [253,12,...bytes];
+
+// Encode vector constants into their binary instruction payload.
+const vectorBytes = (a, b) => {
+  const bytes = new Uint8Array(16),
+    view = new DataView(bytes.buffer);
+
+  view.setBigUint64(0, BigInt(a), true);
+  view.setBigUint64(8, BigInt(b), true);
+
+  return [253, 12, ...bytes];
 };
-const repeat=(bytes,count)=>Array.from({length:count},()=>bytes).flat();
-const body=ops=>{const bytes=[0,...ops,11];return [...uleb(bytes.length),...bytes];};
-const binaryModule=(type,bodies)=>new Uint8Array([0,97,115,109,1,0,0,0,
-  ...section(1,[1,96,0,1,type]),...section(3,[...uleb(bodies.length),...bodies.map(()=>0)]),
-  ...section(7,[1,3,114,117,110,0,...uleb(bodies.length-1)]),
-  ...section(10,[...uleb(bodies.length),...bodies.flatMap(body)])]);
+
+// Repeat an instruction byte sequence for a synthetic benchmark.
+const repeat = (bytes, count) => Array.from({ length: count }, () => bytes).flat();
+
+// Wrap instruction bytes in a binary function body with its local declarations.
+const body = (ops) => {
+  const bytes = [0, ...ops, 11];
+
+  return [...uleb(bytes.length), ...bytes];
+};
+
+// Assemble a synthetic binary guest module from its sections.
+const binaryModule = (type, bodies) =>
+  new Uint8Array([
+    0,
+    97,
+    115,
+    109,
+    1,
+    0,
+    0,
+    0,
+    ...section(1, [1, 96, 0, 1, type]),
+    ...section(3, [...uleb(bodies.length), ...bodies.map(() => 0)]),
+    ...section(7, [1, 3, 114, 117, 110, 0, ...uleb(bodies.length - 1)]),
+    ...section(10, [...uleb(bodies.length), ...bodies.flatMap(body)])
+  ]);
+
 // Const/xor/drop, const/copysign/drop, and SIMD const/extmul/drop match the text cases.
-cases.integersBinary=binaryModule(126,[[...repeat([66,1,66,2,133,26],512),66,0]]);
-cases.floatsBinary=binaryModule(124,[[...repeat([68,...floatBytes(1.5),68,...floatBytes(2),166,26],512),68,...floatBytes(0)]]);
-cases.vectorsBinary=binaryModule(127,[[...repeat([...vectorBytes(1,2),...vectorBytes(3,4),253,...uleb(222),26],256),65,0]]);
-cases.functionsBinary=binaryModule(127,[...Array.from({length:64},()=>[...repeat([65,1,65,2,115,26],16),65,0]),[16,63]]);
+cases.integersBinary = binaryModule(126, [[...repeat([66, 1, 66, 2, 133, 26], 512), 66, 0]]);
+cases.floatsBinary = binaryModule(124, [
+  [...repeat([68, ...floatBytes(1.5), 68, ...floatBytes(2), 166, 26], 512), 68, ...floatBytes(0)]
+]);
+cases.vectorsBinary = binaryModule(127, [
+  [...repeat([...vectorBytes(1, 2), ...vectorBytes(3, 4), 253, ...uleb(222), 26], 256), 65, 0]
+]);
+cases.functionsBinary = binaryModule(127, [
+  ...Array.from({ length: 64 }, () => [...repeat([65, 1, 65, 2, 115, 26], 16), 65, 0]),
+  [16, 63]
+]);
 
 // Hand-encoded data modules compare binary string elaboration with the corresponding text payloads.
-const binaryDataModule=payload=>new Uint8Array([0,97,115,109,1,0,0,0,
-  ...section(1,[1,96,0,1,127]),...section(3,[1,0]),...section(5,[1,0,1]),
-  ...section(7,[1,3,114,117,110,0,0]),...section(10,[1,...body([65,0])]),
-  ...section(11,[1,0,65,0,11,...uleb(payload.length),...payload])]);
-for(const name of ['plainData','unicodeData']) {
-  const binaryName=name.replace('Data','Binary');dataPayloads[binaryName]=dataPayloads[name];
-  cases[binaryName]=binaryDataModule(new TextEncoder().encode(dataPayloads[name]));
-}
-cases.dataBytesBinary=binaryDataModule(dataBytes);
+const binaryDataModule = (payload) =>
+  new Uint8Array([
+    0,
+    97,
+    115,
+    109,
+    1,
+    0,
+    0,
+    0,
+    ...section(1, [1, 96, 0, 1, 127]),
+    ...section(3, [1, 0]),
+    ...section(5, [1, 0, 1]),
+    ...section(7, [1, 3, 114, 117, 110, 0, 0]),
+    ...section(10, [1, ...body([65, 0])]),
+    ...section(11, [1, 0, 65, 0, 11, ...uleb(payload.length), ...payload])
+  ]);
 
-const binary = new URL('../build/wiw-opt.wasm',import.meta.url);
-const source = await readFile(new URL('../build/wiw-opt.wat',import.meta.url),'utf8');
+// Include binary equivalents of the plain and Unicode data-loading workloads.
+for (const name of ['plainData', 'unicodeData']) {
+  const binaryName = name.replace('Data', 'Binary');
+
+  dataPayloads[binaryName] = dataPayloads[name];
+  cases[binaryName] = binaryDataModule(new TextEncoder().encode(dataPayloads[name]));
+}
+
+cases.dataBytesBinary = binaryDataModule(dataBytes);
+
+const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
+const source = await readFile(new URL('../build/wiw-opt.wat', import.meta.url), 'utf8');
 const report = {
-  node:process.version,
-  binaryen:execFileSync('wasm-opt',['--version'],{encoding:'utf8'}).trim(),
-  engineSourceSha256:createHash('sha256').update(source).digest('hex'),
-  binarySha256:createHash('sha256').update(await readFile(binary)).digest('hex'),
-  phase:'load',repeats,samples,cases:[]
+  node: process.version,
+  binaryen: execFileSync('wasm-opt', ['--version'], { encoding: 'utf8' }).trim(),
+  engineSourceSha256: createHash('sha256').update(source).digest('hex'),
+  binarySha256: createHash('sha256')
+    .update(await readFile(binary))
+    .digest('hex'),
+  phase: 'load',
+  repeats,
+  samples,
+  cases: []
 };
-for (const [runtime,create] of [['bootstrap',createBootstrapInterpreter],['interpreted',createInterpreter]]) {
-  for (const [name,guest] of Object.entries(cases)) {
-    const engine = await create(binary,runtime==='interpreted' ? {source} : undefined);
-    const format=guest instanceof Uint8Array ? 'binary' : 'text';
-    const load=()=>format==='binary' ? engine.loadBinary(guest) : engine.load(guest);
+
+// Compare guest loading through the compiled and self-hosted interpreters.
+for (const [runtime, create] of [
+  ['bootstrap', createBootstrapInterpreter],
+  ['interpreted', createInterpreter]
+]) {
+  // Reuse one engine per workload so the timing measures loading rather than factory construction.
+  for (const [name, guest] of Object.entries(cases)) {
+    const engine = await create(binary, runtime === 'interpreted' ? { source } : undefined);
+    const format = guest instanceof Uint8Array ? 'binary' : 'text';
+
+    // Load, bind and initialize a guest module through the selected interpreter.
+    const load = () => (format === 'binary' ? engine.loadBinary(guest) : engine.load(guest));
+
     load();
-    assert.equal(engine.invoke('run'),name.startsWith('integers') ? 0n : 0);
-    checkData(name,engine);
-    const elapsedMs=[];
-    for (let sample=0;sample<samples;sample++) {
-      const start=performance.now();
-      for (let repeat=0;repeat<repeats;repeat++) load();
-      elapsedMs.push((performance.now()-start)/repeats);
-      assert.equal(engine.invoke('run'),name.startsWith('integers') ? 0n : 0);
-      checkData(name,engine);
+    assert.equal(engine.invoke('run'), name.startsWith('integers') ? 0n : 0);
+    checkData(name, engine);
+
+    const elapsedMs = [];
+
+    // Collect repeated samples while amortizing timer overhead across multiple guest loads.
+    for (let sample = 0; sample < samples; sample++) {
+      const start = performance.now();
+
+      // Repeat the selected text or binary load without reconstructing its interpreter.
+      for (let repeat = 0; repeat < repeats; repeat++) load();
+
+      elapsedMs.push((performance.now() - start) / repeats);
+      assert.equal(engine.invoke('run'), name.startsWith('integers') ? 0n : 0);
+      checkData(name, engine);
     }
-    const medianMs=[...elapsedMs].sort((a,b)=>a-b)[Math.floor(samples/2)];
-    report.cases.push({runtime,name,format,sourceBytes:Buffer.byteLength(guest),medianMs,elapsedMs});
+
+    const medianMs = [...elapsedMs].sort((a, b) => a - b)[Math.floor(samples / 2)];
+
+    report.cases.push({ runtime, name, format, sourceBytes: Buffer.byteLength(guest), medianMs, elapsedMs });
     console.log(`${runtime}/${name}: ${medianMs.toFixed(2)} ms per load (median of ${samples})`);
   }
 }
-await writeFile(new URL('../build/bench-load.json',import.meta.url),JSON.stringify(report,null,2)+'\n');
+
+await writeFile(new URL('../build/bench-load.json', import.meta.url), JSON.stringify(report, null, 2) + '\n');

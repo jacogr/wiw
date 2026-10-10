@@ -4026,7 +4026,7 @@ full-run timings are diagnostic measurements rather than paired speedups.
 
 ## Public WASI Preview 1 runner
 
-`wasi.js` publishes the existing Node-WASI memory mirror as a supported host,
+`wiw.js` publishes the existing Node-WASI memory mirror as a supported host,
 command/reactor loader and CLI. Native WASI requires memory with guest address
 zero at the start of its buffer; the adapter copies the selected wasm32 memory
 before/after syscalls and tracks growth. Exported-name selection defaults to
@@ -4059,3 +4059,15 @@ starts successfully through the public compiled CLI; the public loadWasi/host AP
 initializes it and evaluates `1 2 + . cr`, producing `3` and a newline. No w4
 repository dependency, fixture copy or permanent target is added. The historical
 full self-hosted w4 library validation remains recorded separately.
+
+
+### CLI runtime selection
+
+The CLI defaults to the compiled optimized engine (`--runtime wasm`).
+`--runtime wat` and its `--bootstrap` alias select self-hosted inception: the
+compiled parent interprets wiw's WAT, which then interprets the guest. Shared
+option parsing supports these switches in ordinary export invocation and WASI
+mode, in either order with `--wasi`. Host option parsing stops at the filename,
+so guest arguments remain verbatim. `--wasi` is an optional, documented mode
+switch; ordinary invocation still requires a named export. The API factories,
+WASI helper defaults and `make check` retain their existing self-hosted selection.

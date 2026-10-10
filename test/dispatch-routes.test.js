@@ -1,11 +1,13 @@
-import {runtimeFactories} from './runtime.js';
+import { runtimeFactories } from './runtime.js';
 import assert from 'node:assert/strict';
-import {test} from 'node:test';
+import { test } from 'node:test';
 
-const binary = new URL('../build/wiw-opt.wasm',import.meta.url);
-for (const [runtime,create] of runtimeFactories) {
-  test(`${runtime}: mixed dispatch families retain raw results through direct, indirect and reference calls`,async () => {
+const binary = new URL('../build/wiw-opt.wasm', import.meta.url);
+
+for (const [runtime, create] of runtimeFactories) {
+  test(`${runtime}: mixed dispatch families retain raw results through direct, indirect and reference calls`, async () => {
     const engine = await create(binary);
+
     engine.load(`(module
       (type $t (func (param i32) (result i32)))
       (memory 1)
@@ -28,18 +30,19 @@ for (const [runtime,create] of runtimeFactories) {
         (f64.mul (f64.const 1.5) (f64.const 2))
         (v128.store (i32.const 16) (v128.const i64x2 1 -1))
         (v128.xor (v128.load (i32.const 16)) (v128.const i64x2 3 0))))`);
-    for (const input of [0,7,255,256,0]) {
-      assert.deepEqual(engine.invokeRaw('run',{type:'i32',bits:BigInt(input)}),[
-        {type:'i32',bits:BigInt(input*3)},
-        {type:'i64',bits:BigInt.asUintN(64,-4n)},
-        {type:'f32',bits:0x80000000n},
-        {type:'f64',bits:0x4008000000000000n},
-        {type:'v128',bits:0xffffffffffffffff0000000000000002n}
+
+    for (const input of [0, 7, 255, 256, 0]) {
+      assert.deepEqual(engine.invokeRaw('run', { type: 'i32', bits: BigInt(input) }), [
+        { type: 'i32', bits: BigInt(input * 3) },
+        { type: 'i64', bits: BigInt.asUintN(64, -4n) },
+        { type: 'f32', bits: 0x80000000n },
+        { type: 'f64', bits: 0x4008000000000000n },
+        { type: 'v128', bits: 0xffffffffffffffff0000000000000002n }
       ]);
     }
   });
 
-  test(`${runtime}: routed exception rethrows preserve payloads and recover after traps and reloads`,async () => {
+  test(`${runtime}: routed exception rethrows preserve payloads and recover after traps and reloads`, async () => {
     const engine = await create(binary);
     const source = `(module
       (tag $t (param i64))
@@ -56,12 +59,14 @@ for (const [runtime,create] of runtimeFactories) {
           unreachable))
       (func (export "trap")
         ref.null exn throw_ref))`;
-    for (let reload=0;reload<2;reload++) {
+
+    for (let reload = 0; reload < 2; reload++) {
       engine.load(source);
-      for (const value of [0n,-1n,-(1n<<63n)]) {
-        assert.equal(engine.invoke('run',value),value);
-        assert.throws(() => engine.invoke('trap'),/null reference at byte/);
-        assert.equal(engine.invoke('run',value),value);
+
+      for (const value of [0n, -1n, -(1n << 63n)]) {
+        assert.equal(engine.invoke('run', value), value);
+        assert.throws(() => engine.invoke('trap'), /null reference at byte/);
+        assert.equal(engine.invoke('run', value), value);
       }
     }
   });

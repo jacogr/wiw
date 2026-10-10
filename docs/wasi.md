@@ -1,6 +1,6 @@
 # WASI Preview 1
 
-`wasi.js` is the supported Node WASI Preview 1 adapter and command runner.
+`wiw.js` is the supported Node WASI Preview 1 adapter and command runner.
 It uses the existing wiw interpreter in either compiled or self-hosted mode;
 guest WAT is interpreted and guest Wasm uses wiw's binary decoder. No external
 guest repository, compiler invocation, or guest-specific Make target is required.
@@ -9,18 +9,21 @@ Preview 2 and the component model are separate interfaces and are not provided.
 ## CLI
 
 ```sh
-# Default self-hosted WAT interpreter; standard streams use this process's descriptors.
-node wasi.js --dir /usr=/absolute/path/to/fixtures guest.wat -- argument1 argument2
+# Default compiled Wasm interpreter; standard streams use this process's descriptors.
+node wiw.js --wasi --dir /usr=/absolute/path/to/fixtures guest.wat -- argument1 argument2
 
-# Compiled interpreter, binary guest, explicit environment and fuel.
-node wasi.js --bootstrap --env NAME=value --fuel 100000000000 guest.wasm
+# Self-hosted inception, binary guest, explicit environment and fuel.
+node wiw.js --wasi --bootstrap --env NAME=value --fuel 100000000000 guest.wasm
 
 # A reactor invokes its optional _initialize instead of requiring _start.
-node wasi.js --reactor reactor.wasm
+node wiw.js --wasi --reactor reactor.wasm
 ```
 
-`--runtime wat|wasm` selects the interpreter mode; `--bootstrap` aliases
-`--runtime wasm`. The default fuel is 100,000,000 instructions per invocation.
+`--wasi` enables WASI Preview 1 process hosting instead of invoking a named
+export. Guest arguments follow the filename; no export name is required.
+`--runtime wasm|wat` selects the interpreter mode. Compiled Wasm is the CLI
+default; `--bootstrap` aliases `--runtime wat` for self-hosted inception.
+The default fuel is 100,000,000 instructions per invocation.
 `--env NAME=VALUE` and `--dir GUEST=HOST` are repeatable. Environment entries and
 preopens default to empty; the CLI does not inherit the process environment or
 working directory into the guest. Arguments start with the guest filename as
@@ -32,7 +35,7 @@ low eight bits of the WASI exit code; the API preserves all 32 bits.
 
 ```js
 import {readFile} from 'node:fs/promises';
-import {runWasi, loadWasi} from './wasi.js';
+import {runWasi, loadWasi} from './wiw.js';
 
 const exitCode = await runWasi(await readFile('/absolute/path/to/guest.wasm'), {
   runtime: 'wat',                 // 'wasm' selects the compiled interpreter
@@ -56,7 +59,9 @@ owns that host and closes it. Both helpers accept `limits`, `parentLimits` and
 `parentFuel` factory settings and extra import namespaces under `imports`.
 Extra imports cannot replace `wasi_snapshot_preview1`. They also accept the host
 options described below. A BigInt `fuel` sets the per-invocation instruction
-budget; the default self-hosted parent retains its separate execution budget.
+budget. The API helpers retain their self-hosted default (`runtime: 'wat'`);
+the CLI supplies `runtime: 'wasm'` by default. A self-hosted parent retains its
+separate execution budget.
 
 ```js
 const {engine, host} = await loadWasi(reactorSource, {mode: 'reactor'});
@@ -70,7 +75,7 @@ try {
 
 ## Host adapter
 
-For caller-created engines, import `createWasiHost` from `./wasi.js`, then pass
+For caller-created engines, import `createWasiHost` from `./wiw.js`, then pass
 `host.imports` to `engine.load`/`loadBinary` or their async counterparts. The old
 `test/helpers/wasi.js` path reexports this public implementation for existing
 local integration scripts.

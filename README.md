@@ -1,8 +1,9 @@
 # wiw
 
-A WAT interpreter written in WAT. The CLI and API run guests through one
-interpreted copy by default. This runtime passes the entire pinned WebAssembly
-3.0 core suite, including SIMD. Additional regressions run wiw through two
+A WAT interpreter written in WAT. The CLI runs the compiled Wasm engine by
+default; `--runtime wat` or `--bootstrap` selects inception, where wiw interprets
+its own WAT source. The API retains its self-hosted default. This runtime passes
+the entire pinned WebAssembly 3.0 core suite, including SIMD. Additional regressions run wiw through two
 interpreted layers.
 
 Requires Git, Node, make, m4, wat2wasm (WABT), and wasm-opt (Binaryen).
@@ -18,8 +19,9 @@ node wiw.js test/float.wat double 1.25
 ```
 
 These examples print `42`, `120`, and `2.5`. Use
-`node wiw.js --bootstrap test/constant.wat answer` for the bootstrap diagnostic
-runtime. Runtime selection is independent of `DEBUG`.
+`node wiw.js --bootstrap test/constant.wat answer` for self-hosted inception.
+`--runtime wasm` explicitly selects the faster compiled engine; `--runtime wat`
+is equivalent to `--bootstrap`. Runtime selection is independent of `DEBUG`.
 `make` produces readable expanded `build/wiw.wat`, the intermediate bootstrap
 binary, and optimized `build/wiw-opt.wasm`. It also emits compact `build/wiw-opt.wat`
 from that optimized binary for the interpreted copy. Guest text and binary
@@ -96,11 +98,11 @@ in either interpreter mode, with arguments, environment, preopened directories,
 standard streams and process-exit handling. For example:
 
 ```sh
-node wasi.js --dir /usr=/absolute/path/to/fixtures guest.wat -- argument
-node wasi.js --bootstrap guest.wasm
+node wiw.js --wasi --dir /usr=/absolute/path/to/fixtures guest.wat -- argument
+node wiw.js --wasi guest.wasm
 ```
 
-The public `runWasi`, `loadWasi` and `createWasiHost` APIs live in `wasi.js`.
+The public `runWasi`, `loadWasi` and `createWasiHost` APIs live in `wiw.js`.
 No guest-specific target or repository dependency is required.
 
 `getGlobal`/`setGlobal` provide checked global access. Memory access supports

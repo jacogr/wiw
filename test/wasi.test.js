@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
-import {test} from 'node:test';
+import { test } from 'node:test';
 import fs from 'node:fs';
-import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
-import {execFileSync} from 'node:child_process';
-import {WASI} from 'node:wasi';
-import {runtimeFactories} from './runtime.js';
-import {createWasiHost,WasiExit} from '../wasi.js';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { WASI } from 'node:wasi';
+import { runtimeFactories } from './runtime.js';
+import { createWasiHost, WasiExit } from '../wiw.js';
 
-const source=`(module
+const source = `(module
   (import "wasi_snapshot_preview1" "fd_read" (func $read (param i32 i32 i32 i32) (result i32)))
   (import "wasi_snapshot_preview1" "fd_write" (func $write (param i32 i32 i32 i32) (result i32)))
   (import "wasi_snapshot_preview1" "path_open" (func $open (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
@@ -47,65 +47,114 @@ const source=`(module
     i32.const 4 i32.const 1 i32.store
     i32.const 1 i32.const 0 i32.const 1 i32.const 68 call $write))`;
 
-for(const [runtime,create] of runtimeFactories) {
-  test(`${runtime}: WASI bridge matches native file IO, growth, i64 offsets and bounds`,async()=>{
-    const directory=await mkdtemp(join(tmpdir(),'wiw-wasi-'));
-    const descriptors=[];
-    const options=label=>{
-      const stdin=fs.openSync(join(directory,'stdin'),'r'),stdout=fs.openSync(join(directory,label+'-out'),'w');
-      const stderr=fs.openSync(join(directory,label+'-err'),'w');
-      descriptors.push(stdin,stdout,stderr);
-      return {args:[],env:{},preopens:{'/usr':directory},stdin,stdout,stderr};
+for (const [runtime, create] of runtimeFactories) {
+  test(`${runtime}: WASI bridge matches native file IO, growth, i64 offsets and bounds`, async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'wiw-wasi-'));
+    const descriptors = [];
+
+    // Create fresh WASI options and descriptor bindings for one test instance.
+    const options = (label) => {
+      const stdin = fs.openSync(join(directory, 'stdin'), 'r'),
+        stdout = fs.openSync(join(directory, label + '-out'), 'w');
+      const stderr = fs.openSync(join(directory, label + '-err'), 'w');
+
+      descriptors.push(stdin, stdout, stderr);
+
+      return { args: [], env: {}, preopens: { '/usr': directory }, stdin, stdout, stderr };
     };
+
     try {
-      await writeFile(join(directory,'stdin'),'ABC');await writeFile(join(directory,'input.txt'),'hello-world');
-      const wat=join(directory,'guest.wat'),wasm=join(directory,'guest.wasm');
-      await writeFile(wat,source);execFileSync('wat2wasm',[wat,'-o',wasm]);
-      const binary=await readFile(wasm),nativeWasi=new WASI({...options('native'),version:'preview1'});
-      const {instance}=await WebAssembly.instantiate(binary,nativeWasi.getImportObject());
-      assert.equal(nativeWasi.start(instance),0);
-      const expected=instance.exports.bad();assert.notEqual(expected,0);
-      const engine=await create();
-      for(const format of ['text','binary']) {
-        const host=createWasiHost(engine,options(format));
-        if(format==='text')engine.load(source,host.imports);else engine.loadBinary(binary,host.imports);
-        assert.equal(host.start(),0);assert.throws(()=>host.start(),/already started/);
-        assert.equal(host.invoke('bad'),expected,'a pointer at guest end remains out of bounds');
-        for(const [offset,length] of [[64,32],[200,3],[512,5],[65536,4]]) {
-          assert.deepEqual(engine.readMemory(offset,length),new Uint8Array(instance.exports.memory.buffer,offset,length));
+      await writeFile(join(directory, 'stdin'), 'ABC');
+      await writeFile(join(directory, 'input.txt'), 'hello-world');
+
+      const wat = join(directory, 'guest.wat'),
+        wasm = join(directory, 'guest.wasm');
+
+      await writeFile(wat, source);
+      execFileSync('wat2wasm', [wat, '-o', wasm]);
+
+      const binary = await readFile(wasm),
+        nativeWasi = new WASI({ ...options('native'), version: 'preview1' });
+      const { instance } = await WebAssembly.instantiate(binary, nativeWasi.getImportObject());
+
+      assert.equal(nativeWasi.start(instance), 0);
+
+      const expected = instance.exports.bad();
+
+      assert.notEqual(expected, 0);
+
+      const engine = await create();
+
+      for (const format of ['text', 'binary']) {
+        const host = createWasiHost(engine, options(format));
+
+        // Exercise the WAT loader while retaining an equivalent binary fixture for comparison.
+        if (format === 'text') engine.load(source, host.imports);
+        else engine.loadBinary(binary, host.imports);
+
+        assert.equal(host.start(), 0);
+        assert.throws(() => host.start(), /already started/);
+        assert.equal(host.invoke('bad'), expected, 'a pointer at guest end remains out of bounds');
+
+        for (const [offset, length] of [
+          [64, 32],
+          [200, 3],
+          [512, 5],
+          [65536, 4]
+        ]) {
+          assert.deepEqual(
+            engine.readMemory(offset, length),
+            new Uint8Array(instance.exports.memory.buffer, offset, length)
+          );
         }
-        assert.equal(await readFile(join(directory,format+'-out'),'utf8'),'XYZ');
-        assert.equal(await readFile(join(directory,format+'-err'),'utf8'),'');
+
+        assert.equal(await readFile(join(directory, format + '-out'), 'utf8'), 'XYZ');
+        assert.equal(await readFile(join(directory, format + '-err'), 'utf8'), '');
         host.close();
       }
-      assert.equal(await readFile(join(directory,'native-out'),'utf8'),'XYZ');
-    }finally {
-      for(const fd of descriptors)fs.closeSync(fd);
-      await rm(directory,{recursive:true,force:true});
+
+      assert.equal(await readFile(join(directory, 'native-out'), 'utf8'), 'XYZ');
+    } finally {
+      for (const fd of descriptors) fs.closeSync(fd);
+
+      await rm(directory, { recursive: true, force: true });
     }
   });
 
-  test(`${runtime}: WASI process exit preserves its code and leaves the interpreter usable`,async()=>{
-    const engine=await create(),host=createWasiHost(engine,{args:[],env:{}});
-    engine.load(`(module
+  test(`${runtime}: WASI process exit preserves its code and leaves the interpreter usable`, async () => {
+    const engine = await create(),
+      host = createWasiHost(engine, { args: [], env: {} });
+
+    engine.load(
+      `(module
       (import "wasi_snapshot_preview1" "proc_exit" (func $exit (param i32)))
       (memory (export "memory") 1)
       (func (export "_start") i32.const 7 call $exit unreachable)
       (func (export "exit") i32.const -1 call $exit)
-      (func (export "answer") (result i32) i32.const 42))`,host.imports);
-    assert.equal(host.start(),7);
-    assert.equal(host.invoke('answer'),42);
-    assert.throws(()=>host.invoke('exit'),error=>error instanceof WasiExit&&error.code===4294967295);
-    assert.equal(engine.invoke('answer'),42);
+      (func (export "answer") (result i32) i32.const 42))`,
+      host.imports
+    );
+    assert.equal(host.start(), 7);
+    assert.equal(host.invoke('answer'), 42);
+    assert.throws(
+      () => host.invoke('exit'),
+      (error) => error instanceof WasiExit && error.code === 4294967295
+    );
+    assert.equal(engine.invoke('answer'), 42);
     host.close();
-    const automatic=createWasiHost(engine,{args:[],env:{},stdout:1});
-    engine.load(`(module
+
+    const automatic = createWasiHost(engine, { args: [], env: {}, stdout: 1 });
+
+    engine.load(
+      `(module
       (import "wasi_snapshot_preview1" "fd_write" (func $write (param i32 i32 i32 i32) (result i32)))
       (memory (export "memory") 1)
       (func $init i32.const 1 i32.const 0 i32.const 0 i32.const 4 call $write drop)
       (start $init)
-      (func (export "answer") (result i32) i32.const 42))`,automatic.imports);
-    assert.equal(automatic.invoke('answer'),42,'WASI is available during module start');
+      (func (export "answer") (result i32) i32.const 42))`,
+      automatic.imports
+    );
+    assert.equal(automatic.invoke('answer'), 42, 'WASI is available during module start');
     automatic.close();
   });
 }
