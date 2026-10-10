@@ -40,6 +40,79 @@ const messages = [
   'array out of bounds',
   'uncaught exception'
 ];
+// Stable symbolic names mirror the interpreter ABI independently of message wording.
+const errorCodes = [
+  'SUCCESS',
+  'SYNTAX',
+  'UNSUPPORTED',
+  'INTEGER_RANGE',
+  'UNKNOWN_EXPORT',
+  'INVALID_BUFFER',
+  'RESOURCE_LIMIT',
+  'OPERAND_STACK',
+  'DIVIDE_BY_ZERO',
+  'INTEGER_OVERFLOW',
+  'INVALID_REFERENCE',
+  'ARGUMENT_MISMATCH',
+  'EXHAUSTED_FUEL',
+  'UNREACHABLE',
+  'MEMORY_BOUNDS',
+  'MEMORY_LIMITS',
+  'IMMUTABLE_GLOBAL',
+  'INTERPRETER',
+  'EXPORT_KIND',
+  'ALIGNMENT',
+  'HOST_IMPORT',
+  'INVALID_RESUME',
+  'SUSPENDED_REENTRY',
+  'HOST_VALUE_TYPE',
+  'UNDEFINED_ELEMENT',
+  'INDIRECT_TYPE',
+  'TABLE_LIMITS',
+  'ELEMENT_BOUNDS',
+  'INVALID_CONVERSION',
+  'NOT_INITIALIZED',
+  'TABLE_BOUNDS',
+  'NULL_REFERENCE',
+  'CAST_FAILURE',
+  'ARRAY_BOUNDS',
+  'UNCAUGHT_EXCEPTION'
+];
+
+export class WiwError extends Error {
+  // Snapshot diagnostic fields so recovery and guest reload cannot change an earlier error.
+  constructor(message, details = {}, options = {}) {
+    super(message, options);
+
+    this.name = 'WiwError';
+
+    // Keep diagnostic fields read-only and freeze nested coordinate/import records.
+    for (const field of ['code', 'status', 'phase', 'sourceFormat', 'byteOffset', 'location', 'import']) {
+      const value = details[field];
+
+      Object.defineProperty(this, field, {
+        value: value && typeof value === 'object' ? Object.freeze({ ...value }) : value,
+        enumerable: true
+      });
+    }
+  }
+
+  // Serialize metadata without copying guest source or traversing arbitrary host callback causes.
+  toJSON() {
+    return {
+      name: this.name,
+      message: this.message,
+      code: this.code,
+      status: this.status,
+      phase: this.phase,
+      sourceFormat: this.sourceFormat,
+      byteOffset: this.byteOffset,
+      location: this.location,
+      import: this.import
+    };
+  }
+}
+
 let nextTagIdentity = 1;
 const exceptionTypes = new WeakMap();
 export class WiwException extends Error {
@@ -828,6 +901,7 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
   let invoking = false;
   let activeInvocation;
   let generation = 0;
+  let diagnosticSource = { format: undefined, length: 0, text: undefined };
   /** @type {{module: string, name: string, params: number[], results: number | number[], callback: Function}[]} */
   let bindings = [];
   let resources = [];
@@ -862,15 +936,73 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
     return bytes.length;
   }
 
-  // Turn a nonzero interpreter status into a descriptive host error.
-  function check(/** @type {number} */ code) {
-    // Preserve tagged guest exceptions instead of reducing them to ordinary status errors.
+  // Retain source context, deferring UTF-8 coordinate calculation until an error occurs.
+  function rememberSource(source, binary, length) {
+    diagnosticSource = {
+      format: binary ? 'wasm' : 'wat',
+      length,
+      text: binary ? undefined : typeof source === 'string' ? source : new TextDecoder().decode(source)
+    };
+  }
+
+  // Distinguish original source offsets from the binary decoder's generated WAT coordinates.
+  function diagnosticLocation(byteOffset) {
+    const { format, length, text } = diagnosticSource;
+
+    // Expansion begins sixteen bytes past the binary input; runtime tokens belong to that generated text.
+    if (format === 'wasm') {
+      return byteOffset >= length + 16
+        ? { format: 'generated-wat', byteOffset: byteOffset - length - 16 }
+        : { format: 'wasm', byteOffset };
+    }
+
+    // Coordinates outside original WAT have no meaningful line or column.
+    if (format !== 'wat' || byteOffset > length) return undefined;
+
+    const prefix = new TextDecoder().decode(new TextEncoder().encode(text).subarray(0, byteOffset));
+    const lines = prefix.split(/\r\n|\r|\n/);
+
+    return { format: 'wat', byteOffset, line: lines.length, column: [...lines.at(-1)].length + 1 };
+  }
+
+  // Snapshot runtime status and retain the established human-readable message for compatibility.
+  function statusError(status, phase = activeInvocation?.phase ?? 'access', message, options, imported) {
+    const byteOffset = Math.max(0, e.error_offset() - 4096);
+
+    return new WiwError(
+      message ?? `${messages[status] ?? 'interpreter error'} at byte ${byteOffset}`,
+      {
+        code: errorCodes[status] ?? 'INTERPRETER',
+        status,
+        phase,
+        sourceFormat: diagnosticSource.format,
+        byteOffset,
+        location: diagnosticLocation(byteOffset),
+        import: imported
+      },
+      options
+    );
+  }
+
+  // Report binding failures without inventing an instruction location from stale runtime state.
+  function importError(message, module, name, code) {
+    return new WiwError(message, {
+      code,
+      phase: 'link',
+      sourceFormat: diagnosticSource.format,
+      import: { module, name }
+    });
+  }
+
+  // Translate a nonzero status while preserving identity-bearing tagged guest exceptions.
+  function check(/** @type {number} */ code, phase) {
+    // Guest exceptions must retain their original tag and payload APIs.
     if (code === 34) throw guestException();
 
-    // Translate remaining nonzero statuses into errors with their guest source offsets.
-    if (code)
-      throw new Error(`${messages[code] ?? 'interpreter error'} at byte ${Math.max(0, e.error_offset() - 4096)}`);
+    // Capture metadata before cleanup or subsequent execution changes the runtime status.
+    if (code) throw statusError(code, phase);
   }
+
   const importedExceptions = new Map();
 
   // Reconstruct a guest exception from its exported tag and payload slots.
@@ -2135,13 +2267,13 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
 
       // Attach the import name, source offset and original cause to ordinary host failures.
       if (failed) {
-        const error = new Error(
-          `host import ${binding.module}.${binding.name} failed at byte ${Math.max(0, e.error_offset() - 4096)}`
+        throw statusError(
+          20,
+          undefined,
+          `host import ${binding.module}.${binding.name} failed at byte ${Math.max(0, e.error_offset() - 4096)}`,
+          { cause: failure },
+          { module: binding.module, name: binding.name }
         );
-
-        Object.defineProperty(error, 'cause', { value: failure });
-
-        throw error;
       }
 
       check(e.error_code());
@@ -2227,7 +2359,7 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
     // Save the suspended guest state before entering a callback-owned nested invocation.
     if (nested) check(e.begin_reentry(index));
 
-    activeInvocation = {};
+    activeInvocation = { phase: 'invoke' };
     invoking = true;
 
     let at, n, argumentsAt;
@@ -2404,11 +2536,13 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
 
       const sourceLength = write(source, 4096);
 
+      rememberSource(source, binarySource, sourceLength);
+
       e.validation_only(1);
 
       // Validate source with instantiation disabled and restore the normal load mode afterward.
       try {
-        check(binarySource ? e.load_binary(4096, sourceLength) : e.load(4096, sourceLength));
+        check(binarySource ? e.load_binary(4096, sourceLength) : e.load(4096, sourceLength), 'validate');
       } finally {
         // Restore normal instantiation behavior after a validation-only attempt.
         e.validation_only(0);
@@ -2444,7 +2578,9 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
 
       const sourceLength = write(source, 4096);
 
-      check(binarySource ? e.load_binary(4096, sourceLength) : e.load(4096, sourceLength));
+      rememberSource(source, binarySource, sourceLength);
+
+      check(binarySource ? e.load_binary(4096, sourceLength) : e.load(4096, sourceLength), 'load');
 
       // Give each declared guest tag a fresh identity for this module generation.
       for (let index = 0; index < e.tag_count(); index++) e.bind_tag(index, nextTagIdentity++);
@@ -2472,11 +2608,16 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
           const state = callback && resourceTypes.get(callback);
 
           // Report a missing resource handle before reading its signature or state.
-          if (!state) throw new Error(`missing resource import ${module}.${name}`);
+          if (!state) throw importError(`missing resource import ${module}.${name}`, module, name, 'MISSING_IMPORT');
 
           // Reject a resource whose provider is stale or whose kind differs from the declared import.
           if (!state.valid() || state.kind !== kind)
-            throw new Error(`import signature mismatch or stale binding ${module}.${name}`);
+            throw importError(
+              `import signature mismatch or stale binding ${module}.${name}`,
+              module,
+              name,
+              'IMPORT_TYPE_MISMATCH'
+            );
 
           // Require tag payload signatures to agree in both directions before sharing identity.
           if (kind === 4) {
@@ -2484,7 +2625,7 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
 
             // Reject tag imports whose structural payload signatures differ.
             if (!compatibleType(state.descriptor, descriptor) || !compatibleType(descriptor, state.descriptor))
-              throw new Error(`import signature mismatch ${module}.${name}`);
+              throw importError(`import signature mismatch ${module}.${name}`, module, name, 'IMPORT_TYPE_MISMATCH');
 
             e.bind_tag(target, state.identity);
             resourceBindings.push({ index: target, state });
@@ -2496,7 +2637,7 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
           if (kind === 1 || kind === 3) {
             // Prevent memory32/table32 resources from satisfying memory64/table64 imports or vice versa.
             if (state.addressType !== (kind === 1 ? e.memory_width(target) : e.table_address_type(target)))
-              throw new Error(`import signature mismatch ${module}.${name}`);
+              throw importError(`import signature mismatch ${module}.${name}`, module, name, 'IMPORT_TYPE_MISMATCH');
 
             const actual = kind === 1 ? state.pages : state.entries.length;
             const minimum = kind === 1 ? e.memory_minimum(target) : e.table_size(target),
@@ -2508,14 +2649,14 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
               (!compatibleType(state.descriptor, typeDescription(view.getInt32(e.table_info(target) + 16, true))) ||
                 !compatibleType(typeDescription(view.getInt32(e.table_info(target) + 16, true)), state.descriptor))
             )
-              throw new Error(`import signature mismatch ${module}.${name}`);
+              throw importError(`import signature mismatch ${module}.${name}`, module, name, 'IMPORT_TYPE_MISMATCH');
 
             // Enforce declared minimum sizes and maximum limits against the provider's actual resource.
             if (
               actual < minimum ||
               (requiredMaximum !== -1 && (state.maximum === -1 || state.maximum > requiredMaximum))
             )
-              throw new Error(`import signature mismatch ${module}.${name}`);
+              throw importError(`import signature mismatch ${module}.${name}`, module, name, 'IMPORT_TYPE_MISMATCH');
 
             // Bind imported memory with the provider's current size and maximum.
             if (kind === 1) check(e.bind_guest_memory(target, actual, state.maximum));
@@ -2530,7 +2671,7 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
               !compatibleType(state.descriptor, typeDescription(view.getInt32(globalAt + 12, true))) ||
               (state.mutable && !compatibleType(typeDescription(view.getInt32(globalAt + 12, true)), state.descriptor))
             )
-              throw new Error(`import signature mismatch ${module}.${name}`);
+              throw importError(`import signature mismatch ${module}.${name}`, module, name, 'IMPORT_TYPE_MISMATCH');
           }
 
           resourceBindings.push({ index: target, state });
@@ -2544,7 +2685,8 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
         const results = resultSignature(target);
 
         // Reject missing or noncallable function imports before recording their argument ABI.
-        if (typeof callback !== 'function') throw new Error(`missing function import ${module}.${name}`);
+        if (typeof callback !== 'function')
+          throw importError(`missing function import ${module}.${name}`, module, name, 'MISSING_IMPORT');
 
         const signature = functionTypes.get(callback);
 
@@ -2557,7 +2699,12 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
             (signature.descriptor &&
               !compatibleType(signature.descriptor, typeDescription(e.function_heap_type(target)))))
         ) {
-          throw new Error(`import signature mismatch or stale binding ${module}.${name}`);
+          throw importError(
+            `import signature mismatch or stale binding ${module}.${name}`,
+            module,
+            name,
+            'IMPORT_TYPE_MISMATCH'
+          );
         }
 
         resolved.push({ module, name, params, results, callback });
@@ -2610,7 +2757,7 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
       // Start callbacks may reenter initialized functions while reloads remain guarded.
       loaded = true;
       invoking = true;
-      activeInvocation = {};
+      activeInvocation = { phase: 'initialize' };
 
       // Finish module initialization and publish its loaded state and resource changes.
       const finish = () => {

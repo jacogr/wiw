@@ -178,6 +178,51 @@ engine.growTable(2, null, 'functions');
 console.log(engine.tableSize('functions'));
 ```
 
+Interpreter status failures throw an exported `WiwError` (an `Error` subclass).
+Existing message text stays unchanged. Its read-only diagnostic fields are:
+
+- `code`: a symbolic status such as `SYNTAX`, `OPERAND_STACK`, `UNREACHABLE`,
+  `MEMORY_BOUNDS` or `EXHAUSTED_FUEL`, matching the `M4_ERR_*` ABI names.
+- `status`: the numeric interpreter status, when the runtime reports one.
+- `phase`: `load`, `validate`, `link`, `initialize`, `invoke` or `access`.
+  Loading combines parsing and validation; initialization includes automatic start.
+- `sourceFormat`: `wat` or `wasm` for the most recent load/validation attempt.
+- `byteOffset`: the existing byte coordinate used in the error message.
+- `location`: a frozen `{format, byteOffset}` record, with one-based `line` and
+  `column` for original WAT. Columns count Unicode code points; offsets count UTF-8
+  bytes. CRLF, LF and CR line endings are recognized.
+- `import`: a frozen `{module, name}` record for binding or host callback failures.
+
+```js
+import {WiwError} from './wiw.js';
+try {
+  engine.invoke('run');
+} catch (error) {
+  if (error instanceof WiwError) {
+    console.error(error.code, error.phase, error.location);
+    console.error(JSON.stringify(error));
+  } else {
+    throw error;
+  }
+}
+```
+
+Binary decoding feeds generated WAT into the common interpreter. A binary decode
+failure has `location.format === 'wasm'`; subsequent validation/execution errors
+use `'generated-wat'`, whose `location.byteOffset` is relative to that generated
+text. These are not original binary instruction offsets. Locations have the
+precision recorded by the runtime (binary decode failures currently identify
+input start); unavailable coordinates are omitted rather than fabricated.
+
+Missing imports use `MISSING_IMPORT`, incompatible/stale bindings use
+`IMPORT_TYPE_MISMATCH`, and neither invents a source location. Callback failures
+use `HOST_IMPORT`, preserve the original thrown value as `cause`, and include
+the binding name. `toJSON()` includes diagnostic fields and the message, excluding
+source text, stack traces and arbitrary causes. Saved diagnostics survive later
+execution and reloads. Tagged guest exceptions retain `WiwException` identity and
+payload methods; JavaScript API argument/ownership checks retain their existing
+ordinary errors.
+
 `exportFunction(name)` makes a typed forwarding callback;
 `exportNamespace()` also includes opaque memory, global, table and tag bindings.
 Imported resources share mutations, growth and table function references across
