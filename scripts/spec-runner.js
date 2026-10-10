@@ -3,7 +3,7 @@ import { floatValue, floatBits } from './scalar-values.js';
 import { specSource } from './spec-source.js';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { createInterpreter, createBootstrapInterpreter, WiwException } from '../wiw.js';
+import { createInterpreter, createBootstrapInterpreter, WiwException, WiwError } from '../wiw.js';
 
 // Read script structure only; guest modules retain their original text and comments.
 export function parseScript(source) {
@@ -902,18 +902,50 @@ export async function runSuite(binary, root = new URL('../test/spec/', import.me
           }
 
           const engine = await constructEngine();
-          const expected =
+          const validationOnly = kind === 'assert_invalid' || kind === 'assert_malformed';
+          const codes =
             kind === 'assert_invalid'
-              ? /operand stack|reference|immutable|alignment|memory limits|table limits|syntax|unsupported|integer out of range/
+              ? [
+                  'OPERAND_STACK',
+                  'INVALID_REFERENCE',
+                  'IMMUTABLE_GLOBAL',
+                  'ALIGNMENT',
+                  'MEMORY_LIMITS',
+                  'TABLE_LIMITS',
+                  'SYNTAX',
+                  'UNSUPPORTED',
+                  'INTEGER_RANGE'
+                ]
               : kind === 'assert_malformed'
-              ? module.children?.some((child) => child.atom === 'quote')
-                ? /syntax|integer out of range|unsupported|reference/
-                : /syntax|integer out of range|unsupported/
-              : kind === 'assert_uninstantiable'
-              ? /memory out of bounds/
-              : /missing function import|missing resource import|signature mismatch|memory out of bounds|element out of bounds/;
+              ? [
+                  'SYNTAX',
+                  'INTEGER_RANGE',
+                  'UNSUPPORTED',
+                  ...(module.children?.some((child) => child.atom === 'quote') ? ['INVALID_REFERENCE'] : [])
+                ]
+              : kind === 'assert_unlinkable'
+              ? ['MISSING_IMPORT', 'IMPORT_TYPE_MISMATCH']
+              : [
+                  'MEMORY_BOUNDS',
+                  'ELEMENT_BOUNDS',
+                  'TABLE_BOUNDS',
+                  'UNREACHABLE',
+                  'DIVIDE_BY_ZERO',
+                  'INTEGER_OVERFLOW',
+                  'INVALID_CONVERSION',
+                  'NULL_REFERENCE',
+                  'CAST_FAILURE',
+                  'ARRAY_BOUNDS',
+                  'UNDEFINED_ELEMENT',
+                  'INDIRECT_TYPE'
+                ];
+          const phase = validationOnly ? 'validate' : kind === 'assert_unlinkable' ? 'link' : 'initialize';
 
-          assert.throws(() => measure('loading', () => loadModule(engine, source, module, registered)), expected);
+          assert.throws(
+            () => measure('loading', () => loadModule(engine, source, module, registered, validationOnly)),
+            // A runtime trap or capacity error cannot stand in for invalid syntax, validation or linking.
+            (error) => error instanceof WiwError && error.phase === phase && codes.includes(error.code)
+          );
         } else if (kind === 'assert_trap' && head(node.children[1]) === 'module') {
           // Check instantiation-time traps separately from invocation-time traps.
           const module = node.children[1],
@@ -935,7 +967,11 @@ export async function runSuite(binary, root = new URL('../test/spec/', import.me
           const engine = await constructEngine();
 
           engine.setFuel(capabilities.fuelPerInvocation);
-          assert.throws(() => measure('loading', () => loadModule(engine, source, module, registered)), expected);
+          assert.throws(
+            () => measure('loading', () => loadModule(engine, source, module, registered)),
+            // Module trap assertions must fail during initialization, not parsing, validation or import binding.
+            (error) => error instanceof WiwError && error.phase === 'initialize' && expected.test(error.message)
+          );
         } else if (
           [
             'assert_return',

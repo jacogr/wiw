@@ -1736,6 +1736,9 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
 
   // Import the latest memory, global and table state from shared host resource handles.
   function synchronizeIn() {
+    // Shared handles become authoritative before copying; a partial refresh cannot authorize any publication.
+    for (const binding of resources) binding.publishable = false;
+
     // Import the latest state of each bound memory, global or table before guest execution.
     for (const binding of resources) {
       const state = binding.state;
@@ -1797,6 +1800,9 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
         });
       }
     }
+
+    // Transfer publication authority only after every shared resource has been refreshed successfully.
+    for (const binding of resources) binding.publishable = true;
   }
 
   // Publish guest memory, global and table changes to shared host resource handles.
@@ -1805,8 +1811,8 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
     for (const binding of resources) {
       const state = binding.state;
 
-      // Skip immutable tag identities when publishing mutable resource state.
-      if (state.kind === 4) continue;
+      // Failed imports leave the shared handle authoritative; cleanup must not overwrite it with an older guest image.
+      if (!binding.publishable || state.kind === 4) continue;
 
       // Publish the memory's current logical size and complete byte image.
       if (state.kind === 1) {
@@ -2094,7 +2100,8 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
           })
         });
 
-      resources.push({ index, state });
+      // A newly exported local resource starts with an authoritative guest snapshot.
+      resources.push({ index, state, publishable: true });
     }
 
     const handle = Object.freeze({ kind: ['function', 'memory', 'global', 'table', 'tag'][kind] });
@@ -2652,7 +2659,10 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
 
       rememberSource(source, binarySource, sourceLength);
 
-      check(binarySource ? e.load_binary(4096, sourceLength) : e.load(4096, sourceLength), 'load');
+      const status = binarySource ? e.load_binary(4096, sourceLength) : e.load(4096, sourceLength);
+
+      // Modules without resource imports initialize segments inside load; expose that actual failure phase.
+      check(status, status && e.load_initializing() ? 'initialize' : 'load');
 
       // Give each declared guest tag a fresh identity for this module generation.
       for (let index = 0; index < e.tag_count(); index++) e.bind_tag(index, nextTagIdentity++);
@@ -2700,7 +2710,7 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
               throw importError(`import signature mismatch ${module}.${name}`, module, name, 'IMPORT_TYPE_MISMATCH');
 
             e.bind_tag(target, state.identity);
-            resourceBindings.push({ index: target, state });
+            resourceBindings.push({ index: target, state, publishable: false });
             resolved.push(null);
             continue;
           }
@@ -2746,7 +2756,7 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
               throw importError(`import signature mismatch ${module}.${name}`, module, name, 'IMPORT_TYPE_MISMATCH');
           }
 
-          resourceBindings.push({ index: target, state });
+          resourceBindings.push({ index: target, state, publishable: false });
           resolved.push(null);
           continue;
         }

@@ -242,6 +242,8 @@
 	(data (i32.const 3860) "f32f64infnan")
 	(global $decoded-name-length (mut i32) (i32.const 0))
 	(global $resource-phase (mut i32) (i32.const 0))
+	;; Distinguish eager segment initialization failures from parsing/validation in load().
+	(global $load-initializing (mut i32) (i32.const 0))
 	(global $memory-max-present (mut i32) (i32.const 0))
 	(global $initializer-reference (mut i32) (i32.const 0))
 	(global $initializer-length (mut i32) (i32.const 0))
@@ -400,3 +402,8 @@
 	(global $reentry-stack (mut i32) (i32.const 0))
 	(global $reentry-control (mut i32) (i32.const 0))
 	(global $reentry-context (mut i32) (i32.const 0))
+
+	;; Report whether the latest load reached resource instantiation after successful validation.
+	(func (export "load_initializing") (result i32)
+		(global.get $load-initializing)
+	)

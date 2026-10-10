@@ -407,6 +407,7 @@
 		)
 		(global.set $segments-ready (i32.const 0))
 		(global.set $resource-phase (i32.const 0))
+		(global.set $load-initializing (i32.const 0))
 		(global.set $memory-max-present (i32.const 0))
 		(global.set $ready (i32.const 0))
 		(global.set $last-results (i32.const 0))
@@ -559,6 +560,7 @@
 				(i32.and (i32.eqz (global.get $error)) (i32.eqz (global.get $resource-phase)))
 			)
 			(then
+				(global.set $load-initializing (i32.const 1))
 				(call $instantiate-table)
 				;; Failed table initialization cannot be followed by further guest resource writes.
 				(if (i32.eqz (global.get $error))

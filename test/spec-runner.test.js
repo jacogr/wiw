@@ -455,3 +455,32 @@ test('profiled selections account for empty setup and cumulative file phases', a
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('negative module assertions reject failures from the wrong phase', async () => {
+  const source = `
+    (assert_invalid (module (func $s ref.null func ref.as_non_null drop) (start $s)) "type mismatch")
+    (assert_invalid (module (memory 1) (data (i32.const 65536) "x")) "type mismatch")
+    (assert_malformed (module (func $s unreachable) (start $s)) "unexpected token")
+    (assert_unlinkable (module (memory 1) (data (i32.const 65536) "x")) "unknown import")
+    (assert_unlinkable (module (func $s unreachable) (start $s)) "unknown import")
+    (assert_uninstantiable (module (import "missing" "fn" (func))) "out of bounds memory access")
+    (assert_trap (module (func (result i32))) "unreachable")`;
+  const report = await run(source, () => {}, { audit: true });
+
+  assert.equal(report.passed, 0);
+  assert.equal(report.failed, 7);
+  assert.equal(report.skipped, 0);
+});
+
+test('validation-only negative assertions ignore imports and initialization effects', async () => {
+  const report = await run(`
+    (assert_invalid (module (import "missing" "fn" (func)) (func (result i32))) "type mismatch")
+    (assert_malformed (module quote "(module (import \\"missing\\" \\"fn\\" (func)) (func i32.const 0x_1 drop))") "unexpected token")
+    (assert_unlinkable (module (import "missing" "fn" (func))) "unknown import")
+    (assert_uninstantiable (module (memory 1) (data (i32.const 65536) "x")) "out of bounds memory access")
+    (assert_trap (module (func $s ref.null func ref.as_non_null drop) (start $s)) "null reference")`);
+
+  assert.equal(report.passed, 5);
+  assert.equal(report.failed, 0);
+  assert.equal(report.skipped, 0);
+});

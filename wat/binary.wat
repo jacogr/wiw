@@ -3102,6 +3102,7 @@
 		(global.set $ready (i32.const 0))
 		(global.set $segments-ready (i32.const 0))
 		(global.set $resource-phase (i32.const 0))
+		(global.set $load-initializing (i32.const 0))
 		(global.set $tok (local.get $p))
 		;; Reject invalid host input ranges before reading a binary header.
 		(if (i32.eqz (call $buffer-ok (local.get $p) (local.get $n)))

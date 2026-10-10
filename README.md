@@ -439,14 +439,21 @@ console.log(await engine.invokeAsync('answer')); // 42
 Typed bindings check full signatures. Callback failures retain their cause.
 A callback can access resources and invoke its own or a different instance. Each active segment checks its complete bounds before writing. Earlier completed
 segments and writes made by a trapping start remain observable, as specified in 2.0. Resource sharing is
-synchronized at guest/host call boundaries.
+synchronized at guest/host call boundaries. A failed refresh leaves the shared
+handles authoritative; failure cleanup cannot publish an older guest snapshot
+over newer host bytes, table entries or global values.
 
 `funcref` and `externref` work in function signatures, locals, globals and block
 results. `ref.null`, `ref.is_null` and typed `select` preserve reference types.
 Externref accepts any JavaScript value; only `null` is a null reference. Funcref
 accepts `null` or a live function from `exportFunction`. Shared reference globals
 and forwarded calls preserve identity across instances. Each load retains up to
-65,535 distinct non-null external values; reload clears those handles.
+65,535 distinct non-null external values; reload clears those handles. External
+IDs accumulate for the entire load and retain their host values even after a
+guest drops its references. Guest GC does not reclaim these IDs. Long-lived
+workloads that process many distinct host objects should reload or replace the
+instance before exhausting this limit; host-side externref reclamation is not
+implemented.
 `invokeRaw` uses `{type, value}` for references and `{type, bits}` for numbers.
 
 `collectGarbage()` also allows explicit collection while the instance is idle,
