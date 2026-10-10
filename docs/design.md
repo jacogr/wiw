@@ -4022,3 +4022,40 @@ precise GC roots, raw NaN/vector values, imported/tail roots, start callbacks,
 exception boundaries, cross-instance callback cycles, child joining, expired
 scopes, sibling exclusion, fuel/call quotas and operand write ceilings. These
 full-run timings are diagnostic measurements rather than paired speedups.
+
+
+## Public WASI Preview 1 runner
+
+`wasi.js` publishes the existing Node-WASI memory mirror as a supported host,
+command/reactor loader and CLI. Native WASI requires memory with guest address
+zero at the start of its buffer; the adapter copies the selected wasm32 memory
+before/after syscalls and tracks growth. Exported-name selection defaults to
+`memory`, with numeric selection available for legacy guests. The engine's
+read-only generation and memory-address-type queries support binding lifetime
+and width checks. No guest instruction or compilation behavior changes.
+
+All Node Preview 1 imports are forwarded with unsigned i32 wire arguments and
+unaltered i64 values. Native differential testing exposed a signed i32 mismatch
+in Node's slow JavaScript binding path; normalization restores native errno
+behavior. `proc_exit` propagates an unsigned `WasiExit` through wiw's callback
+causes without terminating Node. Automatic starts, async custom imports and
+nested callbacks retain the existing interpreter continuation machinery.
+
+The host validates command/reactor entry shapes and consumes initialization once.
+It tracks owned preopens and guest-opened descriptors, including close and
+renumber transitions; standard streams are borrowed. `loadWasi` transfers host
+ownership to the caller, while `runWasi` closes it on success, exit and failure.
+The CLI loads WAT or Wasm through wiw, configures explicit env/preopens/argv,
+selects either runtime and forwards the process exit status to the shell.
+Node's platform syscall support and filesystem security properties remain those
+of Node WASI; Preview 2/component interfaces are outside this adapter.
+
+
+Final validation passes 336 tests and all 65,199 pinned wg-3.0 commands in both
+optimized modes, with zero failures or skips. Compiled execution takes 13.00
+seconds; self-hosted execution takes 143.85 seconds. Twelve new tests supplement
+the two original integration cases. The unchanged local optimized w4 binary also
+starts successfully through the public compiled CLI; the public loadWasi/host API
+initializes it and evaluates `1 2 + . cr`, producing `3` and a newline. No w4
+repository dependency, fixture copy or permanent target is added. The historical
+full self-hosted w4 library validation remains recorded separately.

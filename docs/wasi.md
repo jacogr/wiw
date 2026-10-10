@@ -1,60 +1,132 @@
-# Local WASI integration tests
+# WASI Preview 1
 
-`test/helpers/wasi.js` provides a reusable, test-only Node WASI Preview 1 adapter
-for a wiw engine. It is separate from the interpreter and its default test
-fixtures: no external guest repository or guest-specific Make target is required.
+`wasi.js` is the supported Node WASI Preview 1 adapter and command runner.
+It uses the existing wiw interpreter in either compiled or self-hosted mode;
+guest WAT is interpreted and guest Wasm uses wiw's binary decoder. No external
+guest repository, compiler invocation, or guest-specific Make target is required.
+Preview 2 and the component model are separate interfaces and are not provided.
+
+## CLI
+
+```sh
+# Default self-hosted WAT interpreter; standard streams use this process's descriptors.
+node wasi.js --dir /usr=/absolute/path/to/fixtures guest.wat -- argument1 argument2
+
+# Compiled interpreter, binary guest, explicit environment and fuel.
+node wasi.js --bootstrap --env NAME=value --fuel 100000000000 guest.wasm
+
+# A reactor invokes its optional _initialize instead of requiring _start.
+node wasi.js --reactor reactor.wasm
+```
+
+`--runtime wat|wasm` selects the interpreter mode; `--bootstrap` aliases
+`--runtime wasm`. The default fuel is 100,000,000 instructions per invocation.
+`--env NAME=VALUE` and `--dir GUEST=HOST` are repeatable. Environment entries and
+preopens default to empty; the CLI does not inherit the process environment or
+working directory into the guest. Arguments start with the guest filename as
+`argv[0]`. Options after that filename belong to the guest; an optional `--`
+separator is removed. `--help` lists the options. Shell exit status uses the
+low eight bits of the WASI exit code; the API preserves all 32 bits.
+
+## Loading and running guests
 
 ```js
 import {readFile} from 'node:fs/promises';
-import {createBootstrapInterpreter} from './wiw.js';
-import {createWasiHost} from './test/helpers/wasi.js';
+import {runWasi, loadWasi} from './wasi.js';
 
-const engine=await createBootstrapInterpreter();
-engine.setFuel64(100_000_000_000n);
-const host=createWasiHost(engine,{
-  args:[],
-  env:{},
-  preopens:{'/usr':'/absolute/path/to/fixtures'}
+const exitCode = await runWasi(await readFile('/absolute/path/to/guest.wasm'), {
+  runtime: 'wat',                 // 'wasm' selects the compiled interpreter
+  fuel: 100_000_000_000n,
+  args: ['guest.wasm', 'argument'],
+  env: {},
+  preopens: {'/usr': '/absolute/path/to/fixtures'}
 });
-engine.load(await readFile('/absolute/path/to/guest.wat','utf8'),host.imports);
-// For binary input: engine.loadBinary(await readFile(file),host.imports).
-const exitCode=host.start();
-if(exitCode!==0) throw new Error(`guest exited with ${exitCode}`);
 ```
 
-Use `createInterpreter()` instead of `createBootstrapInterpreter()` to run the
-guest through the default self-hosted WAT runtime. The helper is shared by both
-modes. Heavy guest initialization can make that extra layer expensive.
+`runWasi(source, options)` accepts WAT text or a Uint8Array/Buffer containing
+WAT UTF-8 or Wasm. It loads with asynchronous imports and invokes `_start`, or
+initializes a reactor with `mode: 'reactor'`. It returns the unsigned exit status
+(zero on normal completion) and closes guest-owned descriptors on success,
+exit and failure. A `proc_exit` from a module's automatic start also returns its
+exit status. Other guest/host errors preserve the interpreter diagnostics.
 
-## Adapter behavior
+`loadWasi(source, options)` returns `{engine, host}` after parsing, linking and
+running the automatic module start, before `_start`/`_initialize`. The caller
+owns that host and closes it. Both helpers accept `limits`, `parentLimits` and
+`parentFuel` factory settings and extra import namespaces under `imports`.
+Extra imports cannot replace `wasi_snapshot_preview1`. They also accept the host
+options described below. A BigInt `fuel` sets the per-invocation instruction
+budget; the default self-hosted parent retains its separate execution budget.
 
-- Options such as `args`, `env`, `preopens`, `stdin`, `stdout` and `stderr` pass
-  through to Node WASI. Standard streams default to the process's file descriptors;
-  tests can supply descriptors for temporary input/output files.
-- `host.imports` provides the `wasi_snapshot_preview1` namespace. Other import
-  namespaces can be combined with it in the normal engine load call.
-- `host.start()` invokes `_start` once and returns zero on normal completion or
-  the guest's `proc_exit` code. It never exits the Node process.
-- `host.invoke(name,...args)` invokes another export. A guest process exit throws
-  `WasiExit`, whose `code` is the unsigned exit status. Other guest/host errors
-  retain the interpreter's ordinary diagnostics. Direct `engine.invoke` also
-  works, but process exits retain wiw's host-error wrapper and its `cause`.
-- WASI callbacks are available during a module's automatic start function too.
-  For reactors, explicitly invoke `_initialize` when appropriate instead of
-  calling `host.start()`.
+```js
+const {engine, host} = await loadWasi(reactorSource, {mode: 'reactor'});
+try {
+  await host.initializeAsync();
+  await host.invokeAsync('application_export');
+} finally {
+  host.close();
+}
+```
 
-Create a fresh host for each loaded guest. Descriptor offsets, preopens and
-process state belong to that guest; reusing a host after engine reload is not
-supported. The helper addresses wasm32 guest memory zero. It uses a native
-`WebAssembly.Memory` mirror because Node WASI requires memory with guest address
-zero at the beginning of its buffer. It copies the complete guest image before
-and after each syscall, tracking memory growth before the next call. Memory bounds
-therefore remain the current guest bounds, including freshly grown pages.
+## Host adapter
 
-This is a compatibility bridge for tests, not an optimized WASI implementation.
-Larger memories and syscall-heavy programs incur copying overhead. Node's WASI
-preopens retain Node's normal behavior; tests should use disposable fixture copies
-rather than original repositories for programs that write or delete files.
+For caller-created engines, import `createWasiHost` from `./wasi.js`, then pass
+`host.imports` to `engine.load`/`loadBinary` or their async counterparts. The old
+`test/helpers/wasi.js` path reexports this public implementation for existing
+local integration scripts.
+
+- `args`, `env`, `preopens`, `stdin`, `stdout` and `stderr` configure Node WASI.
+  Standard streams default to descriptors 0/1/2. Supplied descriptors remain
+  caller-owned; host cleanup does not explicitly close them.
+- `memory` selects a guest memory by exported name or numeric index. It defaults
+  to the standard `"memory"` export. Use `memory: 0` for legacy guests with an
+  unexported memory zero. Preview 1 requires wasm32; memory64 is rejected.
+- `start()`/`startAsync()` invoke a command's void `_start` once and return its
+  unsigned `proc_exit` status or zero. Commands cannot also export `_initialize`.
+- `initialize()`/`initializeAsync()` initialize a reactor's optional void
+  `_initialize` once. Reactors cannot export `_start`. Entry points must have no
+  parameters or results. Initialization and command start are mutually exclusive.
+- `invoke(name, ...args)`/`invokeAsync(name, ...args)` call application exports.
+  A process exit throws `WasiExit`, with its unsigned `code`. Nested callback
+  wrappers are unwrapped to retain that exit identity. Direct `engine.invoke`
+  retains wiw's host-error wrapper and cause.
+- `close()` is idempotent and closes owned preopens and guest-opened descriptors,
+  accounting for guest close and renumber operations. It rejects active host API
+  calls. Finish direct engine invocations before disposing their host.
+
+Create a fresh host for each guest. The host binds to `engine.generation` on first
+use and rejects reuse after a load or validation attempt, including same-size
+reloads. `engine.memoryType(selector)` reports `i32`/`i64` for memory adapters.
+WASI callbacks also work during automatic module starts; initialized resources
+are available then. Native WASI operations remain synchronous; additional import
+namespaces can suspend through wiw's async APIs and callback reentry support.
+
+## Syscall coverage and boundaries
+
+The adapter forwards Node's complete 46-function `wasi_snapshot_preview1`
+namespace. It normalizes i32 arguments to their unsigned WASI wire values,
+preserves i64 bits (including signed seek offsets), and replaces `proc_exit`
+with `WasiExit` so that syscall never terminates the embedding Node process.
+Support for individual operations and returned errno values follows the installed
+Node WASI implementation and operating system; unsupported calls retain their
+native errno rather than reporting fabricated success.
+
+Tests compare all import signatures and invalid-call results against actual
+native Wasm with Node WASI. Positive coverage includes arguments/environment,
+preopens, standard streams, clock records, randomness, polling, file and
+directory creation/removal, reads/writes and positional IO, 64-bit seeking,
+metadata/rights changes, links/symlinks, readdir, renumbering and descriptor
+cleanup. Command/reactor lifecycle, async starts, exits, memory selection,
+growth, invalid pointers and CLI behavior run in both interpreter modes.
+
+Node WASI needs zero-origin WebAssembly memory. This adapter mirrors the selected
+guest memory and copies its full image before/after each syscall, growing the
+mirror with the guest. Pointer checks therefore use current guest bounds, not
+interpreter backing memory. Large-memory, syscall-heavy guests pay that copying
+cost. This is the existing compatibility bridge with a public lifecycle, not a
+new syscall implementation. Preopens and filesystem access retain
+[Node's documented WASI behavior](https://nodejs.org/api/wasi.html#security),
+including its lack of a secure sandbox for untrusted guests.
 
 ## Calling application exports
 
@@ -100,3 +172,11 @@ for library execution. Artifact hashes and revisions are recorded in
 `test/integration/w4-selfhost.json`. These are local diagnostic timings, not CI
 thresholds. No w4-specific target, dependency or submodule is required. The
 complete Forth-standard-suite and deeper self-hosting remain separate checks.
+
+
+The public runner also passes a compiled w4 smoke check against the unchanged
+local optimized binary: `_start` returns zero, and `alloc`/`evaluate` through the
+public API execute `1 2 + . cr` with stdout `3` followed by a newline. w4's `_start`
+initializes the language; application input uses its `evaluate` interface, as in
+the example above. The CLI invokes the guest's standard entry point rather than
+assuming a language-specific input interface.

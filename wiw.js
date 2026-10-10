@@ -911,6 +911,8 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory, limits} = {})
       return invokeValues('', values, true, signature.index, asyncInvocation);
   }
   const api = {
+    // Resource adapters bind to this revision and reject reuse after load/validation attempts.
+    get generation() { return generation; },
     // Parse and validate a module without imports, resource allocation, segment effects or start execution.
     validate(source, binarySource = false) {
       requireIdle();
@@ -1150,6 +1152,10 @@ function wrapInterpreter(exports, {memoryOffset = 0, ensureMemory, limits} = {})
       synchronizeOut();
     },
     // Page counts remain Numbers because host-visible physical backing is bounded.
+    memoryType(memory = 0) {
+      requireLoaded();
+      return e.memory_width(memoryIndex(memory)) === 2 ? 'i64' : 'i32';
+    },
     memoryPages(memory = 0) {
       synchronizeIn();
       return e.memory_pages(memoryIndex(memory));

@@ -91,9 +91,17 @@ Exhaustion traps at the next instruction; a larger budget does not change speed.
 Changing fuel in a host callback affects subsequent invocations, not the active
 one. Invalid setters leave the previous budget intact.
 
-For local WASI integration tests, [the test host adapter](docs/wasi.md) provides
-Preview 1 imports and process-exit handling without a guest-specific target or
-repository dependency.
+[The public WASI Preview 1 adapter and CLI](docs/wasi.md) run commands and reactors
+in either interpreter mode, with arguments, environment, preopened directories,
+standard streams and process-exit handling. For example:
+
+```sh
+node wasi.js --dir /usr=/absolute/path/to/fixtures guest.wat -- argument
+node wasi.js --bootstrap guest.wasm
+```
+
+The public `runWasi`, `loadWasi` and `createWasiHost` APIs live in `wasi.js`.
+No guest-specific target or repository dependency is required.
 
 `getGlobal`/`setGlobal` provide checked global access. Memory access supports
 `readMemory(offset, length, memory = 0)`, `writeMemory(offset, bytes, memory = 0)`,

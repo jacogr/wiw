@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {WASI} from 'node:wasi';
 import {runtimeFactories} from './runtime.js';
-import {createWasiHost,WasiExit} from './helpers/wasi.js';
+import {createWasiHost,WasiExit} from '../wasi.js';
 
 const source=`(module
   (import "wasi_snapshot_preview1" "fd_read" (func $read (param i32 i32 i32 i32) (result i32)))
@@ -48,7 +48,7 @@ const source=`(module
     i32.const 1 i32.const 0 i32.const 1 i32.const 68 call $write))`;
 
 for(const [runtime,create] of runtimeFactories) {
-  test(`${runtime}: test WASI bridge matches native file IO, growth, i64 offsets and bounds`,async()=>{
+  test(`${runtime}: WASI bridge matches native file IO, growth, i64 offsets and bounds`,async()=>{
     const directory=await mkdtemp(join(tmpdir(),'wiw-wasi-'));
     const descriptors=[];
     const options=label=>{
@@ -76,6 +76,7 @@ for(const [runtime,create] of runtimeFactories) {
         }
         assert.equal(await readFile(join(directory,format+'-out'),'utf8'),'XYZ');
         assert.equal(await readFile(join(directory,format+'-err'),'utf8'),'');
+        host.close();
       }
       assert.equal(await readFile(join(directory,'native-out'),'utf8'),'XYZ');
     }finally {
@@ -84,11 +85,11 @@ for(const [runtime,create] of runtimeFactories) {
     }
   });
 
-  test(`${runtime}: test WASI process exit preserves its code and leaves the interpreter usable`,async()=>{
+  test(`${runtime}: WASI process exit preserves its code and leaves the interpreter usable`,async()=>{
     const engine=await create(),host=createWasiHost(engine,{args:[],env:{}});
     engine.load(`(module
       (import "wasi_snapshot_preview1" "proc_exit" (func $exit (param i32)))
-      (memory 1)
+      (memory (export "memory") 1)
       (func (export "_start") i32.const 7 call $exit unreachable)
       (func (export "exit") i32.const -1 call $exit)
       (func (export "answer") (result i32) i32.const 42))`,host.imports);
@@ -96,13 +97,15 @@ for(const [runtime,create] of runtimeFactories) {
     assert.equal(host.invoke('answer'),42);
     assert.throws(()=>host.invoke('exit'),error=>error instanceof WasiExit&&error.code===4294967295);
     assert.equal(engine.invoke('answer'),42);
+    host.close();
     const automatic=createWasiHost(engine,{args:[],env:{},stdout:1});
     engine.load(`(module
       (import "wasi_snapshot_preview1" "fd_write" (func $write (param i32 i32 i32 i32) (result i32)))
-      (memory 1)
+      (memory (export "memory") 1)
       (func $init i32.const 1 i32.const 0 i32.const 0 i32.const 4 call $write drop)
       (start $init)
       (func (export "answer") (result i32) i32.const 42))`,automatic.imports);
     assert.equal(automatic.invoke('answer'),42,'WASI is available during module start');
+    automatic.close();
   });
 }
