@@ -151,6 +151,453 @@ export function createTag(parameters = []) {
   return handle;
 }
 
+// Validate host resource descriptors without silently accepting misspelled or unsupported options.
+function hostResourceOptions(options, allowed, label) {
+  // Descriptor fields must come from an object rather than positional scalar coercion.
+  if (!options || typeof options !== 'object' || Array.isArray(options))
+    throw new Error(`${label} descriptor must be an object`);
+
+  // Reject unsupported resource modes, including shared memory while threads remain unavailable.
+  for (const name of Object.keys(options)) {
+    // Keep unknown options visible rather than allocating a resource with different semantics.
+    if (!allowed.includes(name)) throw new Error(`unknown ${label} option ${name}`);
+  }
+}
+
+// Validate physically bounded initial/maximum sizes and retain the declared logical address width.
+function hostResourceLimits(options, capacity, label) {
+  const { initial = 0, maximum, address = 'i32' } = options;
+
+  // Both address widths use bounded physical storage; the width still controls import matching and BigInt access.
+  if (address !== 'i32' && address !== 'i64') throw new Error(`${label} address must be i32 or i64`);
+
+  // Never narrow or round a descriptor size before checking its physical representation.
+  if (!Number.isInteger(initial) || initial < 0 || initial > capacity) throw new Error(`invalid ${label} initial size`);
+
+  // A declared maximum must accommodate the initial resource and fit the supported physical ceiling.
+  if (maximum !== undefined && (!Number.isInteger(maximum) || maximum < initial || maximum > capacity))
+    throw new Error(`invalid ${label} maximum`);
+
+  return { initial, maximum: maximum ?? -1, addressType: address === 'i64' ? 2 : 1 };
+}
+
+// Check an index or offset before narrowing a memory64/table64 BigInt to the physical host range.
+function hostResourceIndex(value, addressType, limit, label) {
+  // BigInt selectors are reserved for resources declared with 64-bit addressing.
+  if (typeof value === 'bigint') {
+    // Prevent memory32/table32 access from quietly adopting a different host address convention.
+    if (addressType !== 2) throw new Error(`BigInt ${label} requires 64-bit addressing`);
+
+    // The logical bound must be checked before conversion to Number.
+    if (value < 0n || value > BigInt(limit)) throw new Error(`${label} out of bounds`);
+
+    return Number(value);
+  }
+
+  // Reject unsafe or fractional selectors instead of letting array indexing coerce them.
+  if (!Number.isSafeInteger(value) || value < 0 || value > limit) throw new Error(`${label} out of bounds`);
+
+  return value;
+}
+
+// Preserve unsigned growth requests and report physically oversized memory64/table64 deltas without wrapping.
+function hostResourceDelta(value, addressType) {
+  // A valid logical i64 delta can exceed the physical backing capacity and must fail growth rather than wrap.
+  if (typeof value === 'bigint') {
+    // Require the declared address width to agree with a BigInt growth request.
+    if (addressType !== 2) throw new Error('BigInt growth requires 64-bit addressing');
+
+    // Invalid logical deltas throw; valid but physically oversized ones return a failure through grow().
+    if (value < 0n || value > (1n << 64n) - 1n) throw new Error('growth must be an unsigned i64 integer');
+
+    return value > 0xffffffffn ? Infinity : Number(value);
+  }
+
+  // Number growth uses the same unsigned i32 convention as the interpreter's host growth API.
+  if (!Number.isInteger(value) || value < 0 || value > 0xffffffff)
+    throw new Error('growth must be an unsigned i32 integer');
+
+  return value;
+}
+
+// Create a host-owned memory import with copied byte access and atomic, zero-filled growth.
+export function createMemory(options = {}) {
+  hostResourceOptions(options, ['initial', 'maximum', 'address'], 'memory');
+
+  const { initial, maximum, addressType } = hostResourceLimits(options, 65536, 'memory');
+  const state = {
+    kind: 1,
+    pages: initial,
+    maximum,
+    addressType,
+    bytes: new Uint8Array(initial * 65536),
+    // Host-owned storage has no provider generation to invalidate when a guest reloads.
+    valid: () => true
+  };
+
+  // Check the entire byte span before copying or changing any memory bytes.
+  function range(offset, length) {
+    const start = hostResourceIndex(offset, addressType, state.bytes.length, 'memory offset');
+
+    // Check length without addition so an oversized endpoint cannot overflow the bounds calculation.
+    if (!Number.isSafeInteger(length) || length < 0 || length > state.bytes.length - start)
+      throw new Error('memory out of bounds');
+
+    return start;
+  }
+
+  const handle = Object.freeze({
+    kind: 'memory',
+    // Expose the current logical page count without publishing a mutable backing view.
+    get pages() {
+      return state.pages;
+    },
+    // Retain the descriptor width even though physical page counts are bounded Numbers.
+    get address() {
+      return addressType === 2 ? 'i64' : 'i32';
+    },
+    // Distinguish an omitted maximum from a declared physical growth limit.
+    get maximum() {
+      return maximum === -1 ? undefined : maximum;
+    },
+    // Return independent bytes so callers cannot retain stale views across guest writes or growth.
+    read(offset, length) {
+      const at = range(offset, length);
+
+      return state.bytes.slice(at, at + length);
+    },
+    // Validate the complete destination before publishing a host memory update.
+    write(offset, bytes) {
+      // Accept byte arrays without coercing arbitrary iterables or numeric values.
+      if (!(bytes instanceof Uint8Array)) throw new Error('memory bytes must be a Uint8Array');
+
+      state.bytes.set(bytes, range(offset, bytes.length));
+    },
+    // Allocate and copy before changing size so failed growth preserves all existing storage.
+    grow(delta) {
+      const old = state.pages,
+        next = old + hostResourceDelta(delta, addressType);
+
+      // Respect declared limits and the interpreter's memory32 physical backing ceiling.
+      if (next > 65536 || (maximum !== -1 && next > maximum)) return -1;
+
+      // A no-op grow preserves the current allocation and returns its existing size.
+      if (next === old) return old;
+
+      let bytes;
+
+      // Keep allocation failure separate from committed resource state.
+      try {
+        bytes = new Uint8Array(next * 65536);
+
+        bytes.set(state.bytes);
+      } catch (error) {
+        // Treat physical allocation exhaustion as failed growth rather than partial mutation.
+        if (error instanceof RangeError) return -1;
+
+        throw error;
+      }
+
+      state.bytes = bytes;
+      state.pages = next;
+
+      return old;
+    }
+  });
+
+  state.handle = handle;
+
+  resourceTypes.set(handle, state);
+
+  return handle;
+}
+
+// Describe the host-shareable scalar, vector and nullable function/external reference kinds.
+function hostResourceType(name) {
+  const kinds = { i32: 1, i64: 2, f32: 3, f64: 4, funcref: 5, externref: 6, v128: 7 };
+
+  // Managed GC and exception objects retain instance ownership and are not manufactured by these host factories.
+  if (!Object.hasOwn(kinds, name)) throw new Error(`unsupported host resource type ${String(name)}`);
+
+  const kind = kinds[name];
+
+  return {
+    kind,
+    descriptor: Object.freeze(kind === 5 || kind === 6 ? { kind, nonnull: false, heap: kind } : { kind })
+  };
+}
+
+// Validate a function handle before retaining its typed forwarding reference in a host table or global.
+function hostFunctionReference(value) {
+  // Nullable host function resources use the same null entry representation as guest tables.
+  if (value === null) return null;
+
+  const metadata = functionTypes.get(value);
+
+  // Ordinary JS callbacks and stale guest functions lack a live declared guest signature.
+  if (!metadata?.reference || !metadata.valid()) throw new Error('value must be a live wiw function reference or null');
+
+  return metadata.reference();
+}
+
+// Encode exact numeric bits without allocating a guest instance or borrowing guest scratch memory.
+function hostGlobalBits(value, type) {
+  // Keep vectors as raw 128-bit patterns, accepting the same signed/unsigned spellings as invocation arguments.
+  if (type === 7) {
+    // Reject values whose conversion would silently discard vector bits.
+    if (typeof value !== 'bigint' || value < -(1n << 127n) || value > (1n << 128n) - 1n)
+      throw new Error('value must be a v128 BigInt bit pattern');
+
+    return BigInt.asUintN(128, value);
+  }
+
+  // i32 host values may use either signed or unsigned bit-pattern spelling.
+  if (type === 1) {
+    // Validate before reducing the bits to their signed i32 interpretation.
+    if (!Number.isInteger(value) || value < -2147483648 || value > 4294967295)
+      throw new Error('value must be an i32 integer');
+
+    return BigInt.asIntN(32, BigInt(value));
+  }
+
+  // i64 must remain a BigInt throughout host resource construction and mutation.
+  if (type === 2) {
+    // Reject imprecise Numbers and values outside the supported signed/unsigned i64 patterns.
+    if (typeof value !== 'bigint' || value < -(1n << 63n) || value > (1n << 64n) - 1n)
+      throw new Error('value must be an i64 BigInt integer');
+
+    return BigInt.asIntN(64, value);
+  }
+
+  // Floating-point storage applies f32 rounding here and preserves signed zero in both widths.
+  if (typeof value !== 'number') throw new Error('float global value must be a Number');
+
+  const view = new DataView(new ArrayBuffer(8));
+
+  // Encode at the declared width instead of rounding all floating globals through one shared precision.
+  if (type === 3) view.setFloat32(0, value, true);
+  else view.setFloat64(0, value, true);
+
+  return view.getBigInt64(0, true);
+}
+
+// Decode a numeric global snapshot without changing its retained raw bits, including NaN payloads.
+function hostGlobalValue(bits, type) {
+  // Integer and vector kinds retain their width and exact host representation.
+  if (type === 1) return Number(BigInt.asIntN(32, bits));
+
+  if (type === 2) return BigInt.asIntN(64, bits);
+
+  if (type === 7) return BigInt.asUintN(128, bits);
+
+  const view = new DataView(new ArrayBuffer(8));
+
+  view.setBigInt64(0, BigInt.asIntN(64, bits), true);
+
+  return type === 3 ? view.getFloat32(0, true) : view.getFloat64(0, true);
+}
+
+// Create an independent global import with decoded access and an exact raw-value API.
+export function createGlobal(options, value) {
+  hostResourceOptions(options, ['value', 'mutable'], 'global');
+
+  const { value: valueType, mutable = false } = options;
+  const { kind: type, descriptor } = hostResourceType(valueType);
+
+  // Mutability participates in import matching and must not be inferred through truthy coercion.
+  if (typeof mutable !== 'boolean') throw new Error('global mutable must be a boolean');
+
+  const state = {
+    kind: 2,
+    type,
+    descriptor,
+    mutable: Number(mutable),
+    bits: 0n,
+    value: null,
+    // Host globals remain valid independently of any guest module load generation.
+    valid: () => true
+  };
+
+  // Validate a complete replacement before committing either numeric bits or a reference identity.
+  function assign(value) {
+    // Function globals retain a live typed function rather than an untyped callable.
+    if (type === 5) hostFunctionReference(value);
+
+    // Reference slots retain their actual host values; only numeric slots are encoded as bits.
+    if (type === 5 || type === 6) state.value = value;
+    else state.bits = hostGlobalBits(value, type);
+  }
+
+  assign(arguments.length > 1 ? value : type === 5 || type === 6 ? null : type === 2 || type === 7 ? 0n : 0);
+
+  // Read reference values without letting a stale function masquerade as a current guest export.
+  function currentValue() {
+    // Reject a function whose provider was reloaded after it was retained by this host global.
+    if (type === 5) hostFunctionReference(state.value);
+
+    return type === 5 || type === 6 ? state.value : hostGlobalValue(state.bits, type);
+  }
+
+  const handle = Object.freeze({
+    kind: 'global',
+    // Report the declared value kind used for import matching and raw value slots.
+    get type() {
+      return valueType;
+    },
+    // Report the descriptor's mutability without exposing the internal import flag.
+    get mutable() {
+      return mutable;
+    },
+    // Read the latest value published by a guest or assigned by the host.
+    get value() {
+      return currentValue();
+    },
+    // Validate a host write before replacing the current mutable global value.
+    set value(next) {
+      // Immutable globals cannot be changed even before they are imported into a guest.
+      if (!mutable) throw new Error('immutable global');
+
+      assign(next);
+    },
+    // Return raw numeric bits or the retained opaque reference value in the existing typed-slot format.
+    getRaw() {
+      const width = type === 7 ? 128 : type === 1 || type === 3 ? 32 : 64;
+
+      return type === 5 || type === 6
+        ? { type: valueType, value: currentValue() }
+        : { type: valueType, bits: BigInt.asUintN(width, state.bits) };
+    },
+    // Accept exact raw bits without converting floating-point payloads through JavaScript Numbers.
+    setRaw(slot) {
+      // Mutability must be checked before any payload conversion or validation can mutate state.
+      if (!mutable) throw new Error('immutable global');
+
+      // Raw assignments must name the global's actual declared value kind.
+      if (!slot || slot.type !== valueType) throw new Error('raw global type mismatch');
+
+      // Opaque references use value slots rather than accepting manufactured guest pointer bits.
+      if (type === 5 || type === 6) {
+        // Distinguish an explicit undefined externref from an omitted raw value field.
+        if (!Object.hasOwn(slot, 'value')) throw new Error('raw reference requires an opaque value');
+
+        assign(slot.value);
+      } else {
+        // Normalize numeric raw bits to the declared width using the same convention as invokeRaw.
+        if (typeof slot.bits !== 'bigint') throw new Error('raw global bits must be a BigInt');
+
+        state.bits = BigInt.asUintN(type === 7 ? 128 : type === 1 || type === 3 ? 32 : 64, slot.bits);
+      }
+    }
+  });
+
+  state.handle = handle;
+
+  resourceTypes.set(handle, state);
+
+  return handle;
+}
+
+// Create a host-owned nullable function/external table import with checked element access and growth.
+export function createTable(options = {}, value) {
+  hostResourceOptions(options, ['initial', 'maximum', 'address', 'element'], 'table');
+
+  const { initial, maximum, addressType } = hostResourceLimits(options, 16777216, 'table');
+  const { element = 'funcref' } = options;
+  const { kind: type, descriptor } = hostResourceType(element);
+
+  // Numeric values and instance-owned GC objects are not host table element kinds.
+  if (type !== 5 && type !== 6) throw new Error('host table element must be funcref or externref');
+
+  // Retain live typed function metadata internally while leaving arbitrary externrefs opaque.
+  function entry(value) {
+    return type === 5 ? hostFunctionReference(value) : value;
+  }
+
+  const fill = entry(arguments.length > 1 ? value : null);
+  const state = {
+    kind: 3,
+    type,
+    descriptor,
+    addressType,
+    maximum,
+    entries: new Array(initial).fill(fill),
+    hostOwned: true,
+    // Host tables do not expire when an importing guest reloads.
+    valid: () => true
+  };
+  const handle = Object.freeze({
+    kind: 'table',
+    // Return the current element count without exposing the mutable entry array.
+    get length() {
+      return state.entries.length;
+    },
+    // Retain the declared address width for import matching and host index checks.
+    get address() {
+      return addressType === 2 ? 'i64' : 'i32';
+    },
+    // Report the nullable abstract reference kind accepted by this table.
+    get element() {
+      return element;
+    },
+    // Distinguish an omitted maximum from a declared table growth limit.
+    get maximum() {
+      return maximum === -1 ? undefined : maximum;
+    },
+    // Read a checked element while preserving the original provider's callable identity.
+    get(index) {
+      const slot = hostResourceIndex(index, addressType, state.entries.length - 1, 'table index');
+      const stored = state.entries[slot];
+
+      // Externrefs, including undefined and opaque Promises, must be returned without conversion or assimilation.
+      if (type === 6 || stored === null) return stored;
+
+      hostFunctionReference(stored.callback);
+
+      return stored.callback;
+    },
+    // Validate the slot and replacement before publishing any table mutation.
+    set(index, value) {
+      const slot = hostResourceIndex(index, addressType, state.entries.length - 1, 'table index');
+
+      state.entries[slot] = entry(value);
+    },
+    // Allocate a complete grown entry array before replacing the current table state.
+    grow(delta, value) {
+      const old = state.entries.length,
+        next = old + hostResourceDelta(delta, addressType);
+      const fill = entry(arguments.length > 1 ? value : null);
+
+      // Respect declared limits and the table arena's physical entry ceiling before allocation.
+      if (next > 16777216 || (maximum !== -1 && next > maximum)) return -1;
+
+      // Validate the fill even for a no-op grow, then retain the existing entry array.
+      if (next === old) return old;
+
+      let entries;
+
+      // Allocation failure must not publish a longer or partially filled table.
+      try {
+        entries = state.entries.concat(new Array(next - old).fill(fill));
+      } catch (error) {
+        // Report backing allocation exhaustion using the same failed-grow convention as guest tables.
+        if (error instanceof RangeError) return -1;
+
+        throw error;
+      }
+
+      state.entries = entries;
+
+      return old;
+    }
+  });
+
+  state.handle = handle;
+
+  resourceTypes.set(handle, state);
+
+  return handle;
+}
+
 const invocationContext = new AsyncLocalStorage();
 // Callback scopes authorize their own suspended instance, including across awaits and forwarding cycles.
 const callbackContext = new AsyncLocalStorage();
@@ -1192,6 +1639,10 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits } = {
 
         // Import each shared table element after checking reference compatibility.
         state.entries.forEach((entry, index) => {
+          // Host tables outlive their function providers; reject retained callables after provider reload.
+          if (state.hostOwned && state.type === 5 && entry && !functionTypes.get(entry.callback)?.valid())
+            throw new Error('stale forwarded function');
+
           const target =
             state.type === 5 ? (entry ? tableFunctionIndex(entry) : -1) : Number(typedValue(entry, state.type)) - 1;
 

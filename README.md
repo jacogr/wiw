@@ -195,6 +195,61 @@ consumer.load(`(module
 console.log(consumer.invoke('answer'));
 ```
 
+`createMemory`, `createGlobal` and `createTable` create host-owned imports
+without a provider guest. Import them directly under a module/name pair. Multiple
+guests can share a handle, and a direct re-export returns that original handle.
+Their storage survives guest reloads; function references retained in globals or
+tables still expire when their defining guest reloads.
+
+```js
+import {createMemory, createGlobal, createTable, createInterpreter} from './wiw.js';
+const memory = createMemory({initial: 1, maximum: 2});
+const counter = createGlobal({value: 'i32', mutable: true}, 7);
+const values = createTable({element: 'externref', initial: 1, maximum: 4});
+const engine = await createInterpreter();
+engine.load(`(module
+  (memory (import "host" "memory") 1 2)
+  (global $counter (import "host" "counter") (mut i32))
+  (table (import "host" "values") 1 4 externref)
+  (func (export "increment") (result i32)
+    global.get $counter i32.const 1 i32.add global.set $counter
+    global.get $counter))`, {host: {memory, counter, values}});
+console.log(engine.invoke('increment')); // 8
+console.log(counter.value); // 8
+memory.write(0, Uint8Array.of(42));
+values.set(0, {answer: 42});
+```
+
+Memory handles expose `pages`, `address`, `maximum`, `read(offset, length)`,
+`write(offset, bytes)` and `grow(delta)`. Reads return copies; writes accept
+`Uint8Array` and check the complete range before changing bytes. Growth returns
+the previous page count or `-1`, and new bytes are zero-filled.
+
+Global descriptors require `value` to name `i32`, `i64`, `f32`, `f64`, `v128`,
+`funcref` or `externref`; `mutable` defaults to false. Pass the initial value as
+the second factory argument, or omit it for zero/null. Handles expose `type`,
+`mutable`, writable `value` for mutable globals, and `getRaw()`/`setRaw(slot)`.
+Raw numeric slots use `{type, bits: BigInt}` to preserve float NaN payloads and
+vector bits; reference slots use `{type, value}`. Explicit `undefined` remains
+an opaque externref value. Immutable globals reject host writes too.
+
+Table descriptors accept `initial`, `maximum`, `address` and `element` (default
+`funcref`, alternatively `externref`). An optional second argument fills the
+initial entries; omitted fills are null. Handles expose `length`, `address`,
+`element`, `maximum`, `get(index)`, `set(index, value)` and `grow(delta, value)`.
+Growth returns the previous length or `-1`. Function entries and funcref globals
+accept null or live typed callbacks from `exportFunction`/`exportFunctionAsync`;
+externrefs retain arbitrary JavaScript values without awaiting promises.
+
+Memory/table `initial` defaults to zero and `address` to `'i32'`. Select `'i64'`
+for memory64/table64 imports and BigInt offsets, indices or growth deltas.
+Initial sizes and maxima remain Numbers, and host growth results remain Numbers.
+The physical ceilings are 65,536 memory pages and 16,777,216 table entries;
+individual interpreter budgets may be lower. Shared memory, concrete/non-null
+reference types and instance-owned GC/exception references are outside these
+factories. Import matching and synchronization use the same rules as guest-owned
+resources, including writes retained through traps and failed initialization.
+
 The exported `createTag(parameters = [])` helper creates an opaque host-owned tag
 without loading a provider guest. Parameters are an array of public type names:
 `i32`, `i64`, `f32`, `f64`, `v128`, `funcref`, `externref`, `anyref` or `exnref`,
