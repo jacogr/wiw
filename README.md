@@ -146,6 +146,10 @@ python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
 Open [localhost:8000](http://localhost:8000/), paste WAT and click **Run**.
+The editor loads pinned classic CodeMirror 6.65.7 and its WAST mode directly
+from cdnjs, with syntax highlighting, line numbers, indentation and bracket
+matching. CDN assets have integrity hashes; no bundler or editor build step is
+required. A plain textarea remains usable when the CDN is unavailable.
 The page uses the compiled interpreter; guest WAT is interpreted, never compiled.
 Module initialization runs first, followed by each zero-argument function export.
 Results and guest errors appear in the output area.

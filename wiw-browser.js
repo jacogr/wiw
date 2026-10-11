@@ -14,6 +14,37 @@ export * from './wiw-lib.js';
 /** @typedef {string | URL | WebAssembly.Module} BrowserBootstrapSource */
 
 /**
+ * CodeMirror methods used by the page, without coupling the interpreter to editor packages.
+ * @typedef {object} WatEditor
+ * @property {() => string} getValue
+ * @property {() => HTMLTextAreaElement} getInputField
+ */
+
+/**
+ * Direct-script editor configuration for the WAST mode and accessible input field.
+ * @typedef {object} WatEditorOptions
+ * @property {string} mode
+ * @property {string} theme
+ * @property {boolean} lineNumbers
+ * @property {boolean} matchBrackets
+ * @property {boolean} lineWrapping
+ * @property {number} indentUnit
+ * @property {number} tabSize
+ * @property {string} inputStyle
+ * @property {string} screenReaderLabel
+ */
+
+/**
+ * Minimal classic CodeMirror API loaded from cdnjs by index.html.
+ * @typedef {{fromTextArea: (source: HTMLTextAreaElement, options: WatEditorOptions) => WatEditor}} WatEditorFactory
+ */
+
+/**
+ * Browser globals extended by the optional CDN editor script.
+ * @typedef {Window & {CodeMirror?: WatEditorFactory}} EditorWindow
+ */
+
+/**
  * Synchronous ownership scopes for browser calls; no ambient scope escapes into unrelated tasks.
  * @template T
  */
@@ -218,6 +249,28 @@ function attachInterface() {
   const source = sourceElement;
   const output = outputElement;
   const button = buttonElement;
+  const codeMirror = /** @type {EditorWindow} */ (window).CodeMirror;
+  // Keep the textarea usable if the CDN is unavailable; interpreter execution stays independent.
+  const editor = codeMirror?.fromTextArea(source, {
+    mode: 'text/webassembly',
+    theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'material-darker' : 'default',
+    lineNumbers: true,
+    matchBrackets: true,
+    lineWrapping: false,
+    indentUnit: 2,
+    tabSize: 2,
+    inputStyle: 'textarea',
+    screenReaderLabel: 'WAT input'
+  });
+
+  // Preserve the original input's help association after CodeMirror creates its editing field.
+  if (editor) {
+    const input = editor.getInputField();
+
+    input.id = 'wat-editor';
+    input.setAttribute('aria-describedby', 'hint');
+    document.querySelector('label[for="wat"]')?.setAttribute('for', input.id);
+  }
 
   /**
    * Run the current input in a fresh worker and display either results or the guest diagnostic.
@@ -281,7 +334,7 @@ function attachInterface() {
        */
       (event) => finish(event.message || 'Could not start the interpreter worker.');
 
-    worker.postMessage(source.value);
+    worker.postMessage(editor ? editor.getValue() : source.value);
   }
 
   button.addEventListener('click', run);
