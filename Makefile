@@ -4,9 +4,7 @@ M4 = m4
 WAT2WASM = wat2wasm
 WASM_OPT = wasm-opt
 NODE = node
-NPM = npm
-TSC = tsc
-TYPE_ROOTS ?= $(shell $(NPM) root -g)/@types
+TSC = node_modules/.bin/tsc
 
 DEBUG ?= 0
 
@@ -73,9 +71,9 @@ inspect-opt: build/wiw.wasm build/flags
 	BINARYEN_PASS_DEBUG=1 $(WASM_OPT) $(FLAGS_OPT) build/wiw.wasm -o /dev/null > build/opt-passes.log 2>&1
 	@awk '/running pass:/ { sub(/^.*running pass: /, ""); sub(/\.\.\..*/, ""); print }' build/opt-passes.log
 
-# Check only the single-file adapter using globally installed compiler and Node declarations.
+# Check only the single-file adapter using local development dependencies.
 check-js:
-	$(TSC) --noEmit -p jsconfig.json --typeRoots "$(TYPE_ROOTS)"
+	$(TSC) --noEmit -p jsconfig.json
 
 check: check-js check-wat
 

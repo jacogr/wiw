@@ -63,18 +63,18 @@ are `RELEASE` by default and `DEBUG` with `DEBUG=1`. Switching modes rebuilds
 automatically; `make check` switches back to release without requiring `make clean`.
 
 `make check-js` checks only `wiw.js` with the strict configuration in
-`jsconfig.json`, without emitting files. Install the development tools globally:
+`jsconfig.json`, without emitting files. Install the development dependencies:
 
 ```sh
-npm install --global typescript@7.0.2 @types/node@24.19.2
+npm ci
 make check-js
 ```
 
-The Make target resolves Node declarations through `npm root -g`; override
-`TSC`, `NPM`, or `TYPE_ROOTS` for another installation. `jsconfig.json` requests
-automatic Node type acquisition for editors; it contains no installation paths.
-CI installs the pinned tools globally and checks types before runtime tests.
-No project dependencies are required.
+TypeScript and Node declarations are development dependencies, pinned in
+`package.json` and `package-lock.json`. Make uses the local compiler, and editors
+resolve the local Node declarations. CI installs them with `npm ci --include=dev`
+and checks types before runtime tests. Production execution requires neither;
+use `npm ci --omit=dev` when installing only for production.
 
 `make check` runs `check-js` and defaults to `make check-wat`. `check-wat` runs shared regressions
 and the entire pinned spec through the interpreted WAT copy; `check-wasm` runs
