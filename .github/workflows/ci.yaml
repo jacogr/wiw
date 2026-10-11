@@ -73,7 +73,12 @@ jobs:
 
           command -v wasm-opt
           wasm-opt --version
-          test "$(wasm-opt --version)" = "wasm-opt version $BIN_VER"
+          # Release archives include the tag suffix; packaged builds may omit it.
+          BIN_VERSION_OUTPUT="$(wasm-opt --version)"
+          case "$BIN_VERSION_OUTPUT" in
+            "wasm-opt version $BIN_VER"|"wasm-opt version $BIN_VER (version_$BIN_VER)") ;;
+            *) echo "Unexpected Binaryen version: $BIN_VERSION_OUTPUT" >&2; exit 1 ;;
+          esac
 
       - name: Inspect Binaryen optimization pass order
         run: make inspect-opt
