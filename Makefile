@@ -4,6 +4,9 @@ M4 = m4
 WAT2WASM = wat2wasm
 WASM_OPT = wasm-opt
 NODE = node
+NPM = npm
+TSC = tsc
+TYPE_ROOTS ?= $(shell $(NPM) root -g)/@types
 
 DEBUG ?= 0
 
@@ -27,7 +30,7 @@ endif
 
 .DELETE_ON_ERROR:
 
-.PHONY: all check check-wat check-wasm check-spec audit-spec audit-selfhost bench bench-load bench-create bench-create-phases inspect-opt clean FORCE
+.PHONY: all check check-js check-wat check-wasm check-spec audit-spec audit-selfhost bench bench-load bench-create bench-create-phases inspect-opt clean FORCE
 all: build/wiw-opt.wasm build/wiw-opt.wat
 
 build:
@@ -70,7 +73,11 @@ inspect-opt: build/wiw.wasm build/flags
 	BINARYEN_PASS_DEBUG=1 $(WASM_OPT) $(FLAGS_OPT) build/wiw.wasm -o /dev/null > build/opt-passes.log 2>&1
 	@awk '/running pass:/ { sub(/^.*running pass: /, ""); sub(/\.\.\..*/, ""); print }' build/opt-passes.log
 
-check: check-wat
+# Check only the single-file adapter using globally installed compiler and Node declarations.
+check-js:
+	$(TSC) --noEmit -p jsconfig.json --typeRoots "$(TYPE_ROOTS)"
+
+check: check-js check-wat
 
 check-wat: all
 	WIW_TEST_RUNTIME=wat $(NODE) $(FLAGS_NODE) --test test/*.test.js

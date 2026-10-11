@@ -62,7 +62,21 @@ uses `wasm-opt -O4 --converge --strip-debug --strip-producers`; all tests and au
 are `RELEASE` by default and `DEBUG` with `DEBUG=1`. Switching modes rebuilds
 automatically; `make check` switches back to release without requiring `make clean`.
 
-`make check` defaults to `make check-wat`. `check-wat` runs shared regressions
+`make check-js` checks only `wiw.js` with the strict configuration in
+`jsconfig.json`, without emitting files. Install the development tools globally:
+
+```sh
+npm install --global typescript@7.0.2 @types/node@24.19.2
+make check-js
+```
+
+The Make target resolves Node declarations through `npm root -g`; override
+`TSC`, `NPM`, or `TYPE_ROOTS` for another installation. `jsconfig.json` requests
+automatic Node type acquisition for editors; it contains no installation paths.
+CI installs the pinned tools globally and checks types before runtime tests.
+No project dependencies are required.
+
+`make check` runs `check-js` and defaults to `make check-wat`. `check-wat` runs shared regressions
 and the entire pinned spec through the interpreted WAT copy; `check-wasm` runs
 them directly through the native optimized bootstrap. Both targets build the
 same selected release/debug artifacts. CI runs `check-wat` followed by
@@ -651,8 +665,9 @@ skips and zero failures through this copy**, in addition to the bootstrap baseli
 The completed snapshot is `test/spec/selfhost.json`. The report is
 `build/spec-selfhost-wiw-opt.wasm.json`; it records the engine source hash,
 per-file timings and completion status.
-CI runs `make check`, which includes this full interpreted inventory once and
-rejects any failure, skip or mismatch against the frozen coverage counts.
+CI runs `make check-js`, `make check-wat` and `make check-wasm`; each runtime
+checks the full inventory and rejects any failure, skip or mismatch against
+the frozen coverage counts.
 `make audit-selfhost` is available separately for diagnostics and partial progress
 reports.
 
