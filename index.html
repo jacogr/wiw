@@ -1,125 +1,131 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>wiw — WAT interpreter</title>
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.css"
-      integrity="sha512-uf06llspW44/LZpHzHT6qBOIVODjWtv4MxCricRxkzvopAlSWnTf6hpZTFxuuZcuNE9CBQhqE0Seu1CoRk84nQ=="
-      crossorigin="anonymous"
-    />
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/theme/material-darker.min.css"
-      integrity="sha512-2OhXH4Il3n2tHKwLLSDPhrkgnLBC+6lHGGQzSFi3chgVB6DJ/v6+nbx+XYO9CugQyHVF/8D/0k3Hx1eaUK2K9g=="
-      crossorigin="anonymous"
-    />
-    <style>
-      :root {
-        color-scheme: light dark;
-        font-family: system-ui, sans-serif;
-      }
-      body {
-        max-width: 960px;
-        margin: 3rem auto;
-        padding: 0 1.25rem;
-      }
-      h1 {
-        margin-bottom: 0.25rem;
-      }
-      p {
-        line-height: 1.5;
-      }
-      label {
-        display: block;
-        margin: 1.5rem 0 0.5rem;
-        font-weight: 600;
-      }
-      #wat,
-      #output {
-        box-sizing: border-box;
-        width: 100%;
-        padding: 1rem;
-        border: 1px solid #8888;
-        border-radius: 0.4rem;
-        font: 0.95rem/1.5 ui-monospace, monospace;
-      }
-      #wat {
-        min-height: 20rem;
-        resize: vertical;
-        tab-size: 2;
-      }
-      .CodeMirror {
-        height: 20rem;
-        border: 1px solid #8888;
-        border-radius: 0.4rem;
-        font: 0.95rem/1.5 ui-monospace, monospace;
-      }
-      .CodeMirror-focused {
-        outline: 2px solid Highlight;
-        outline-offset: 2px;
-      }
-      .CodeMirror pre {
-        width: auto;
-        min-height: 0;
-        border: 0;
-        border-radius: 0;
-        font: inherit;
-        overflow-wrap: normal;
-      }
-      button {
-        margin-top: 0.75rem;
-        padding: 0.6rem 1.5rem;
-        font: inherit;
-        cursor: pointer;
-      }
-      button:disabled {
-        cursor: wait;
-      }
-      #output {
-        min-height: 6rem;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>wiw</h1>
-    <p>
-      Paste WAT and run it. Module initialization runs first, then each function export with no arguments.
-    </p>
-    <label for="wat">WAT input</label>
-    <textarea id="wat" spellcheck="false" wrap="off" aria-describedby="hint">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>wiw — WAT interpreter</title>
+		<link
+			rel="stylesheet"
+			href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.css"
+			integrity="sha512-uf06llspW44/LZpHzHT6qBOIVODjWtv4MxCricRxkzvopAlSWnTf6hpZTFxuuZcuNE9CBQhqE0Seu1CoRk84nQ=="
+			crossorigin="anonymous"
+		/>
+		<link
+			rel="stylesheet"
+			href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/theme/material-darker.min.css"
+			integrity="sha512-2OhXH4Il3n2tHKwLLSDPhrkgnLBC+6lHGGQzSFi3chgVB6DJ/v6+nbx+XYO9CugQyHVF/8D/0k3Hx1eaUK2K9g=="
+			crossorigin="anonymous"
+		/>
+		<style>
+			:root {
+				color-scheme: light dark;
+				font-family: system-ui, sans-serif;
+			}
+			body {
+				max-width: 960px;
+				margin: 3rem auto;
+				padding: 0 1.25rem;
+			}
+			h1 {
+				margin-bottom: 0.25rem;
+			}
+			p {
+				line-height: 1.5;
+			}
+			label {
+				display: block;
+				margin: 1.5rem 0 0.5rem;
+				font-weight: 600;
+			}
+			#wat,
+			#output {
+				box-sizing: border-box;
+				width: 100%;
+				padding: 1rem;
+				border: 1px solid #8888;
+				border-radius: 0.4rem;
+				font: 0.95rem/1.5 ui-monospace, monospace;
+			}
+			#wat {
+				min-height: 20rem;
+				resize: vertical;
+				tab-size: 2;
+			}
+			.CodeMirror {
+				height: 20rem;
+				border: 1px solid #8888;
+				border-radius: 0.4rem;
+				font: 0.95rem/1.5 ui-monospace, monospace;
+			}
+			.wat-error-line {
+				background: #e5484d30;
+				box-shadow: inset 3px 0 #e5484d;
+			}
+			.CodeMirror-focused {
+				outline: 2px solid Highlight;
+				outline-offset: 2px;
+			}
+			.CodeMirror pre {
+				width: auto;
+				min-height: 0;
+				border: 0;
+				border-radius: 0;
+				font: inherit;
+				overflow-wrap: normal;
+			}
+			button {
+				margin-top: 0.75rem;
+				padding: 0.6rem 1.5rem;
+				font: inherit;
+				cursor: pointer;
+			}
+			button:disabled {
+				cursor: wait;
+			}
+			#output {
+				min-height: 6rem;
+				white-space: pre-wrap;
+				tab-size: 2;
+				overflow-wrap: anywhere;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>wiw</h1>
+		<p>
+			Paste WAT and run it. Module initialization runs first, then each function export with no
+			arguments.
+		</p>
+		<label for="wat">WAT input</label>
+		<textarea id="wat" spellcheck="false" wrap="off" aria-describedby="hint">
 (module
   (func (export "answer") (result i32)
     i32.const 42))</textarea
-    >
-    <p id="hint">Functions requiring arguments are listed without being called.</p>
-    <button id="run" type="button">Run</button>
-    <label id="output-label">Output</label>
-    <pre id="output" aria-labelledby="output-label" aria-live="polite">Ready.</pre>
-    <script
-      src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.js"
-      integrity="sha512-8RnEqURPUc5aqFEN04aQEiPlSAdE0jlFS/9iGgUyNtwFnSKCXhmB6ZTNl7LnDtDWKabJIASzXrzD0K+LYexU9g=="
-      crossorigin="anonymous"
-    ></script>
-    <script
-      src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/mode/simple.min.js"
-      integrity="sha512-CGM6DWPHs250F/m90YZ9NEiEUhd9a4+u8wAzeKC6uHzZbYyt9/e2dLC5BGGB6Y0HtEdZQdSDYjDsoTyNGdMrMA=="
-      crossorigin="anonymous"
-    ></script>
-    <script
-      src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/wast/wast.min.js"
-      integrity="sha512-jROitIYzp4fmQniVqF+eAnO5xKsZbKhI9Mue2XHaUtyC6rFxvcS/utxK+e1tMdlN/JP20A1qPEPPHwts42A4JQ=="
-      crossorigin="anonymous"
-    ></script>
-    <script
-      src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/edit/matchbrackets.min.js"
-      integrity="sha512-GSYCbN/le5gNmfAWVEjg1tKnOH7ilK6xCLgA7c48IReoIR2g2vldxTM6kZlN6o3VtWIe6fHu/qhwxIt11J8EBA=="
-      crossorigin="anonymous"
-    ></script>
-    <script type="module" src="./wiw-browser.js"></script>
-  </body>
+		>
+		<p id="hint">Functions requiring arguments are listed without being called.</p>
+		<button id="run" type="button">Run</button>
+		<label id="output-label">Output</label>
+		<pre id="output" aria-labelledby="output-label" aria-live="polite">Ready.</pre>
+		<script
+			src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.js"
+			integrity="sha512-8RnEqURPUc5aqFEN04aQEiPlSAdE0jlFS/9iGgUyNtwFnSKCXhmB6ZTNl7LnDtDWKabJIASzXrzD0K+LYexU9g=="
+			crossorigin="anonymous"
+		></script>
+		<script
+			src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/mode/simple.min.js"
+			integrity="sha512-CGM6DWPHs250F/m90YZ9NEiEUhd9a4+u8wAzeKC6uHzZbYyt9/e2dLC5BGGB6Y0HtEdZQdSDYjDsoTyNGdMrMA=="
+			crossorigin="anonymous"
+		></script>
+		<script
+			src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/wast/wast.min.js"
+			integrity="sha512-jROitIYzp4fmQniVqF+eAnO5xKsZbKhI9Mue2XHaUtyC6rFxvcS/utxK+e1tMdlN/JP20A1qPEPPHwts42A4JQ=="
+			crossorigin="anonymous"
+		></script>
+		<script
+			src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/edit/matchbrackets.min.js"
+			integrity="sha512-GSYCbN/le5gNmfAWVEjg1tKnOH7ilK6xCLgA7c48IReoIR2g2vldxTM6kZlN6o3VtWIe6fHu/qhwxIt11J8EBA=="
+			crossorigin="anonymous"
+		></script>
+		<script type="module" src="./wiw-browser.js"></script>
+	</body>
 </html>

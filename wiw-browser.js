@@ -1,7 +1,8 @@
 import {
-  createBootstrapInterpreter as createSharedBootstrapInterpreter,
-  createInterpretedInterpreter as createSharedInterpretedInterpreter,
-  formatValue
+	createBootstrapInterpreter as createSharedBootstrapInterpreter,
+	createInterpretedInterpreter as createSharedInterpretedInterpreter,
+	formatValue,
+	WiwError
 } from './wiw-lib.js';
 
 export * from './wiw-lib.js';
@@ -14,10 +15,24 @@ export * from './wiw-lib.js';
 /** @typedef {string | URL | WebAssembly.Module} BrowserBootstrapSource */
 
 /**
+ * Worker output with optional original WAT coordinates (one-based Unicode columns).
+ * @typedef {object} BrowserRunResult
+ * @property {string} text
+ * @property {number} [line]
+ * @property {number} [column]
+ */
+
+/** @typedef {object} WatEditorLine */
+
+/**
  * CodeMirror methods used by the page, without coupling the interpreter to editor packages.
  * @typedef {object} WatEditor
  * @property {() => string} getValue
  * @property {() => HTMLTextAreaElement} getInputField
+ * @property {(line: number, where: string, className: string) => WatEditorLine} addLineClass
+ * @property {(line: WatEditorLine, where: string, className: string) => unknown} removeLineClass
+ * @property {(position: {line: number, ch: number}) => void} scrollIntoView
+ * @property {(event: 'change', callback: () => void) => void} on
  */
 
 /**
@@ -49,58 +64,58 @@ export * from './wiw-lib.js';
  * @template T
  */
 class BrowserContext {
-  /** @type {T | undefined} */
-  current;
+	/** @type {T | undefined} */
+	current;
 
-  /**
-   * Read the scope active on this synchronous JavaScript stack.
-   * @returns {T | undefined}
-   */
-  getStore() {
-    return this.current;
-  }
+	/**
+	 * Read the scope active on this synchronous JavaScript stack.
+	 * @returns {T | undefined}
+	 */
+	getStore() {
+		return this.current;
+	}
 
-  /**
-   * Run one synchronous scope and restore its caller even when it throws.
-   * @template R
-   * @param {T} value
-   * @param {() => R} callback
-   * @returns {R}
-   */
-  run(value, callback) {
-    const previous = this.current;
-    this.current = value;
+	/**
+	 * Run one synchronous scope and restore its caller even when it throws.
+	 * @template R
+	 * @param {T} value
+	 * @param {() => R} callback
+	 * @returns {R}
+	 */
+	run(value, callback) {
+		const previous = this.current;
+		this.current = value;
 
-    // A suspended browser callback must not authorize an unrelated event-loop task.
-    try {
-      return callback();
-    } finally {
-      this.current = previous;
-    }
-  }
+		// A suspended browser callback must not authorize an unrelated event-loop task.
+		try {
+			return callback();
+		} finally {
+			this.current = previous;
+		}
+	}
 }
 
 /** @type {RuntimeServices} */
 const runtime = {
-  invocationContext: new BrowserContext(),
-  callbackContext: new BrowserContext(),
+	invocationContext: new BrowserContext(),
+	callbackContext: new BrowserContext(),
 
-  /**
-   * Yield cooperative execution to the browser event loop.
-   * @returns {Promise<void>}
-   */
-  yieldTask() {
-    return new Promise(
-      /**
-       * Schedule a continuation after the current task finishes.
-       * @param {() => void} resolve
-       * @returns {void}
-       */
-      (resolve) => {
-        setTimeout(resolve, 0);
-      }
-    );
-  }
+	/**
+	 * Yield cooperative execution to the browser event loop.
+	 * @returns {Promise<void>}
+	 */
+	yieldTask() {
+		return new Promise(
+			/**
+			 * Schedule a continuation after the current task finishes.
+			 * @param {() => void} resolve
+			 * @returns {void}
+			 */
+			(resolve) => {
+				setTimeout(resolve, 0);
+			}
+		);
+	}
 };
 
 /**
@@ -109,12 +124,13 @@ const runtime = {
  * @returns {Promise<Response>}
  */
 async function fetchArtifact(source) {
-  const response = await fetch(source);
+	const response = await fetch(source);
 
-  // A missing build must produce an actionable error instead of a Wasm magic-byte error.
-  if (!response.ok) throw new Error(`Could not load ${source}: HTTP ${response.status}. Run make all first.`);
+	// A missing build must produce an actionable error instead of a Wasm magic-byte error.
+	if (!response.ok)
+		throw new Error(`Could not load ${source}: HTTP ${response.status}. Run make all first.`);
 
-  return response;
+	return response;
 }
 
 /**
@@ -123,12 +139,12 @@ async function fetchArtifact(source) {
  * @returns {Promise<WebAssembly.Module>}
  */
 async function bootstrapModule(source) {
-  // Compiled modules can be shared while each interpreter gets fresh instance state.
-  if (source instanceof WebAssembly.Module) return source;
+	// Compiled modules can be shared while each interpreter gets fresh instance state.
+	if (source instanceof WebAssembly.Module) return source;
 
-  const response = await fetchArtifact(source);
+	const response = await fetchArtifact(source);
 
-  return WebAssembly.compile(await response.arrayBuffer());
+	return WebAssembly.compile(await response.arrayBuffer());
 }
 
 /**
@@ -138,10 +154,10 @@ async function bootstrapModule(source) {
  * @returns {Promise<InterpreterApi>}
  */
 export async function createBootstrapInterpreter(
-  binary = new URL('./build/wiw-opt.wasm', import.meta.url),
-  options = {}
+	binary = new URL('./build/wiw-opt.wasm', import.meta.url),
+	options = {}
 ) {
-  return createSharedBootstrapInterpreter(await bootstrapModule(binary), options, runtime);
+	return createSharedBootstrapInterpreter(await bootstrapModule(binary), options, runtime);
 }
 
 /**
@@ -151,10 +167,10 @@ export async function createBootstrapInterpreter(
  * @returns {Promise<InterpreterApi>}
  */
 export async function createInterpreter(
-  binary = new URL('./build/wiw-opt.wasm', import.meta.url),
-  options = {}
+	binary = new URL('./build/wiw-opt.wasm', import.meta.url),
+	options = {}
 ) {
-  return createInterpretedInterpreter(binary, options);
+	return createInterpretedInterpreter(binary, options);
 }
 
 /**
@@ -164,14 +180,15 @@ export async function createInterpreter(
  * @returns {Promise<InterpreterApi>}
  */
 export async function createInterpretedInterpreter(
-  binary = new URL('./build/wiw-opt.wasm', import.meta.url),
-  options = {}
+	binary = new URL('./build/wiw-opt.wasm', import.meta.url),
+	options = {}
 ) {
-  const module = await bootstrapModule(binary);
-  const source =
-    options.source ?? (await (await fetchArtifact(new URL('./build/wiw-opt.wat', import.meta.url))).text());
+	const module = await bootstrapModule(binary);
+	const source =
+		options.source ??
+		(await (await fetchArtifact(new URL('./build/wiw-opt.wat', import.meta.url))).text());
 
-  return createSharedInterpretedInterpreter(module, { ...options, source }, runtime);
+	return createSharedInterpretedInterpreter(module, { ...options, source }, runtime);
 }
 
 /**
@@ -181,52 +198,89 @@ export async function createInterpretedInterpreter(
  * @returns {Promise<string>}
  */
 export async function runWat(source, binary = new URL('./build/wiw-opt.wasm', import.meta.url)) {
-  const engine = await createBootstrapInterpreter(binary);
-  const lines = [];
+	const engine = await createBootstrapInterpreter(binary);
+	const lines = [];
 
-  engine.setFuel64(100_000_000n);
-  engine.load(source);
+	engine.setFuel64(100_000_000n);
+	engine.load(source);
 
-  // Resource exports are retained by the engine; only callable exports can be run here.
-  for (const [name, value] of Object.entries(engine.exportNamespace())) {
-    // Memory, tables, globals and tags have no invocation result.
-    if (typeof value !== 'function') continue;
+	// Resource exports are retained by the engine; only callable exports can be run here.
+	for (const [name, value] of Object.entries(engine.exportNamespace())) {
+		// Memory, tables, globals and tags have no invocation result.
+		if (typeof value !== 'function') continue;
 
-    const signature = engine.signature(name);
+		const signature = engine.signature(name);
 
-    // This single-button interface has no argument editor, so parameterized exports stay uninvoked.
-    if (signature.params.length) {
-      lines.push(`${name}: requires ${signature.params.length} argument(s)`);
-      continue;
-    }
+		// This single-button interface has no argument editor, so parameterized exports stay uninvoked.
+		if (signature.params.length) {
+			lines.push(`${name}: requires ${signature.params.length} argument(s)`);
+			continue;
+		}
 
-    const result = engine.invoke(name);
+		const result = engine.invoke(name);
 
-    // Multivalue results keep their declared order and exact wide numeric patterns.
-    if (Array.isArray(signature.result)) {
-      const types = signature.result;
-      const values = /** @type {unknown[]} */ (result);
-      const output = values.map(
-        /**
-         * Format one result using its declared Wasm kind.
-         * @param {unknown} value
-         * @param {number} index
-         * @returns {string}
-         */
-        (value, index) =>
-          `${types[index]}: ${formatValue(value, /** @type {ValueTypeName} */ (types[index]))}`
-      );
+		// Multivalue results keep their declared order and exact wide numeric patterns.
+		if (Array.isArray(signature.result)) {
+			const types = signature.result;
+			const values = /** @type {unknown[]} */ (result);
+			const output = values.map(
+				/**
+				 * Format one result using its declared Wasm kind.
+				 * @param {unknown} value
+				 * @param {number} index
+				 * @returns {string}
+				 */
+				(value, index) =>
+					`${types[index]}: ${formatValue(value, /** @type {ValueTypeName} */ (types[index]))}`
+			);
 
-      lines.push(`${name}: ${output.join(', ')}`);
-    } else if (signature.result === null) {
-      // Void functions may have side effects even though they produce no values.
-      lines.push(`${name}: (no result)`);
-    } else {
-      lines.push(`${name}: ${signature.result}: ${formatValue(result, signature.result)}`);
-    }
-  }
+			lines.push(`${name}: ${output.join(', ')}`);
+		} else if (signature.result === null) {
+			// Void functions may have side effects even though they produce no values.
+			lines.push(`${name}: (no result)`);
+		} else {
+			lines.push(`${name}: ${signature.result}: ${formatValue(result, signature.result)}`);
+		}
+	}
 
-  return lines.length ? lines.join('\n') : 'Module loaded (no function exports).';
+	return lines.length ? lines.join('\n') : 'Module loaded (no function exports).';
+}
+
+/**
+ * Format interpreter coordinates with a source excerpt without guessing the parser's underlying cause.
+ * @param {unknown} error
+ * @param {string} source
+ * @returns {BrowserRunResult}
+ */
+export function formatBrowserError(error, source) {
+	const message = error instanceof Error ? error.message : String(error);
+	const location = error instanceof WiwError ? error.location : undefined;
+
+	// Binary/generated offsets and host errors have no trustworthy position in the input editor.
+	if (location?.format !== 'wat' || location.line === undefined || location.column === undefined) {
+		return { text: message };
+	}
+
+	const { line, column } = location;
+	const sourceLine = source.split(/\r\n|\r|\n/)[line - 1];
+
+	// Retain the original diagnostic if it points outside the submitted source.
+	if (sourceLine === undefined) return { text: message };
+
+	const prefix = [...sourceLine].slice(0, column - 1).join('');
+	const gutter = `${line} | `;
+	const caret = ' '.repeat(gutter.length) + prefix.replace(/[^\t]/gu, ' ') + '^';
+	const end = location.byteOffset === new TextEncoder().encode(source).length;
+	const hint =
+		error instanceof WiwError && error.code === 'SYNTAX' && end
+			? '\nReached the end of the input. Check for an unclosed parenthesis, string or comment.'
+			: '';
+
+	return {
+		text: `${message} (line ${line}, column ${column})\n\n${gutter}${sourceLine}\n${caret}${hint}`,
+		line,
+		column
+	};
 }
 
 /**
@@ -234,128 +288,162 @@ export async function runWat(source, binary = new URL('./build/wiw-opt.wasm', im
  * @returns {void}
  */
 function attachInterface() {
-  const sourceElement = document.getElementById('wat');
-  const outputElement = document.getElementById('output');
-  const buttonElement = document.getElementById('run');
+	const sourceElement = document.getElementById('wat');
+	const outputElement = document.getElementById('output');
+	const buttonElement = document.getElementById('run');
 
-  // The browser API can also be imported by pages that do not use this interface.
-  if (
-    !(sourceElement instanceof HTMLTextAreaElement) ||
-    !(outputElement instanceof HTMLPreElement) ||
-    !(buttonElement instanceof HTMLButtonElement)
-  )
-    return;
+	// The browser API can also be imported by pages that do not use this interface.
+	if (
+		!(sourceElement instanceof HTMLTextAreaElement) ||
+		!(outputElement instanceof HTMLPreElement) ||
+		!(buttonElement instanceof HTMLButtonElement)
+	)
+		return;
 
-  const source = sourceElement;
-  const output = outputElement;
-  const button = buttonElement;
-  const codeMirror = /** @type {EditorWindow} */ (window).CodeMirror;
-  // Keep the textarea usable if the CDN is unavailable; interpreter execution stays independent.
-  const editor = codeMirror?.fromTextArea(source, {
-    mode: 'text/webassembly',
-    theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'material-darker' : 'default',
-    lineNumbers: true,
-    matchBrackets: true,
-    lineWrapping: false,
-    indentUnit: 2,
-    tabSize: 2,
-    inputStyle: 'textarea',
-    screenReaderLabel: 'WAT input'
-  });
+	const source = sourceElement;
+	const output = outputElement;
+	const button = buttonElement;
+	const codeMirror = /** @type {EditorWindow} */ (window).CodeMirror;
+	// Keep the textarea usable if the CDN is unavailable; interpreter execution stays independent.
+	const editor = codeMirror?.fromTextArea(source, {
+		mode: 'text/webassembly',
+		theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'material-darker' : 'default',
+		lineNumbers: true,
+		matchBrackets: true,
+		lineWrapping: false,
+		indentUnit: 2,
+		tabSize: 2,
+		inputStyle: 'textarea',
+		screenReaderLabel: 'WAT input'
+	});
 
-  // Preserve the original input's help association after CodeMirror creates its editing field.
-  if (editor) {
-    const input = editor.getInputField();
+	// Preserve the original input's help association after CodeMirror creates its editing field.
+	if (editor) {
+		const input = editor.getInputField();
 
-    input.id = 'wat-editor';
-    input.setAttribute('aria-describedby', 'hint');
-    document.querySelector('label[for="wat"]')?.setAttribute('for', input.id);
-  }
+		input.id = 'wat-editor';
+		input.setAttribute('aria-describedby', 'hint');
+		document.querySelector('label[for="wat"]')?.setAttribute('for', input.id);
+	}
 
-  /**
-   * Run the current input in a fresh worker and display either results or the guest diagnostic.
-   * @returns {void}
-   */
-  function run() {
-    button.disabled = true;
-    output.textContent = 'Running…';
+	/** @type {WatEditorLine | undefined} */
+	let errorMarker;
 
-    /** @type {Worker} */
-    let worker;
+	/**
+	 * Remove a previous diagnostic marker when the source changes or another run starts.
+	 * @returns {void}
+	 */
+	function clearError() {
+		// A marker belongs to the submitted source and must not follow subsequent edits.
+		if (editor && errorMarker) editor.removeLineClass(errorMarker, 'background', 'wat-error-line');
 
-    // Restore the page if the browser rejects worker construction before any event can fire.
-    try {
-      worker = new Worker(new URL('./wiw-browser.js', import.meta.url), { type: 'module' });
-    } catch (error) {
-      output.textContent = error instanceof Error ? error.message : String(error);
-      button.disabled = false;
-      return;
-    }
+		errorMarker = undefined;
+	}
 
-    let finished = false;
-    const timeout = setTimeout(
-      /**
-       * Restore the interface if an artifact fetch or guest run never finishes.
-       * @returns {void}
-       */
-      () => finish('Run timed out after 30 seconds.'),
-      30_000
-    );
+	editor?.on('change', clearError);
 
-    /**
-     * End the worker, restore the button and publish plain text output exactly once.
-     * @param {string} text
-     * @returns {void}
-     */
-    function finish(text) {
-      // Ignore an already queued error or timeout after a successful worker result.
-      if (finished) return;
+	/**
+	 * Run the current input in a fresh worker and display either results or the guest diagnostic.
+	 * @returns {void}
+	 */
+	function run() {
+		clearError();
+		const submitted = editor ? editor.getValue() : source.value;
 
-      finished = true;
-      clearTimeout(timeout);
-      worker.terminate();
-      output.textContent = text;
-      button.disabled = false;
-    }
+		button.disabled = true;
+		output.textContent = 'Running…';
 
-    worker.onmessage =
-      /**
-       * Display the worker's completed run or reported guest error.
-       * @param {MessageEvent<string>} event
-       * @returns {void}
-       */
-      (event) => finish(event.data);
+		/** @type {Worker} */
+		let worker;
 
-    worker.onerror =
-      /**
-       * Report worker startup or module-loading errors and allow another run.
-       * @param {ErrorEvent} event
-       * @returns {void}
-       */
-      (event) => finish(event.message || 'Could not start the interpreter worker.');
+		// Restore the page if the browser rejects worker construction before any event can fire.
+		try {
+			worker = new Worker(new URL('./wiw-browser.js', import.meta.url), { type: 'module' });
+		} catch (error) {
+			output.textContent = error instanceof Error ? error.message : String(error);
+			button.disabled = false;
+			return;
+		}
 
-    worker.postMessage(editor ? editor.getValue() : source.value);
-  }
+		let finished = false;
+		const timeout = setTimeout(
+			/**
+			 * Restore the interface if an artifact fetch or guest run never finishes.
+			 * @returns {void}
+			 */
+			() => finish({ text: 'Run timed out after 30 seconds.' }),
+			30_000
+		);
 
-  button.addEventListener('click', run);
+		/**
+		 * End the worker, restore the button and publish plain text output exactly once.
+		 * @param {BrowserRunResult} result
+		 * @returns {void}
+		 */
+		function finish(result) {
+			// Ignore an already queued error or timeout after a successful worker result.
+			if (finished) return;
+
+			finished = true;
+			clearTimeout(timeout);
+			worker.terminate();
+			output.textContent = result.text;
+			button.disabled = false;
+
+			// Avoid marking a stale location if the user edited while the worker was running.
+			if (
+				editor &&
+				editor.getValue() === submitted &&
+				result.line !== undefined &&
+				result.column !== undefined
+			) {
+				const errorLine = result.line - 1;
+				const line = submitted.split(/\r\n|\r|\n/)[errorLine] ?? '';
+				const ch = [...line].slice(0, result.column - 1).join('').length;
+
+				errorMarker = editor.addLineClass(errorLine, 'background', 'wat-error-line');
+				editor.scrollIntoView({ line: errorLine, ch });
+			}
+		}
+
+		worker.onmessage =
+			/**
+			 * Display the worker's completed run or reported guest error.
+			 * @param {MessageEvent<BrowserRunResult>} event
+			 * @returns {void}
+			 */
+			(event) => finish(event.data);
+
+		worker.onerror =
+			/**
+			 * Report worker startup or module-loading errors and allow another run.
+			 * @param {ErrorEvent} event
+			 * @returns {void}
+			 */
+			(event) => finish({ text: event.message || 'Could not start the interpreter worker.' });
+
+		worker.postMessage(submitted);
+	}
+
+	button.addEventListener('click', run);
 }
 
 // The same module supplies the page frontend and its isolated worker entry point.
 if (typeof document !== 'undefined') {
-  attachInterface();
+	attachInterface();
 } else if (typeof globalThis.postMessage === 'function') {
-  globalThis.onmessage =
-    /**
-     * Interpret one WAT request without compiling guest WAT or importing Node modules.
-     * @param {MessageEvent<string>} event
-     * @returns {Promise<void>}
-     */
-    async (event) => {
-      // Keep guest errors inside the output area so the next Run starts cleanly.
-      try {
-        globalThis.postMessage(await runWat(event.data));
-      } catch (error) {
-        globalThis.postMessage(error instanceof Error ? error.message : String(error));
-      }
-    };
+	globalThis.onmessage =
+		/**
+		 * Interpret one WAT request without compiling guest WAT or importing Node modules.
+		 * @param {MessageEvent<string>} event
+		 * @returns {Promise<void>}
+		 */
+		async (event) => {
+			// Keep guest errors inside the output area so the next Run starts cleanly.
+			try {
+				globalThis.postMessage({ text: await runWat(event.data) });
+			} catch (error) {
+				globalThis.postMessage(formatBrowserError(error, event.data));
+			}
+		};
 }
