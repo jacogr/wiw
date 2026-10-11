@@ -71,9 +71,10 @@ inspect-opt: build/wiw.wasm build/flags
 	BINARYEN_PASS_DEBUG=1 $(WASM_OPT) $(FLAGS_OPT) build/wiw.wasm -o /dev/null > build/opt-passes.log 2>&1
 	@awk '/running pass:/ { sub(/^.*running pass: /, ""); sub(/\.\.\..*/, ""); print }' build/opt-passes.log
 
-# Check only the single-file adapter using local development dependencies.
+# Check both frontends, then verify the browser dependency graph without Node declarations.
 check-js:
 	$(TSC) --noEmit -p jsconfig.json
+	$(TSC) --noEmit -p jsconfig-browser.json
 
 check: check-js check-wat
 

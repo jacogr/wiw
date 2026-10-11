@@ -334,6 +334,7 @@ test('CLI defaults to compiled Wasm and bootstrap selects self-hosted WAT', asyn
     fs.mkdirSync(join(directory, 'build'));
     await writeFile(join(directory, 'package.json'), '{"type":"module"}');
     await writeFile(cli, await readFile(new URL('../wiw.js', import.meta.url)));
+    await writeFile(join(directory, 'wiw-lib.js'), await readFile(new URL('../wiw-lib.js', import.meta.url)));
     await writeFile(
       join(directory, 'build', 'wiw-opt.wasm'),
       await readFile(new URL('../build/wiw-opt.wasm', import.meta.url))

@@ -1,7 +1,7 @@
 {
 	// As per
 	// https://github.com/tsconfig/bases/blob/ebe629c2857d386a0bc2c5d60cab18b9f1a425d0/bases/strictest.json
-	"files": ["wiw.js"],
+	"files": ["wiw.js", "wiw-lib.js", "wiw-browser.js"],
 	"compilerOptions": {
 		"types": ["node"],
 		"noEmit": true,

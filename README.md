@@ -62,8 +62,10 @@ uses `wasm-opt -O4 --converge --strip-debug --strip-producers`; all tests and au
 are `RELEASE` by default and `DEBUG` with `DEBUG=1`. Switching modes rebuilds
 automatically; `make check` switches back to release without requiring `make clean`.
 
-`make check-js` checks only `wiw.js` with the strict configuration in
-`jsconfig.json`, without emitting files. Install the development dependencies:
+`make check-js` checks `wiw.js`, `wiw-lib.js` and `wiw-browser.js` with the strict
+configuration in `jsconfig.json`, without emitting files. A second check uses
+`jsconfig-browser.json` without Node declarations to keep the browser dependency
+graph portable. Install the development dependencies:
 
 ```sh
 npm ci
@@ -134,6 +136,32 @@ larger ratios use exact integer rounding. Raw scalar slots preserve signed zero 
 The binary reader validates supported sections, LEB encodings and instructions inside
 WAT, elaborates them to bounded WAT text, and uses the same parser and validator.
 No guest binary is passed to native WebAssembly compilation.
+
+## Browser interface
+
+Build the interpreter with `make all`, then serve this directory over HTTP:
+
+```sh
+python3 -m http.server 8000 --bind 127.0.0.1
+```
+
+Open [localhost:8000](http://localhost:8000/), paste WAT and click **Run**.
+The page uses the compiled interpreter; guest WAT is interpreted, never compiled.
+Module initialization runs first, followed by each zero-argument function export.
+Results and guest errors appear in the output area.
+Functions requiring arguments are listed without being called. Each run gets a
+fresh worker and interpreter; execution has a 100,000,000-instruction fuel budget
+and a 30-second timeout, keeping the page responsive.
+
+`wiw-lib.js` contains shared interpreter, resource and diagnostic code.
+`wiw.js` supplies Node file loading, async context tracking, WASI and the CLI;
+its existing exports remain available. `wiw-browser.js` supplies artifact fetching,
+worker execution and the page interface. It imports the shared library directly,
+with no Node dependencies or bundler. The browser factories also support
+self-hosting through `createInterpreter()` / `createInterpretedInterpreter()`;
+the page uses `createBootstrapInterpreter()` for faster execution. Browser
+ownership scopes support synchronous callbacks; Node's async callback reentry
+across awaits continues to use `AsyncLocalStorage`. WASI hosting stays in Node.
 
 ## Node API
 

@@ -1,0 +1,7 @@
+{
+	"extends": "./jsconfig.json",
+	"files": ["wiw-lib.js", "wiw-browser.js"],
+	"compilerOptions": {
+		"types": []
+	}
+}
