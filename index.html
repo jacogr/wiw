@@ -94,6 +94,17 @@
 			.execution-controls button {
 				margin-top: 0;
 			}
+			.argument-fields {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+				gap: 0 1rem;
+			}
+			.argument-fields input {
+				box-sizing: border-box;
+				width: 100%;
+				padding: 0.6rem;
+				font: inherit;
+			}
 			button:disabled {
 				cursor: wait;
 			}
@@ -121,8 +132,10 @@
 			<select id="functions" aria-describedby="function-hint" disabled></select>
 			<button id="execute" type="button" disabled>Execute</button>
 		</div>
+		<div id="arguments" class="argument-fields"></div>
 		<p id="function-hint">
-			Functions requiring arguments are listed but unavailable. Executions share module state.
+			i32/i64 arguments accept decimal or 0x hexadecimal integers. Other parameter types are
+			unavailable. Executions share module state.
 		</p>
 		<label id="output-label">Output</label>
 		<pre id="output" aria-labelledby="output-label" aria-live="polite">Ready.</pre>

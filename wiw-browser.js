@@ -32,10 +32,10 @@ export * from './wiw-lib.js';
  * Initialized guest retained between explicit function executions.
  * @typedef {object} BrowserSession
  * @property {BrowserFunction[]} functions
- * @property {(name: string) => string} execute
+ * @property {(name: string, args?: string[]) => string} execute
  */
 
-/** @typedef {{action: 'compile', source: string} | {action: 'execute', name: string}} BrowserRequest */
+/** @typedef {{action: 'compile', source: string} | {action: 'execute', name: string, args: string[]}} BrowserRequest */
 /** @typedef {BrowserRunResult & {ok: boolean, functions?: BrowserFunction[]}} BrowserResponse */
 
 /** @typedef {object} WatEditorLine */
@@ -208,6 +208,40 @@ export async function createInterpretedInterpreter(
 }
 
 /**
+ * Parse an exact integer literal, accepting signed values or unsigned bit patterns without rounding.
+ * @param {string} text
+ * @param {ValueTypeName} type
+ * @returns {number | bigint}
+ */
+export function parseBrowserInteger(text, type) {
+	// Other parameter kinds need their own input controls and conversion rules.
+	if (type !== 'i32' && type !== 'i64') throw new Error(`Unsupported parameter type: ${type}`);
+
+	const literal = text.trim();
+
+	// BigInt preserves all i64 digits; reject blanks, fractions and exponent notation explicitly.
+	if (!/^[+-]?(?:[0-9]+|0x[0-9a-f]+)$/i.test(literal)) {
+		throw new Error(`Enter an ${type} integer in decimal or hexadecimal (0x…).`);
+	}
+
+	const negative = literal.startsWith('-');
+	const magnitude = BigInt(literal.replace(/^[+-]/, ''));
+	const value = negative ? -magnitude : magnitude;
+	const bits = type === 'i32' ? 32 : 64;
+
+	// Accept Wasm's signed range and unsigned literal range, then interpret the same bits as signed.
+	if (value < -(1n << BigInt(bits - 1)) || value >= 1n << BigInt(bits)) {
+		throw new Error(
+			`${type} integer is out of range (${-(1n << BigInt(bits - 1))} to ${(1n << BigInt(bits)) - 1n}).`
+		);
+	}
+
+	const signed = BigInt.asIntN(bits, value);
+
+	return type === 'i32' ? Number(signed) : signed;
+}
+
+/**
  * Validate and initialize WAT, discovering exports without invoking them.
  * @param {string} source
  * @param {BrowserBootstrapSource} [binary]
@@ -231,11 +265,12 @@ export async function compileWat(source, binary = new URL('./build/wiw-opt.wasm'
 		functions,
 
 		/**
-		 * Execute one zero-argument export on the initialized guest, renewing its fuel budget.
+		 * Execute one integer-parameter export on the initialized guest, renewing its fuel budget.
 		 * @param {string} name
+		 * @param {string[]} [args]
 		 * @returns {string}
 		 */
-		execute(name) {
+		execute(name, args = []) {
 			const signature = functions.find(
 				/**
 				 * Match the requested export by its exact name.
@@ -247,11 +282,31 @@ export async function compileWat(source, binary = new URL('./build/wiw-opt.wasm'
 
 			// Reject unsupported requests before they can mutate the initialized guest.
 			if (!signature) throw new Error(`Unknown function export: ${name}`);
-			if (signature.params.length)
-				throw new Error(`${name}: requires ${signature.params.length} argument(s)`);
+			if (signature.params.length !== args.length)
+				throw new Error(
+					`${name}: requires ${signature.params.length} argument(s), received ${args.length}`
+				);
+
+			const values = signature.params.map(
+				/**
+				 * Convert each input using its declared integer width before starting guest execution.
+				 * @param {ValueTypeName} type
+				 * @param {number} index
+				 * @returns {number | bigint}
+				 */
+				(type, index) => {
+					try {
+						return parseBrowserInteger(args[index] ?? '', type);
+					} catch (error) {
+						throw new Error(
+							`Argument ${index + 1}: ${error instanceof Error ? error.message : String(error)}`
+						);
+					}
+				}
+			);
 
 			engine.setFuel64(100_000_000n);
-			const result = engine.invoke(name);
+			const result = engine.invoke(name, ...values);
 
 			// Multivalue results keep their declared order and exact wide numeric patterns.
 			if (Array.isArray(signature.result)) {
@@ -349,6 +404,7 @@ function attachInterface() {
 	const compileElement = document.getElementById('compile');
 	const executeElement = document.getElementById('execute');
 	const functionsElement = document.getElementById('functions');
+	const argumentsElement = document.getElementById('arguments');
 
 	// Importing this frontend on another page does not require the playground's controls.
 	if (
@@ -356,7 +412,8 @@ function attachInterface() {
 		!(outputElement instanceof HTMLPreElement) ||
 		!(compileElement instanceof HTMLButtonElement) ||
 		!(executeElement instanceof HTMLButtonElement) ||
-		!(functionsElement instanceof HTMLSelectElement)
+		!(functionsElement instanceof HTMLSelectElement) ||
+		!(argumentsElement instanceof HTMLDivElement)
 	)
 		return;
 
@@ -365,6 +422,7 @@ function attachInterface() {
 	const compile = compileElement;
 	const execute = executeElement;
 	const functions = functionsElement;
+	const argumentFields = argumentsElement;
 	const codeMirror = /** @type {EditorWindow} */ (window).CodeMirror;
 	const editor = codeMirror?.fromTextArea(source, {
 		mode: 'text/webassembly',
@@ -396,6 +454,10 @@ function attachInterface() {
 	let busy = false;
 	let compiled = false;
 	let submitted = '';
+	/** @type {BrowserFunction[]} */
+	let exports = [];
+	/** @type {HTMLInputElement[]} */
+	let inputs = [];
 
 	/**
 	 * Read the visible editor, including the plain-text fallback.
@@ -406,7 +468,7 @@ function attachInterface() {
 	}
 
 	/**
-	 * Enable execution only for a compiled, selected zero-argument function.
+	 * Enable execution only for a compiled export with supported parameter types.
 	 * @returns {void}
 	 */
 	function updateControls() {
@@ -415,6 +477,66 @@ function attachInterface() {
 		const selected = functions.selectedOptions[0];
 
 		execute.disabled = busy || !compiled || !selected || selected.disabled;
+
+		for (const input of inputs) input.disabled = busy;
+	}
+
+	/**
+	 * Build labeled integer fields for the selected function without changing guest state.
+	 * @returns {void}
+	 */
+	function selectFunction() {
+		argumentFields.replaceChildren();
+		inputs = [];
+		const entry = exports.find(
+			/**
+			 * Resolve the selected export's declared parameter types.
+			 * @param {BrowserFunction} entry
+			 * @returns {boolean}
+			 */
+			(entry) => entry.name === functions.value
+		);
+
+		// Unsupported exports stay listed but cannot create executable argument controls.
+		if (
+			entry &&
+			entry.params.every(
+				/**
+				 * Limit this interface to integer inputs until other value kinds have editors.
+				 * @param {ValueTypeName} type
+				 * @returns {boolean}
+				 */
+				(type) => type === 'i32' || type === 'i64'
+			)
+		) {
+			for (const [index, type] of entry.params.entries()) {
+				const field = document.createElement('div');
+				const label = document.createElement('label');
+				const input = document.createElement('input');
+
+				input.id = `argument-${index}`;
+				input.type = 'text';
+				input.required = true;
+				input.spellcheck = false;
+				input.placeholder = 'Decimal or 0x hexadecimal';
+				input.setAttribute('aria-describedby', 'function-hint');
+				label.htmlFor = input.id;
+				label.textContent = `Argument ${index + 1} (${type})`;
+				input.addEventListener(
+					'input',
+					/**
+					 * Remove the previous validation message while the user corrects this input.
+					 * @returns {void}
+					 */
+					() => input.setCustomValidity('')
+				);
+				field.append(label, input);
+				argumentFields.append(field);
+				inputs.push(input);
+			}
+		}
+
+		updateControls();
 	}
 
 	/**
@@ -440,6 +562,9 @@ function attachInterface() {
 		busy = false;
 		compiled = false;
 		functions.replaceChildren();
+		argumentFields.replaceChildren();
+		exports = [];
+		inputs = [];
 		updateControls();
 	}
 
@@ -454,7 +579,7 @@ function attachInterface() {
 
 	editor?.on('change', edited);
 	source.addEventListener('input', edited);
-	functions.addEventListener('change', updateControls);
+	functions.addEventListener('change', selectFunction);
 
 	/**
 	 * Display a completed request and retain accurate source diagnostics.
@@ -469,6 +594,7 @@ function attachInterface() {
 		// A successful compile supplies metadata without invoking any exported function.
 		if (result.functions) {
 			compiled = true;
+			exports = result.functions;
 			functions.replaceChildren();
 
 			for (const entry of result.functions) {
@@ -479,8 +605,15 @@ function attachInterface() {
 					entry.name
 				);
 
-				// Argument entry is not supported yet; still display these exports and their signatures.
-				option.disabled = entry.params.length > 0;
+				// Non-integer parameter kinds remain visible while unsupported inputs stay disabled.
+				option.disabled = entry.params.some(
+					/**
+					 * Reject parameter kinds without an input parser in this interface.
+					 * @param {ValueTypeName} type
+					 * @returns {boolean}
+					 */
+					(type) => type !== 'i32' && type !== 'i64'
+				);
 				functions.add(option);
 			}
 
@@ -493,6 +626,7 @@ function attachInterface() {
 				(option) => !option.disabled
 			);
 			functions.value = first?.value ?? '';
+			selectFunction();
 		} else if (!result.ok && !compiled) {
 			// Failed validation or initialization cannot leave a usable guest behind.
 			reset();
@@ -597,7 +731,44 @@ function attachInterface() {
 		// Disabled controls also have a guard against programmatic or stale click dispatch.
 		if (execute.disabled) return;
 
-		send({ action: 'execute', name: functions.value });
+		const entry = exports.find(
+			/**
+			 * Resolve the selected function before validating its argument controls.
+			 * @param {BrowserFunction} entry
+			 * @returns {boolean}
+			 */
+			(entry) => entry.name === functions.value
+		);
+
+		if (!entry) return;
+
+		// Validate all inputs before sending anything that can change the guest instance.
+		for (const [index, input] of inputs.entries()) {
+			try {
+				parseBrowserInteger(input.value, entry.params[index] ?? 'i32');
+				input.setCustomValidity('');
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+
+				input.setCustomValidity(message);
+				input.reportValidity();
+				output.textContent = `Argument ${index + 1}: ${message}`;
+				return;
+			}
+		}
+
+		send({
+			action: 'execute',
+			name: functions.value,
+			args: inputs.map(
+				/**
+				 * Transfer original text so the worker independently checks exact integer values.
+				 * @param {HTMLInputElement} input
+				 * @returns {string}
+				 */
+				(input) => input.value
+			)
+		});
 	}
 
 	compile.addEventListener('click', compileSource);
@@ -632,13 +803,13 @@ if (typeof document !== 'undefined') {
 						ok: true,
 						functions: session.functions,
 						text: session.functions.length
-							? 'Module initialized. Select a function and press Execute. Functions requiring arguments are unavailable.'
+							? 'Module initialized. Select a function and press Execute. Integer parameters can be entered below.'
 							: 'Module initialized (no function exports).'
 					});
 				} else {
 					if (!session) throw new Error('Compile a module before executing.');
 
-					globalThis.postMessage({ ok: true, text: session.execute(request.name) });
+					globalThis.postMessage({ ok: true, text: session.execute(request.name, request.args) });
 				}
 			} catch (error) {
 				globalThis.postMessage({ ok: false, ...formatBrowserError(error, source) });

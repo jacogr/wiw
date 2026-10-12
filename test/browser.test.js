@@ -7,6 +7,7 @@ import {
 	createMemory,
 	compileWat,
 	formatBrowserError,
+	parseBrowserInteger,
 	runWat,
 	WiwError
 } from '../wiw-browser.js';
@@ -195,4 +196,53 @@ test('browser compilation discovers signatures and executes only selected export
 	await assert.rejects(compileWat('(module (func $start unreachable) (start $start))', binary), {
 		code: 'UNREACHABLE'
 	});
+});
+
+// Integer input must preserve all i64 bits and reject invalid values before mutating the guest.
+test('browser integer arguments preserve widths, validate literals and invoke mixed signatures', async () => {
+	const session = await compileWat(
+		`(module
+    (global $calls (mut i32) (i32.const 0))
+    (func (export "mixed") (param i32 i64) (result i32 i64)
+      global.get $calls i32.const 1 i32.add global.set $calls
+      local.get 0 local.get 1)
+    (func (export "calls") (result i32) global.get $calls)
+    (func (export "float") (param f32)))`,
+		binary
+	);
+
+	assert.equal(
+		session.execute('mixed', ['-2147483648', '9223372036854775807']),
+		'mixed: i32: -2147483648, i64: 9223372036854775807'
+	);
+	assert.equal(session.execute('mixed', ['0xffffffff', '0xffffffffffffffff']), 'mixed: i32: -1, i64: -1');
+	assert.equal(
+		session.execute('mixed', ['+0x2a', '-0x8000000000000000']),
+		'mixed: i32: 42, i64: -9223372036854775808'
+	);
+	assert.equal(session.execute('mixed', ['0', '9007199254740993']), 'mixed: i32: 0, i64: 9007199254740993');
+
+	for (const args of [
+		[],
+		['1'],
+		['1', '2', '3'],
+		['', '1'],
+		['1.5', '1'],
+		['1', '1e3'],
+		['4294967296', '1'],
+		['-2147483649', '1'],
+		['1', '18446744073709551616'],
+		['1', '-9223372036854775809']
+	]) {
+		assert.throws(() => session.execute('mixed', args));
+	}
+
+	assert.throws(() => session.execute('float', ['1']), /Unsupported parameter type: f32/);
+	assert.equal(session.execute('calls'), 'calls: i32: 4');
+	assert.equal(parseBrowserInteger('  +42  ', 'i32'), 42);
+	assert.equal(parseBrowserInteger('18446744073709551615', 'i64'), -1n);
+
+	for (const literal of ['', ' ', '0x', '1_000', 'NaN', 'Infinity', '--1', '2.0', '1e2']) {
+		assert.throws(() => parseBrowserInteger(literal, 'i64'));
+	}
 });
