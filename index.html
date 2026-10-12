@@ -79,6 +79,21 @@
 				font: inherit;
 				cursor: pointer;
 			}
+			.execution-controls {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 0.75rem;
+				align-items: center;
+			}
+			.execution-controls select {
+				flex: 1;
+				min-width: 0;
+				padding: 0.6rem;
+				font: inherit;
+			}
+			.execution-controls button {
+				margin-top: 0;
+			}
 			button:disabled {
 				cursor: wait;
 			}
@@ -92,18 +107,23 @@
 	</head>
 	<body>
 		<h1>wiw</h1>
-		<p>
-			Paste WAT and run it. Module initialization runs first, then each function export with no
-			arguments.
-		</p>
+		<p>Paste WAT, compile to initialize the module, then select a function to execute.</p>
 		<label for="wat">WAT input</label>
 		<textarea id="wat" spellcheck="false" wrap="off" aria-describedby="hint">
 (module
   (func (export "answer") (result i32)
     i32.const 42))</textarea
 		>
-		<p id="hint">Functions requiring arguments are listed without being called.</p>
-		<button id="run" type="button">Run</button>
+		<p id="hint">Compile validates and initializes your WAT. Editing it requires recompilation.</p>
+		<button id="compile" type="button">Compile</button>
+		<label for="functions">Exported function</label>
+		<div class="execution-controls">
+			<select id="functions" aria-describedby="function-hint" disabled></select>
+			<button id="execute" type="button" disabled>Execute</button>
+		</div>
+		<p id="function-hint">
+			Functions requiring arguments are listed but unavailable. Executions share module state.
+		</p>
 		<label id="output-label">Output</label>
 		<pre id="output" aria-labelledby="output-label" aria-live="polite">Ready.</pre>
 		<script

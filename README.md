@@ -145,17 +145,22 @@ Build the interpreter with `make all`, then serve this directory over HTTP:
 python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
-Open [localhost:8000](http://localhost:8000/), paste WAT and click **Run**.
+Open [localhost:8000](http://localhost:8000/), paste WAT and click **Compile**.
 The editor loads pinned classic CodeMirror 6.65.7 and its WAST mode directly
 from cdnjs, with syntax highlighting, line numbers, indentation and bracket
 matching. CDN assets have integrity hashes; no bundler or editor build step is
 required. A plain textarea remains usable when the CDN is unavailable.
 The page uses the compiled interpreter; guest WAT is interpreted, never compiled.
-Module initialization runs first, followed by each zero-argument function export.
-Results and guest errors appear in the output area.
-Functions requiring arguments are listed without being called. Each run gets a
-fresh worker and interpreter; execution has a 100,000,000-instruction fuel budget
-and a 30-second timeout, keeping the page responsive.
+Compile validates and initializes the module, then lists exported functions with
+parameter and result types. Select a zero-argument function and click **Execute**.
+Functions requiring arguments are listed but unavailable until argument entry is
+supported. Results and source diagnostics appear in the output area.
+Executions reuse the initialized instance, preserving globals and memory;
+initialization runs only when compiling. Editing WAT discards the instance and
+requires recompilation. Each compile creates a fresh worker and interpreter.
+Initialization and each execution have a fresh 100,000,000-instruction fuel budget
+and a 30-second timeout. Timeouts discard the instance and require recompilation.
+The Compile button prepares interpreted WAT; it does not compile guest WAT to Wasm.
 
 `wiw-lib.js` contains shared interpreter, resource and diagnostic code.
 `wiw.js` supplies Node file loading, async context tracking, WASI and the CLI;

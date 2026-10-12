@@ -12,6 +12,7 @@ export * from './wiw-lib.js';
 /** @typedef {import('./wiw-lib.js').RuntimeServices} RuntimeServices */
 /** @typedef {import('./wiw-lib.js').CallbackScope} CallbackScope */
 /** @typedef {import('./wiw-lib.js').ValueTypeName} ValueTypeName */
+/** @typedef {import("./wiw-lib.js").PublicSignature} PublicSignature */
 /** @typedef {string | URL | WebAssembly.Module} BrowserBootstrapSource */
 
 /**
@@ -21,6 +22,21 @@ export * from './wiw-lib.js';
  * @property {number} [line]
  * @property {number} [column]
  */
+
+/**
+ * Exported function name and its declared parameter/result types.
+ * @typedef {PublicSignature & {name: string}} BrowserFunction
+ */
+
+/**
+ * Initialized guest retained between explicit function executions.
+ * @typedef {object} BrowserSession
+ * @property {BrowserFunction[]} functions
+ * @property {(name: string) => string} execute
+ */
+
+/** @typedef {{action: 'compile', source: string} | {action: 'execute', name: string}} BrowserRequest */
+/** @typedef {BrowserRunResult & {ok: boolean, functions?: BrowserFunction[]}} BrowserResponse */
 
 /** @typedef {object} WatEditorLine */
 
@@ -192,56 +208,96 @@ export async function createInterpretedInterpreter(
 }
 
 /**
- * Run a fresh WAT module and show the results of its zero-argument function exports in order.
+ * Validate and initialize WAT, discovering exports without invoking them.
+ * @param {string} source
+ * @param {BrowserBootstrapSource} [binary]
+ * @returns {Promise<BrowserSession>}
+ */
+export async function compileWat(source, binary = new URL('./build/wiw-opt.wasm', import.meta.url)) {
+	const engine = await createBootstrapInterpreter(binary);
+	/** @type {BrowserFunction[]} */
+	const functions = [];
+
+	engine.setFuel64(100_000_000n);
+	engine.load(source);
+
+	// Discover callable exports without changing guest state through an invocation.
+	for (const [name, value] of Object.entries(engine.exportNamespace())) {
+		// Resources are available to the module but do not belong in the function selector.
+		if (typeof value === 'function') functions.push({ name, ...engine.signature(name) });
+	}
+
+	return {
+		functions,
+
+		/**
+		 * Execute one zero-argument export on the initialized guest, renewing its fuel budget.
+		 * @param {string} name
+		 * @returns {string}
+		 */
+		execute(name) {
+			const signature = functions.find(
+				/**
+				 * Match the requested export by its exact name.
+				 * @param {BrowserFunction} entry
+				 * @returns {boolean}
+				 */
+				(entry) => entry.name === name
+			);
+
+			// Reject unsupported requests before they can mutate the initialized guest.
+			if (!signature) throw new Error(`Unknown function export: ${name}`);
+			if (signature.params.length)
+				throw new Error(`${name}: requires ${signature.params.length} argument(s)`);
+
+			engine.setFuel64(100_000_000n);
+			const result = engine.invoke(name);
+
+			// Multivalue results keep their declared order and exact wide numeric patterns.
+			if (Array.isArray(signature.result)) {
+				const types = signature.result;
+				const values = /** @type {unknown[]} */ (result);
+				const output = values.map(
+					/**
+					 * Format one result using its declared Wasm kind.
+					 * @param {unknown} value
+					 * @param {number} index
+					 * @returns {string}
+					 */
+					(value, index) =>
+						`${types[index]}: ${formatValue(value, /** @type {ValueTypeName} */ (types[index]))}`
+				);
+
+				return `${name}: ${output.join(', ')}`;
+			}
+
+			// Void functions may have side effects even though they produce no values.
+			if (signature.result === null) return `${name}: (no result)`;
+
+			return `${name}: ${signature.result}: ${formatValue(result, signature.result)}`;
+		}
+	};
+}
+
+/**
+ * Run all zero-argument exports for existing browser API callers.
  * @param {string} source
  * @param {BrowserBootstrapSource} [binary]
  * @returns {Promise<string>}
  */
 export async function runWat(source, binary = new URL('./build/wiw-opt.wasm', import.meta.url)) {
-	const engine = await createBootstrapInterpreter(binary);
-	const lines = [];
-
-	engine.setFuel64(100_000_000n);
-	engine.load(source);
-
-	// Resource exports are retained by the engine; only callable exports can be run here.
-	for (const [name, value] of Object.entries(engine.exportNamespace())) {
-		// Memory, tables, globals and tags have no invocation result.
-		if (typeof value !== 'function') continue;
-
-		const signature = engine.signature(name);
-
-		// This single-button interface has no argument editor, so parameterized exports stay uninvoked.
-		if (signature.params.length) {
-			lines.push(`${name}: requires ${signature.params.length} argument(s)`);
-			continue;
-		}
-
-		const result = engine.invoke(name);
-
-		// Multivalue results keep their declared order and exact wide numeric patterns.
-		if (Array.isArray(signature.result)) {
-			const types = signature.result;
-			const values = /** @type {unknown[]} */ (result);
-			const output = values.map(
-				/**
-				 * Format one result using its declared Wasm kind.
-				 * @param {unknown} value
-				 * @param {number} index
-				 * @returns {string}
-				 */
-				(value, index) =>
-					`${types[index]}: ${formatValue(value, /** @type {ValueTypeName} */ (types[index]))}`
-			);
-
-			lines.push(`${name}: ${output.join(', ')}`);
-		} else if (signature.result === null) {
-			// Void functions may have side effects even though they produce no values.
-			lines.push(`${name}: (no result)`);
-		} else {
-			lines.push(`${name}: ${signature.result}: ${formatValue(result, signature.result)}`);
-		}
-	}
+	const session = await compileWat(source, binary);
+	const lines = session.functions.map(
+		/**
+		 * Retain the original runner's treatment of parameterized exports.
+		 * @param {BrowserFunction} entry
+		 * @returns {string}
+		 */
+		(entry) =>
+			entry.params.length
+				? `${entry.name}: requires ${entry.params.length} argument(s)`
+				: session.execute(entry.name)
+	);
 
 	return lines.length ? lines.join('\n') : 'Module loaded (no function exports).';
 }
@@ -284,27 +340,32 @@ export function formatBrowserError(error, source) {
 }
 
 /**
- * Attach the single-button interface and keep all interpreter execution inside a disposable worker.
+ * Attach compilation and explicit execution controls to a persistent, isolated guest worker.
  * @returns {void}
  */
 function attachInterface() {
 	const sourceElement = document.getElementById('wat');
 	const outputElement = document.getElementById('output');
-	const buttonElement = document.getElementById('run');
+	const compileElement = document.getElementById('compile');
+	const executeElement = document.getElementById('execute');
+	const functionsElement = document.getElementById('functions');
 
-	// The browser API can also be imported by pages that do not use this interface.
+	// Importing this frontend on another page does not require the playground's controls.
 	if (
 		!(sourceElement instanceof HTMLTextAreaElement) ||
 		!(outputElement instanceof HTMLPreElement) ||
-		!(buttonElement instanceof HTMLButtonElement)
+		!(compileElement instanceof HTMLButtonElement) ||
+		!(executeElement instanceof HTMLButtonElement) ||
+		!(functionsElement instanceof HTMLSelectElement)
 	)
 		return;
 
 	const source = sourceElement;
 	const output = outputElement;
-	const button = buttonElement;
+	const compile = compileElement;
+	const execute = executeElement;
+	const functions = functionsElement;
 	const codeMirror = /** @type {EditorWindow} */ (window).CodeMirror;
-	// Keep the textarea usable if the CDN is unavailable; interpreter execution stays independent.
 	const editor = codeMirror?.fromTextArea(source, {
 		mode: 'text/webassembly',
 		theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'material-darker' : 'default',
@@ -317,7 +378,7 @@ function attachInterface() {
 		screenReaderLabel: 'WAT input'
 	});
 
-	// Preserve the original input's help association after CodeMirror creates its editing field.
+	// Preserve the label and help association after the editor replaces the textarea.
 	if (editor) {
 		const input = editor.getInputField();
 
@@ -326,124 +387,261 @@ function attachInterface() {
 		document.querySelector('label[for="wat"]')?.setAttribute('for', input.id);
 	}
 
+	/** @type {Worker | undefined} */
+	let worker;
+	/** @type {ReturnType<typeof setTimeout> | undefined} */
+	let timeout;
 	/** @type {WatEditorLine | undefined} */
 	let errorMarker;
+	let busy = false;
+	let compiled = false;
+	let submitted = '';
 
 	/**
-	 * Remove a previous diagnostic marker when the source changes or another run starts.
+	 * Read the visible editor, including the plain-text fallback.
+	 * @returns {string}
+	 */
+	function sourceText() {
+		return editor ? editor.getValue() : source.value;
+	}
+
+	/**
+	 * Enable execution only for a compiled, selected zero-argument function.
+	 * @returns {void}
+	 */
+	function updateControls() {
+		compile.disabled = busy;
+		functions.disabled = busy || !compiled || !functions.options.length;
+		const selected = functions.selectedOptions[0];
+
+		execute.disabled = busy || !compiled || !selected || selected.disabled;
+	}
+
+	/**
+	 * Clear the diagnostic highlight before editing or a new request.
 	 * @returns {void}
 	 */
 	function clearError() {
-		// A marker belongs to the submitted source and must not follow subsequent edits.
+		// Line handles keep the marker removable even when edits shift its line number.
 		if (editor && errorMarker) editor.removeLineClass(errorMarker, 'background', 'wat-error-line');
 
 		errorMarker = undefined;
 	}
 
-	editor?.on('change', clearError);
-
 	/**
-	 * Run the current input in a fresh worker and display either results or the guest diagnostic.
+	 * Discard guest state and outstanding responses when source or compilation changes.
 	 * @returns {void}
 	 */
-	function run() {
+	function reset() {
 		clearError();
-		const submitted = editor ? editor.getValue() : source.value;
+		clearTimeout(timeout);
+		worker?.terminate();
+		worker = undefined;
+		busy = false;
+		compiled = false;
+		functions.replaceChildren();
+		updateControls();
+	}
 
-		button.disabled = true;
-		output.textContent = 'Running…';
+	/**
+	 * Require fresh validation and initialization after any source edit.
+	 * @returns {void}
+	 */
+	function edited() {
+		reset();
+		output.textContent = 'Source changed. Compile before executing.';
+	}
 
-		/** @type {Worker} */
-		let worker;
+	editor?.on('change', edited);
+	source.addEventListener('input', edited);
+	functions.addEventListener('change', updateControls);
 
-		// Restore the page if the browser rejects worker construction before any event can fire.
-		try {
-			worker = new Worker(new URL('./wiw-browser.js', import.meta.url), { type: 'module' });
-		} catch (error) {
-			output.textContent = error instanceof Error ? error.message : String(error);
-			button.disabled = false;
-			return;
+	/**
+	 * Display a completed request and retain accurate source diagnostics.
+	 * @param {BrowserResponse} result
+	 * @returns {void}
+	 */
+	function finish(result) {
+		clearTimeout(timeout);
+		busy = false;
+		output.textContent = result.text;
+
+		// A successful compile supplies metadata without invoking any exported function.
+		if (result.functions) {
+			compiled = true;
+			functions.replaceChildren();
+
+			for (const entry of result.functions) {
+				const results =
+					entry.result === null ? [] : Array.isArray(entry.result) ? entry.result : [entry.result];
+				const option = new Option(
+					`${entry.name} (${entry.params.join(', ')}) → ${results.join(', ') || 'void'}`,
+					entry.name
+				);
+
+				// Argument entry is not supported yet; still display these exports and their signatures.
+				option.disabled = entry.params.length > 0;
+				functions.add(option);
+			}
+
+			const first = Array.from(functions.options).find(
+				/**
+				 * Choose the first export the current interface can execute.
+				 * @param {HTMLOptionElement} option
+				 * @returns {boolean}
+				 */
+				(option) => !option.disabled
+			);
+			functions.value = first?.value ?? '';
+		} else if (!result.ok && !compiled) {
+			// Failed validation or initialization cannot leave a usable guest behind.
+			reset();
 		}
 
-		let finished = false;
-		const timeout = setTimeout(
+		updateControls();
+
+		// Coordinates belong only to the exact source that produced this diagnostic.
+		if (
+			editor &&
+			sourceText() === submitted &&
+			result.line !== undefined &&
+			result.column !== undefined
+		) {
+			const line = result.line - 1;
+			const text = submitted.split(/\r\n|\r|\n/)[line] ?? '';
+			const ch = [...text].slice(0, result.column - 1).join('').length;
+
+			errorMarker = editor.addLineClass(line, 'background', 'wat-error-line');
+			editor.scrollIntoView({ line, ch });
+		}
+	}
+
+	/**
+	 * Send one request with a fresh deadline while preserving initialized guest state.
+	 * @param {BrowserRequest} request
+	 * @returns {void}
+	 */
+	function send(request) {
+		clearError();
+		busy = true;
+		updateControls();
+		output.textContent = request.action === 'compile' ? 'Compiling…' : 'Executing…';
+		timeout = setTimeout(
 			/**
-			 * Restore the interface if an artifact fetch or guest run never finishes.
+			 * Terminate a stalled request and require recompilation of discarded guest state.
 			 * @returns {void}
 			 */
-			() => finish({ text: 'Run timed out after 30 seconds.' }),
+			() => {
+				reset();
+				output.textContent =
+					'Request timed out after 30 seconds. Compile again to create a fresh instance.';
+			},
 			30_000
 		);
 
-		/**
-		 * End the worker, restore the button and publish plain text output exactly once.
-		 * @param {BrowserRunResult} result
-		 * @returns {void}
-		 */
-		function finish(result) {
-			// Ignore an already queued error or timeout after a successful worker result.
-			if (finished) return;
-
-			finished = true;
-			clearTimeout(timeout);
-			worker.terminate();
-			output.textContent = result.text;
-			button.disabled = false;
-
-			// Avoid marking a stale location if the user edited while the worker was running.
-			if (
-				editor &&
-				editor.getValue() === submitted &&
-				result.line !== undefined &&
-				result.column !== undefined
-			) {
-				const errorLine = result.line - 1;
-				const line = submitted.split(/\r\n|\r|\n/)[errorLine] ?? '';
-				const ch = [...line].slice(0, result.column - 1).join('').length;
-
-				errorMarker = editor.addLineClass(errorLine, 'background', 'wat-error-line');
-				editor.scrollIntoView({ line: errorLine, ch });
-			}
+		// Worker construction or dispatch failures restore the controls for another attempt.
+		try {
+			if (!worker) throw new Error('Compile a module before executing.');
+			worker.postMessage(request);
+		} catch (error) {
+			reset();
+			output.textContent = error instanceof Error ? error.message : String(error);
 		}
-
-		worker.onmessage =
-			/**
-			 * Display the worker's completed run or reported guest error.
-			 * @param {MessageEvent<BrowserRunResult>} event
-			 * @returns {void}
-			 */
-			(event) => finish(event.data);
-
-		worker.onerror =
-			/**
-			 * Report worker startup or module-loading errors and allow another run.
-			 * @param {ErrorEvent} event
-			 * @returns {void}
-			 */
-			(event) => finish({ text: event.message || 'Could not start the interpreter worker.' });
-
-		worker.postMessage(submitted);
 	}
 
-	button.addEventListener('click', run);
+	/**
+	 * Initialize a fresh module in a worker and request its exported function metadata.
+	 * @returns {void}
+	 */
+	function compileSource() {
+		reset();
+		submitted = sourceText();
+
+		// Startup failures must leave compilation available and execution disabled.
+		try {
+			const current = new Worker(new URL('./wiw-browser.js', import.meta.url), { type: 'module' });
+			worker = current;
+			current.onmessage =
+				/**
+				 * Ignore results from an instance discarded by edits or a subsequent compilation.
+				 * @param {MessageEvent<BrowserResponse>} event
+				 * @returns {void}
+				 */
+				(event) => {
+					if (worker === current) finish(event.data);
+				};
+			current.onerror =
+				/**
+				 * Discard a broken worker and display its startup or transport error.
+				 * @param {ErrorEvent} event
+				 * @returns {void}
+				 */
+				(event) => {
+					if (worker !== current) return;
+
+					reset();
+					output.textContent = event.message || 'Could not start the interpreter worker.';
+				};
+			send({ action: 'compile', source: submitted });
+		} catch (error) {
+			reset();
+			output.textContent = error instanceof Error ? error.message : String(error);
+		}
+	}
+
+	/**
+	 * Invoke only the selected export of the current initialized instance.
+	 * @returns {void}
+	 */
+	function executeSelected() {
+		// Disabled controls also have a guard against programmatic or stale click dispatch.
+		if (execute.disabled) return;
+
+		send({ action: 'execute', name: functions.value });
+	}
+
+	compile.addEventListener('click', compileSource);
+	execute.addEventListener('click', executeSelected);
+	updateControls();
 }
 
 // The same module supplies the page frontend and its isolated worker entry point.
 if (typeof document !== 'undefined') {
 	attachInterface();
 } else if (typeof globalThis.postMessage === 'function') {
+	/** @type {BrowserSession | undefined} */
+	let session;
+	let source = '';
+
 	globalThis.onmessage =
 		/**
-		 * Interpret one WAT request without compiling guest WAT or importing Node modules.
-		 * @param {MessageEvent<string>} event
+		 * Initialize once, then execute explicit requests against that same guest instance.
+		 * @param {MessageEvent<BrowserRequest>} event
 		 * @returns {Promise<void>}
 		 */
 		async (event) => {
-			// Keep guest errors inside the output area so the next Run starts cleanly.
+			const request = event.data;
+
+			// Guest failures retain source diagnostics; a failed compilation discards the previous session.
 			try {
-				globalThis.postMessage({ text: await runWat(event.data) });
+				if (request.action === 'compile') {
+					session = undefined;
+					source = request.source;
+					session = await compileWat(source);
+					globalThis.postMessage({
+						ok: true,
+						functions: session.functions,
+						text: session.functions.length
+							? 'Module initialized. Select a function and press Execute. Functions requiring arguments are unavailable.'
+							: 'Module initialized (no function exports).'
+					});
+				} else {
+					if (!session) throw new Error('Compile a module before executing.');
+
+					globalThis.postMessage({ ok: true, text: session.execute(request.name) });
+				}
 			} catch (error) {
-				globalThis.postMessage(formatBrowserError(error, event.data));
+				globalThis.postMessage({ ok: false, ...formatBrowserError(error, source) });
 			}
 		};
 }
