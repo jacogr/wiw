@@ -38,6 +38,19 @@
 				font-weight: 600;
 			}
 			#wat,
+			#globals,
+			#memory-dump {
+				padding: 1rem;
+				border: 1px solid #8888;
+				border-radius: 0.4rem;
+				overflow: auto;
+				font: 0.85rem/1.5 ui-monospace, monospace;
+			}
+			#memories {
+				padding: 0.6rem;
+				font: inherit;
+				max-width: 100%;
+			}
 			#output {
 				box-sizing: border-box;
 				width: 100%;
@@ -108,6 +121,19 @@
 			button:disabled {
 				cursor: wait;
 			}
+			#globals,
+			#memory-dump {
+				padding: 1rem;
+				border: 1px solid #8888;
+				border-radius: 0.4rem;
+				overflow: auto;
+				font: 0.85rem/1.5 ui-monospace, monospace;
+			}
+			#memories {
+				padding: 0.6rem;
+				font: inherit;
+				max-width: 100%;
+			}
 			#output {
 				min-height: 6rem;
 				white-space: pre-wrap;
@@ -139,6 +165,24 @@
 		</p>
 		<label id="output-label">Output</label>
 		<pre id="output" aria-labelledby="output-label" aria-live="polite">Ready.</pre>
+		<h2>Module state</h2>
+		<label id="globals-label">Exported globals</label>
+		<pre id="globals" aria-labelledby="globals-label">Compile to inspect globals.</pre>
+		<label for="memories">Exported memory</label>
+		<select id="memories" disabled></select>
+		<div class="argument-fields">
+			<div>
+				<label for="memory-offset">Offset (decimal or hex)</label
+				><input id="memory-offset" type="text" value="0" disabled />
+			</div>
+			<div>
+				<label for="memory-count">Bytes (1–256)</label
+				><input id="memory-count" type="number" min="1" max="256" value="128" disabled />
+			</div>
+		</div>
+		<button id="inspect" type="button" disabled>Refresh memory</button>
+		<p id="memory-info"></p>
+		<pre id="memory-dump" aria-label="Memory bytes">Compile to inspect memory.</pre>
 		<script
 			src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.js"
 			integrity="sha512-8RnEqURPUc5aqFEN04aQEiPlSAdE0jlFS/9iGgUyNtwFnSKCXhmB6ZTNl7LnDtDWKabJIASzXrzD0K+LYexU9g=="

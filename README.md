@@ -169,6 +169,14 @@ Initialization and each execution have a fresh 100,000,000-instruction fuel budg
 and a 30-second timeout. Timeouts discard the instance and require recompilation.
 The Compile button prepares interpreted WAT; it does not compile guest WAT to Wasm.
 
+The read-only module-state panel shows exported globals with their declared types
+and current values. Select an exported memory to view up to 256 bytes in hex and
+ASCII, starting at a decimal or hexadecimal offset. State refreshes after
+compilation and execution, including writes made before a trap. Refresh memory
+changes the viewed range without executing guest functions. Editing source
+clears the inspector along with the initialized instance. Only exported resources
+are shown.
+
 `wiw-lib.js` contains shared interpreter, resource and diagnostic code.
 `wiw.js` supplies Node file loading, async context tracking, WASI and the CLI;
 its existing exports remain available. `wiw-browser.js` supplies artifact fetching,

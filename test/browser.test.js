@@ -62,6 +62,7 @@ test('browser factories retain resources, synchronous callback reentry and self-
 			`(module
       (import "host" "memory" (memory 1))
       (import "host" "callback" (func $callback (result i32)))
+      (global (export "value") f32 (f32.const -0))
       (func (export "inner") (result i32) i32.const 42)
       (func (export "run") (result i32) call $callback))`,
 			{
@@ -73,6 +74,8 @@ test('browser factories retain resources, synchronous callback reentry and self-
 		);
 
 		assert.equal(engine.invoke('run'), 42);
+		assert.equal(engine.globalType('value'), 'f32');
+		assert.ok(Object.is(engine.getGlobal('value'), -0));
 		engine.writeMemory(0, new Uint8Array([7]));
 		assert.deepEqual(memory.read(0, 1), new Uint8Array([7]));
 	}
@@ -298,4 +301,86 @@ test('browser float arguments round f32, preserve f64 and validate before guest 
 			assert.throws(() => parseBrowserArgument(value, type));
 		}
 	}
+});
+
+// State inspection must remain read-only and expose guest writes, growth and pre-trap side effects.
+test('browser inspector snapshots exported globals and bounded memory windows', async () => {
+	const session = await compileWat(
+		`(module
+    (memory (export "bytes") 1 2)
+    (memory (export "other") 1)
+    (global $count (export "count") (mut i32) (i32.const 0))
+    (global (export "wide") i64 (i64.const 9007199254740993))
+    (global (export "float") f64 (f64.const -0))
+    (global (export "vector") v128 (v128.const i32x4 1 2 3 4))
+    (global (export "reference") externref (ref.null extern))
+    (data (i32.const 0) "Hello")
+    (data (memory 1) (i32.const 0) "Other")
+    (func (export "write") (param i32)
+      local.get 0 global.set $count
+      i32.const 5 local.get 0 i32.store8)
+    (func (export "grow") i32.const 1 memory.grow drop)
+    (func (export "trap")
+      i32.const 99 global.set $count
+      i32.const 6 i32.const 88 i32.store8 unreachable))`,
+		binary
+	);
+	const initial = session.inspect();
+
+	assert.equal(initial.memory, 'bytes');
+	assert.deepEqual(initial.memories, [
+		{ name: 'bytes', address: 'i32', pages: 1 },
+		{ name: 'other', address: 'i32', pages: 1 }
+	]);
+	assert.deepEqual(initial.globals.slice(0, 3), [
+		{ name: 'count', type: 'i32', value: '0' },
+		{ name: 'wide', type: 'i64', value: '9007199254740993' },
+		{ name: 'float', type: 'f64', value: '-0' }
+	]);
+	assert.match(initial.globals[3].value, /^0x/);
+	assert.deepEqual(initial.globals[4], { name: 'reference', type: 'externref', value: 'null' });
+	assert.match(initial.dump, /^00000000  48 65 6c 6c 6f/);
+	assert.match(initial.dump, /\|Hello/);
+	session.execute('write', ['33']);
+	assert.equal(session.inspect().globals[0].value, '33');
+	assert.match(
+		session.inspect({ memory: 'bytes', offset: '0x5', length: 1 }).dump,
+		/^00000005  21 .*\|!\|$/
+	);
+	assert.match(session.inspect({ memory: 'other', offset: '0', length: 5 }).dump, /\|Other\|$/);
+	assert.throws(() => session.execute('trap'), { code: 'UNREACHABLE' });
+	assert.equal(session.inspect().globals[0].value, '99');
+	assert.match(session.inspect({ memory: 'bytes', offset: '6', length: 1 }).dump, /58 .*\|X\|$/);
+	session.execute('grow');
+	assert.equal(session.inspect().memories[0].pages, 2);
+	assert.equal(initial.memories[0].pages, 1);
+	assert.match(session.inspect({ memory: 'bytes', offset: '131071', length: 128 }).dump, /0001ffff  00/);
+	assert.equal(
+		session.inspect({ memory: 'bytes', offset: '131072', length: 1 }).dump,
+		'(No bytes at this offset.)'
+	);
+
+	for (const view of [
+		{ memory: 'missing', offset: '0', length: 1 },
+		{ memory: 'bytes', offset: '-1', length: 1 },
+		{ memory: 'bytes', offset: '1.5', length: 1 },
+		{ memory: 'bytes', offset: '131073', length: 1 },
+		{ memory: 'bytes', offset: '0', length: 0 },
+		{ memory: 'bytes', offset: '0', length: 257 }
+	])
+		assert.throws(() => session.inspect(view));
+
+	assert.equal(session.inspect().globals[0].value, '99');
+	assert.deepEqual((await compileWat('(module)', binary)).inspect(), {
+		globals: [],
+		memories: [],
+		dump: ''
+	});
+	const memory64 = await compileWat(
+		'(module (memory (export "wide") i64 1) (data (i64.const 0) "64"))',
+		binary
+	);
+
+	assert.equal(memory64.inspect().memories[0].address, 'i64');
+	assert.match(memory64.inspect().dump, /\|64/);
 });

@@ -33,10 +33,16 @@ export * from './wiw-lib.js';
  * @typedef {object} BrowserSession
  * @property {BrowserFunction[]} functions
  * @property {(name: string, args?: string[]) => string} execute
+ * @property {(view?: BrowserMemoryView) => BrowserState} inspect
  */
 
-/** @typedef {{action: 'compile', source: string} | {action: 'execute', name: string, args: string[]}} BrowserRequest */
-/** @typedef {BrowserRunResult & {ok: boolean, functions?: BrowserFunction[]}} BrowserResponse */
+/** @typedef {{memory: string, offset: string, length: number}} BrowserMemoryView */
+/** @typedef {{name: string, type: ValueTypeName, value: string}} BrowserGlobal */
+/** @typedef {{name: string, address: string, pages: number}} BrowserMemory */
+/** @typedef {{globals: BrowserGlobal[], memories: BrowserMemory[], memory?: string, offset?: string, length?: number, dump: string}} BrowserState */
+
+/** @typedef {{action: 'compile', source: string} | {action: 'execute', name: string, args: string[]} | {action: 'inspect', view: BrowserMemoryView}} BrowserRequest */
+/** @typedef {BrowserRunResult & {ok: boolean, functions?: BrowserFunction[], state?: BrowserState}} BrowserResponse */
 
 /** @typedef {object} WatEditorLine */
 
@@ -292,6 +298,10 @@ export async function compileWat(source, binary = new URL('./build/wiw-opt.wasm'
 	const engine = await createBootstrapInterpreter(binary);
 	/** @type {BrowserFunction[]} */
 	const functions = [];
+	/** @type {string[]} */
+	const globals = [];
+	/** @type {string[]} */
+	const memories = [];
 
 	engine.setFuel64(100_000_000n);
 	engine.load(source);
@@ -300,10 +310,104 @@ export async function compileWat(source, binary = new URL('./build/wiw-opt.wasm'
 	for (const [name, value] of Object.entries(engine.exportNamespace())) {
 		// Resources are available to the module but do not belong in the function selector.
 		if (typeof value === 'function') functions.push({ name, ...engine.signature(name) });
+		else if (value.kind === 'global') globals.push(name);
+		else if (value.kind === 'memory') memories.push(name);
 	}
 
 	return {
 		functions,
+
+		/**
+		 * Copy exported state and a bounded memory window without invoking guest functions.
+		 * @param {BrowserMemoryView} [view]
+		 * @returns {BrowserState}
+		 */
+		inspect(view) {
+			const state = {
+				globals: globals.map(
+					/**
+					 * Decode each exported global using its declared value kind.
+					 * @param {string} name
+					 * @returns {BrowserGlobal}
+					 */
+					(name) => {
+						const type = engine.globalType(name);
+
+						return { name, type, value: formatValue(engine.getGlobal(name), type) };
+					}
+				),
+				memories: memories.map(
+					/**
+					 * Capture current page counts so memory growth appears after execution.
+					 * @param {string} name
+					 * @returns {BrowserMemory}
+					 */
+					(name) => ({ name, address: engine.memoryType(name), pages: engine.memoryPages(name) })
+				),
+				dump: ''
+			};
+			const memory = view?.memory ?? memories[0];
+
+			// Modules without exported memory still expose globals independently.
+			if (memory === undefined) return state;
+			if (!memories.includes(memory)) throw new Error(`Unknown memory export: ${memory}`);
+
+			const literal = (view?.offset ?? '0').trim();
+			const length = view?.length ?? 128;
+
+			// Bounded reads protect the page and worker from oversized inspection requests.
+			if (!/^(?:[0-9]+|0x[0-9a-f]+)$/i.test(literal))
+				throw new Error('Memory offset must be a non-negative decimal or hexadecimal integer.');
+			if (!Number.isInteger(length) || length < 1 || length > 256)
+				throw new Error('Memory byte count must be between 1 and 256.');
+
+			const offset = BigInt(literal);
+			const size = BigInt(engine.memoryPages(memory)) * 65536n;
+
+			if (offset > size) throw new Error(`Memory offset is beyond the ${size}-byte memory.`);
+
+			const bytes = engine.readMemory(
+				engine.memoryType(memory) === 'i64' ? offset : Number(offset),
+				Number(size - offset < BigInt(length) ? size - offset : BigInt(length)),
+				memory
+			);
+			const rows = [];
+
+			// Show sixteen bytes per row, retaining exact addresses and printable ASCII alongside hex.
+			for (let index = 0; index < bytes.length; index += 16) {
+				const row = bytes.subarray(index, index + 16);
+				const hex = Array.from(
+					row,
+					/**
+					 * Format one byte as two hexadecimal digits.
+					 * @param {number} byte
+					 * @returns {string}
+					 */
+					(byte) => byte.toString(16).padStart(2, '0')
+				)
+					.join(' ')
+					.padEnd(47, ' ');
+				const ascii = Array.from(
+					row,
+					/**
+					 * Replace non-printable bytes with a dot in the ASCII column.
+					 * @param {number} byte
+					 * @returns {string}
+					 */
+					(byte) => (byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.')
+				).join('');
+
+				rows.push(`${(offset + BigInt(index)).toString(16).padStart(8, '0')}  ${hex}  |${ascii}|`);
+			}
+
+			return {
+				...state,
+				memory,
+				offset: literal,
+				length,
+				dump: rows.join('\n') || '(No bytes at this offset.)'
+			};
+		},
 
 		/**
 		 * Execute one scalar-parameter export on the initialized guest, renewing its fuel budget.
@@ -446,6 +550,13 @@ function attachInterface() {
 	const executeElement = document.getElementById('execute');
 	const functionsElement = document.getElementById('functions');
 	const argumentsElement = document.getElementById('arguments');
+	const globalsElement = document.getElementById('globals');
+	const memoryElement = document.getElementById('memories');
+	const offsetElement = document.getElementById('memory-offset');
+	const countElement = document.getElementById('memory-count');
+	const refreshElement = document.getElementById('inspect');
+	const dumpElement = document.getElementById('memory-dump');
+	const memoryInfoElement = document.getElementById('memory-info');
 
 	// Importing this frontend on another page does not require the playground's controls.
 	if (
@@ -454,7 +565,14 @@ function attachInterface() {
 		!(compileElement instanceof HTMLButtonElement) ||
 		!(executeElement instanceof HTMLButtonElement) ||
 		!(functionsElement instanceof HTMLSelectElement) ||
-		!(argumentsElement instanceof HTMLDivElement)
+		!(argumentsElement instanceof HTMLDivElement) ||
+		!(globalsElement instanceof HTMLPreElement) ||
+		!(memoryElement instanceof HTMLSelectElement) ||
+		!(offsetElement instanceof HTMLInputElement) ||
+		!(countElement instanceof HTMLInputElement) ||
+		!(refreshElement instanceof HTMLButtonElement) ||
+		!(dumpElement instanceof HTMLPreElement) ||
+		!(memoryInfoElement instanceof HTMLParagraphElement)
 	)
 		return;
 
@@ -464,6 +582,13 @@ function attachInterface() {
 	const execute = executeElement;
 	const functions = functionsElement;
 	const argumentFields = argumentsElement;
+	const globalsOutput = globalsElement;
+	const memorySelect = memoryElement;
+	const memoryOffset = offsetElement;
+	const memoryCount = countElement;
+	const refresh = refreshElement;
+	const memoryDump = dumpElement;
+	const memoryInfo = memoryInfoElement;
 	const codeMirror = /** @type {EditorWindow} */ (window).CodeMirror;
 	const editor = codeMirror?.fromTextArea(source, {
 		mode: 'text/webassembly',
@@ -520,6 +645,12 @@ function attachInterface() {
 		execute.disabled = busy || !compiled || !selected || selected.disabled;
 
 		for (const input of inputs) input.disabled = busy;
+		const unavailable = busy || !compiled || !memorySelect.options.length;
+
+		memorySelect.disabled = unavailable;
+		memoryOffset.disabled = unavailable;
+		memoryCount.disabled = unavailable;
+		refresh.disabled = unavailable;
 	}
 
 	/**
@@ -598,6 +729,10 @@ function attachInterface() {
 		functions.replaceChildren();
 		argumentFields.replaceChildren();
 		exports = [];
+		memorySelect.replaceChildren();
+		globalsOutput.textContent = 'Compile to inspect globals.';
+		memoryDump.textContent = 'Compile to inspect memory.';
+		memoryInfo.textContent = '';
 		inputs = [];
 		updateControls();
 	}
@@ -623,7 +758,37 @@ function attachInterface() {
 	function finish(result) {
 		clearTimeout(timeout);
 		busy = false;
-		output.textContent = result.text;
+		if (result.text) output.textContent = result.text;
+
+		// Snapshot strings are rendered as text, preserving arbitrary export names safely.
+		if (result.state) {
+			globalsOutput.textContent =
+				result.state.globals
+					.map(
+						/**
+						 * Display each global's declared kind beside its current value.
+						 * @param {BrowserGlobal} global
+						 * @returns {string}
+						 */
+						(global) => `${global.name}: ${global.type}: ${global.value}`
+					)
+					.join('\n') || '(No exported globals.)';
+			memorySelect.replaceChildren();
+
+			for (const memory of result.state.memories) {
+				memorySelect.add(
+					new Option(`${memory.name} (${memory.address}, ${memory.pages} pages)`, memory.name)
+				);
+			}
+
+			memorySelect.value = result.state.memory ?? '';
+			memoryOffset.value = result.state.offset ?? '0';
+			memoryCount.value = String(result.state.length ?? 128);
+			memoryDump.textContent = result.state.dump || '(No exported memory.)';
+			memoryInfo.textContent = result.state.memories.length
+				? 'Read-only hex/ASCII view. Up to 256 bytes; refreshed after execution.'
+				: '';
+		}
 
 		// A successful compile supplies metadata without invoking any exported function.
 		if (result.functions) {
@@ -686,7 +851,8 @@ function attachInterface() {
 		clearError();
 		busy = true;
 		updateControls();
-		output.textContent = request.action === 'compile' ? 'Compiling…' : 'Executing…';
+		if (request.action !== 'inspect')
+			output.textContent = request.action === 'compile' ? 'Compiling…' : 'Executing…';
 		timeout = setTimeout(
 			/**
 			 * Terminate a stalled request and require recompilation of discarded guest state.
@@ -717,6 +883,8 @@ function attachInterface() {
 	function compileSource() {
 		reset();
 		submitted = sourceText();
+		memoryOffset.value = '0';
+		memoryCount.value = '128';
 
 		// Startup failures must leave compilation available and execution disabled.
 		try {
@@ -798,6 +966,35 @@ function attachInterface() {
 		});
 	}
 
+	/**
+	 * Refresh the selected memory window without executing guest code.
+	 * @returns {void}
+	 */
+	function inspectMemory() {
+		// Inspection is available only for an initialized guest with exported memory.
+		if (refresh.disabled) return;
+
+		send({
+			action: 'inspect',
+			view: {
+				memory: memorySelect.value,
+				offset: memoryOffset.value,
+				length: Number(memoryCount.value)
+			}
+		});
+	}
+
+	/**
+	 * Start a new memory selection at its first byte.
+	 * @returns {void}
+	 */
+	function selectMemory() {
+		memoryOffset.value = '0';
+		inspectMemory();
+	}
+
+	refresh.addEventListener('click', inspectMemory);
+	memorySelect.addEventListener('change', selectMemory);
 	compile.addEventListener('click', compileSource);
 	execute.addEventListener('click', executeSelected);
 	updateControls();
@@ -810,6 +1007,8 @@ if (typeof document !== 'undefined') {
 	/** @type {BrowserSession | undefined} */
 	let session;
 	let source = '';
+	/** @type {BrowserMemoryView | undefined} */
+	let view;
 
 	globalThis.onmessage =
 		/**
@@ -824,11 +1023,13 @@ if (typeof document !== 'undefined') {
 			try {
 				if (request.action === 'compile') {
 					session = undefined;
+					view = undefined;
 					source = request.source;
 					session = await compileWat(source);
 					globalThis.postMessage({
 						ok: true,
 						functions: session.functions,
+						state: session.inspect(),
 						text: session.functions.length
 							? 'Module initialized. Select a function and press Execute. Scalar parameters can be entered below.'
 							: 'Module initialized (no function exports).'
@@ -836,10 +1037,34 @@ if (typeof document !== 'undefined') {
 				} else {
 					if (!session) throw new Error('Compile a module before executing.');
 
-					globalThis.postMessage({ ok: true, text: session.execute(request.name, request.args) });
+					// Inspection updates the view only after its requested range has been validated.
+					if (request.action === 'inspect') {
+						const state = session.inspect(request.view);
+						view = request.view;
+						globalThis.postMessage({ ok: true, text: '', state });
+					} else {
+						const text = session.execute(request.name, request.args);
+						globalThis.postMessage({ ok: true, text, state: session.inspect(view) });
+					}
 				}
 			} catch (error) {
-				globalThis.postMessage({ ok: false, ...formatBrowserError(error, source) });
+				/** @type {BrowserState | undefined} */
+				let state;
+
+				// Inspection failures must never hide the original compilation or guest error.
+				if (session) {
+					try {
+						state = session.inspect(view);
+					} catch {
+						// Preserve the primary diagnostic when the guest state cannot be read safely.
+					}
+				}
+
+				globalThis.postMessage({
+					ok: false,
+					...formatBrowserError(error, source),
+					...(state ? { state } : {})
+				});
 			}
 		};
 }

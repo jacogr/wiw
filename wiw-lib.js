@@ -607,6 +607,7 @@
  * @property {(name: string) => AsyncHostCallback} exportFunctionAsync
  * @property {() => HostNamespace} exportNamespaceAsync
  * @property {(asynchronous?: boolean) => HostNamespace} exportNamespace
+ * @property {(name: string) => ValueTypeName} globalType
  * @property {(name: string) => unknown} getGlobal
  * @property {(name: string, value: unknown) => void} setGlobal
  * @property {(offset: number | bigint, length: number, memory?: ResourceSelector) => Uint8Array} readMemory
@@ -5242,6 +5243,22 @@ function wrapInterpreter(exports, { memoryOffset = 0, ensureMemory, limits = ins
       }
 
       return namespace;
+    },
+
+    /**
+     * Read the declared scalar, vector or reference kind of an exported global.
+     * @param {string} name
+     * @returns {ValueTypeName}
+     */
+    globalType(name) {
+      requireLoaded();
+      const at = e.host_base();
+      const n = write(name, at);
+      const type = e.global_type(at, n);
+
+      check(e.error_code());
+
+      return /** @type {ValueTypeName} */ (scalarNames[type]);
     },
 
     /**
