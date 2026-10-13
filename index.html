@@ -148,8 +148,52 @@
 		<label for="wat">WAT input</label>
 		<textarea id="wat" spellcheck="false" wrap="off" aria-describedby="hint">
 (module
+  ;; Inspect these exports in the module-state panel after Compile.
+  (memory (export "memory") 1)
+  (data (i32.const 0) "Hello, wiw!")
+  (global $counter (export "counter") (mut i32) (i32.const 0))
+  (global (export "wide") i64 (i64.const 9007199254740993))
+  (global (export "negative-zero") f64 (f64.const -0))
+
+  ;; Initialization runs once per Compile, before any selected function.
+  (func $initialize
+    i32.const 1
+    global.set $counter)
+  (start $initialize)
+
+  ;; Execute without arguments to get a simple result.
   (func (export "answer") (result i32)
-    i32.const 42))</textarea
+    i32.const 42)
+
+  ;; Try 42, 9007199254740993, 0.1 and -0 to see all scalar input types.
+  ;; Multiple results preserve order; f32 rounds to single precision.
+  (func (export "echo") (param i32 i64 f32 f64) (result i32 i64 f32 f64)
+    local.get 0
+    local.get 1
+    local.get 2
+    local.get 3)
+
+  ;; Add an amount to the counter. Repeated executions retain its value.
+  (func (export "increment") (param $amount i32) (result i32)
+    global.get $counter
+    local.get $amount
+    i32.add
+    global.set $counter
+    global.get $counter)
+
+  ;; Try offset 0 and value 104 to change "Hello, wiw!" to "hello, wiw!".
+  ;; The memory viewer refreshes after the write; this function has no result.
+  (func (export "write-byte") (param $offset i32) (param $value i32)
+    local.get $offset
+    local.get $value
+    i32.store8)
+
+  ;; Vector inputs are listed but unavailable in this scalar interface.
+  (func (export "vector-input") (param v128))
+
+  ;; Deliberately trap to see source diagnostics; other exports remain usable.
+  (func (export "trap")
+    unreachable))</textarea
 		>
 		<p id="hint">Compile validates and initializes your WAT. Editing it requires recompilation.</p>
 		<button id="compile" type="button">Compile</button>
