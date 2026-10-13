@@ -169,6 +169,13 @@ Initialization and each execution have a fresh 100,000,000-instruction fuel budg
 and a 30-second timeout. Timeouts discard the instance and require recompilation.
 The Compile button prepares interpreted WAT; it does not compile guest WAT to Wasm.
 
+The output shows separate Compile and Execute timings, including failed
+initializations and trapped calls. Compile includes interpreter loading and guest
+initialization. Execute includes argument conversion, invocation and result
+formatting. Both exclude state inspection, worker startup and message delivery.
+Memory refresh leaves these timings unchanged. Fuel exhaustion reports the
+100,000,000-instruction budget; each execution receives a fresh budget.
+
 The read-only module-state panel shows exported globals with their declared types
 and current values. Select an exported memory to view up to 256 bytes in hex and
 ASCII, starting at a decimal or hexadecimal offset. State refreshes after

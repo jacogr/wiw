@@ -42,7 +42,8 @@ export * from './wiw-lib.js';
 /** @typedef {{globals: BrowserGlobal[], memories: BrowserMemory[], memory?: string, offset?: string, length?: number, dump: string}} BrowserState */
 
 /** @typedef {{action: 'compile', source: string} | {action: 'execute', name: string, args: string[]} | {action: 'inspect', view: BrowserMemoryView}} BrowserRequest */
-/** @typedef {BrowserRunResult & {ok: boolean, functions?: BrowserFunction[], state?: BrowserState}} BrowserResponse */
+/** @typedef {{compileMs?: number, executeMs?: number}} BrowserTiming */
+/** @typedef {BrowserRunResult & {ok: boolean, functions?: BrowserFunction[], state?: BrowserState, timing?: BrowserTiming}} BrowserResponse */
 
 /** @typedef {object} WatEditorLine */
 
@@ -510,18 +511,22 @@ export async function runWat(source, binary = new URL('./build/wiw-opt.wasm', im
  */
 export function formatBrowserError(error, source) {
 	const message = error instanceof Error ? error.message : String(error);
+	const fuelHint =
+		error instanceof WiwError && error.code === 'EXHAUSTED_FUEL'
+			? '\nStopped after exhausting the 100,000,000-instruction budget. Each execution gets a fresh budget.'
+			: '';
 	const location = error instanceof WiwError ? error.location : undefined;
 
 	// Binary/generated offsets and host errors have no trustworthy position in the input editor.
 	if (location?.format !== 'wat' || location.line === undefined || location.column === undefined) {
-		return { text: message };
+		return { text: message + fuelHint };
 	}
 
 	const { line, column } = location;
 	const sourceLine = source.split(/\r\n|\r|\n/)[line - 1];
 
 	// Retain the original diagnostic if it points outside the submitted source.
-	if (sourceLine === undefined) return { text: message };
+	if (sourceLine === undefined) return { text: message + fuelHint };
 
 	const prefix = [...sourceLine].slice(0, column - 1).join('');
 	const gutter = `${line} | `;
@@ -533,7 +538,7 @@ export function formatBrowserError(error, source) {
 			: '';
 
 	return {
-		text: `${message} (line ${line}, column ${column})\n\n${gutter}${sourceLine}\n${caret}${hint}`,
+		text: `${message} (line ${line}, column ${column})\n\n${gutter}${sourceLine}\n${caret}${hint}${fuelHint}`,
 		line,
 		column
 	};
@@ -557,6 +562,7 @@ function attachInterface() {
 	const refreshElement = document.getElementById('inspect');
 	const dumpElement = document.getElementById('memory-dump');
 	const memoryInfoElement = document.getElementById('memory-info');
+	const timingElement = document.getElementById('timing');
 
 	// Importing this frontend on another page does not require the playground's controls.
 	if (
@@ -572,7 +578,8 @@ function attachInterface() {
 		!(countElement instanceof HTMLInputElement) ||
 		!(refreshElement instanceof HTMLButtonElement) ||
 		!(dumpElement instanceof HTMLPreElement) ||
-		!(memoryInfoElement instanceof HTMLParagraphElement)
+		!(memoryInfoElement instanceof HTMLParagraphElement) ||
+		!(timingElement instanceof HTMLParagraphElement)
 	)
 		return;
 
@@ -589,6 +596,9 @@ function attachInterface() {
 	const refresh = refreshElement;
 	const memoryDump = dumpElement;
 	const memoryInfo = memoryInfoElement;
+	const timingOutput = timingElement;
+	/** @type {BrowserTiming} */
+	let timings = {};
 	const codeMirror = /** @type {EditorWindow} */ (window).CodeMirror;
 	const editor = codeMirror?.fromTextArea(source, {
 		mode: 'text/webassembly',
@@ -733,6 +743,8 @@ function attachInterface() {
 		globalsOutput.textContent = 'Compile to inspect globals.';
 		memoryDump.textContent = 'Compile to inspect memory.';
 		memoryInfo.textContent = '';
+		timings = {};
+		timingOutput.textContent = '';
 		inputs = [];
 		updateControls();
 	}
@@ -822,6 +834,17 @@ function attachInterface() {
 		} else if (!result.ok && !compiled) {
 			// Failed validation or initialization cannot leave a usable guest behind.
 			reset();
+		}
+
+		// Keep compilation and the most recent invocation timings separate from state inspection.
+		if (result.timing) {
+			timings = { ...timings, ...result.timing };
+			const parts = [];
+
+			if (timings.compileMs !== undefined) parts.push(`Compile: ${timings.compileMs.toFixed(3)} ms`);
+			if (timings.executeMs !== undefined) parts.push(`Execute: ${timings.executeMs.toFixed(3)} ms`);
+
+			timingOutput.textContent = parts.join(' · ');
 		}
 
 		updateControls();
@@ -1018,6 +1041,8 @@ if (typeof document !== 'undefined') {
 		 */
 		async (event) => {
 			const request = event.data;
+			/** @type {BrowserTiming} */
+			const timing = {};
 
 			// Guest failures retain source diagnostics; a failed compilation discards the previous session.
 			try {
@@ -1025,10 +1050,18 @@ if (typeof document !== 'undefined') {
 					session = undefined;
 					view = undefined;
 					source = request.source;
-					session = await compileWat(source);
+					const started = performance.now();
+
+					// Record initialization failures too, without including inspection or message delivery.
+					try {
+						session = await compileWat(source);
+					} finally {
+						timing.compileMs = performance.now() - started;
+					}
 					globalThis.postMessage({
 						ok: true,
 						functions: session.functions,
+						timing,
 						state: session.inspect(),
 						text: session.functions.length
 							? 'Module initialized. Select a function and press Execute. Scalar parameters can be entered below.'
@@ -1043,8 +1076,17 @@ if (typeof document !== 'undefined') {
 						view = request.view;
 						globalThis.postMessage({ ok: true, text: '', state });
 					} else {
-						const text = session.execute(request.name, request.args);
-						globalThis.postMessage({ ok: true, text, state: session.inspect(view) });
+						const started = performance.now();
+						let text;
+
+						// Invocation timing includes argument conversion and result formatting, but excludes inspection.
+						try {
+							text = session.execute(request.name, request.args);
+						} finally {
+							timing.executeMs = performance.now() - started;
+						}
+
+						globalThis.postMessage({ ok: true, text, timing, state: session.inspect(view) });
 					}
 				}
 			} catch (error) {
@@ -1063,6 +1105,7 @@ if (typeof document !== 'undefined') {
 				globalThis.postMessage({
 					ok: false,
 					...formatBrowserError(error, source),
+					timing,
 					...(state ? { state } : {})
 				});
 			}

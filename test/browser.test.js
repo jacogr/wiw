@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
+import { once } from 'node:events';
+import { Worker } from 'node:worker_threads';
 import {
 	createBootstrapInterpreter,
 	createInterpretedInterpreter,
@@ -383,4 +385,82 @@ test('browser inspector snapshots exported globals and bounded memory windows', 
 
 	assert.equal(memory64.inspect().memories[0].address, 'i64');
 	assert.match(memory64.inspect().dump, /\|64/);
+});
+
+// Exercise the real worker protocol so inspection cannot overwrite execution timing and traps retain timing.
+test('browser worker reports separate compile and execution timings, including failures', async () => {
+	const moduleUrl = new URL('../wiw-browser.js', import.meta.url).href;
+	const binaryPath = new URL('../build/wiw-opt.wasm', import.meta.url).pathname;
+	const worker = new Worker(
+		`
+    const {parentPort} = require('node:worker_threads');
+    (async () => {
+      const {readFile} = await import('node:fs/promises');
+      const bytes = await readFile(${JSON.stringify(binaryPath)});
+      globalThis.fetch = async () => new Response(bytes);
+      globalThis.postMessage = value => parentPort.postMessage(value);
+      await import(${JSON.stringify(moduleUrl)});
+      parentPort.on('message', data => globalThis.onmessage({data}));
+      parentPort.postMessage({ready: true});
+    })().catch(error => {throw error});
+  `,
+		{ eval: true }
+	);
+
+	/**
+	 * Deliver a worker request after registering its response listener.
+	 * @param {import('../wiw-browser.js').BrowserRequest} request
+	 * @returns {Promise<import('../wiw-browser.js').BrowserResponse>}
+	 */
+	async function request(request) {
+		const response = once(worker, 'message');
+
+		worker.postMessage(request);
+		return (await response)[0];
+	}
+
+	try {
+		await once(worker, 'message');
+		const compiled = await request({
+			action: 'compile',
+			source: `(module
+      (memory (export "memory") 1)
+      (func (export "answer") (result i32) i32.const 42)
+      (func (export "trap") unreachable))`
+		});
+
+		assert.equal(compiled.ok, true);
+		assert.ok(Number.isFinite(compiled.timing.compileMs));
+		assert.ok(compiled.timing.compileMs >= 0);
+		assert.equal(compiled.timing.executeMs, undefined);
+		const executed = await request({ action: 'execute', name: 'answer', args: [] });
+
+		assert.equal(executed.text, 'answer: i32: 42');
+		assert.ok(Number.isFinite(executed.timing.executeMs));
+		assert.ok(executed.timing.executeMs >= 0);
+		assert.equal(executed.timing.compileMs, undefined);
+		const inspected = await request({
+			action: 'inspect',
+			view: { memory: 'memory', offset: '0', length: 1 }
+		});
+
+		assert.equal(inspected.timing, undefined);
+		const trapped = await request({ action: 'execute', name: 'trap', args: [] });
+
+		assert.equal(trapped.ok, false);
+		assert.match(trapped.text, /unreachable/);
+		assert.ok(Number.isFinite(trapped.timing.executeMs));
+		const invalid = await request({ action: 'compile', source: '(module (' });
+
+		assert.equal(invalid.ok, false);
+		assert.ok(Number.isFinite(invalid.timing.compileMs));
+		assert.equal(invalid.timing.executeMs, undefined);
+	} finally {
+		await worker.terminate();
+	}
+
+	const diagnostic = formatBrowserError(new WiwError('exhausted fuel', { code: 'EXHAUSTED_FUEL' }), '');
+
+	assert.match(diagnostic.text, /100,000,000-instruction budget/);
+	assert.match(diagnostic.text, /fresh budget/);
 });
