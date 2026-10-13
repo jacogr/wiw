@@ -8,6 +8,7 @@ import {
 	compileWat,
 	formatBrowserError,
 	parseBrowserInteger,
+	parseBrowserArgument,
 	runWat,
 	WiwError
 } from '../wiw-browser.js';
@@ -207,7 +208,7 @@ test('browser integer arguments preserve widths, validate literals and invoke mi
       global.get $calls i32.const 1 i32.add global.set $calls
       local.get 0 local.get 1)
     (func (export "calls") (result i32) global.get $calls)
-    (func (export "float") (param f32)))`,
+    (func (export "vector") (param v128)))`,
 		binary
 	);
 
@@ -237,12 +238,64 @@ test('browser integer arguments preserve widths, validate literals and invoke mi
 		assert.throws(() => session.execute('mixed', args));
 	}
 
-	assert.throws(() => session.execute('float', ['1']), /Unsupported parameter type: f32/);
+	assert.throws(() => session.execute('vector', ['1']), /Unsupported parameter type: v128/);
 	assert.equal(session.execute('calls'), 'calls: i32: 4');
 	assert.equal(parseBrowserInteger('  +42  ', 'i32'), 42);
 	assert.equal(parseBrowserInteger('18446744073709551615', 'i64'), -1n);
 
 	for (const literal of ['', ' ', '0x', '1_000', 'NaN', 'Infinity', '--1', '2.0', '1e2']) {
 		assert.throws(() => parseBrowserInteger(literal, 'i64'));
+	}
+});
+
+// Float arguments must preserve signed zero and distinguish deliberate special values from invalid input.
+test('browser float arguments round f32, preserve f64 and validate before guest execution', async () => {
+	const session = await compileWat(
+		`(module
+    (global $calls (mut i32) (i32.const 0))
+    (func (export "echo") (param f32 f64) (result f32 f64)
+      global.get $calls i32.const 1 i32.add global.set $calls
+      local.get 0 local.get 1)
+    (func (export "mixed") (param i32 i64 f32 f64) (result i32 i64 f32 f64)
+      local.get 0 local.get 1 local.get 2 local.get 3)
+    (func (export "calls") (result i32) global.get $calls))`,
+		binary
+	);
+
+	assert.equal(session.execute('echo', ['0.1', '0.1']), 'echo: f32: 0.10000000149011612, f64: 0.1');
+	assert.equal(session.execute('echo', ['-0', '-0.0e3']), 'echo: f32: -0, f64: -0');
+	assert.equal(session.execute('echo', ['inf', '-Infinity']), 'echo: f32: Infinity, f64: -Infinity');
+	assert.equal(session.execute('echo', ['NaN', '-nan']), 'echo: f32: NaN, f64: NaN');
+	assert.equal(session.execute('echo', ['-1e-100', '-1e-400']), 'echo: f32: -0, f64: -0');
+	assert.equal(
+		session.execute('mixed', ['42', '9007199254740993', '1.5', '2.25']),
+		'mixed: i32: 42, i64: 9007199254740993, f32: 1.5, f64: 2.25'
+	);
+
+	for (const args of [
+		['', '1'],
+		['0x1', '1'],
+		['1e39', '1'],
+		['1', '1e309'],
+		['1', '1e'],
+		['1', 'nan:0x1']
+	]) {
+		assert.throws(() => session.execute('echo', args));
+	}
+
+	assert.equal(session.execute('calls'), 'calls: i32: 5');
+	assert.equal(parseBrowserArgument(' +.5E+2 ', 'f64'), 50);
+	assert.equal(parseBrowserArgument('1.', 'f32'), 1);
+	assert.equal(parseBrowserArgument('+Infinity', 'f32'), Infinity);
+	assert.ok(Object.is(parseBrowserArgument('-0', 'f32'), -0));
+	assert.ok(Number.isNaN(parseBrowserArgument('+NaN', 'f64')));
+	assert.equal(parseBrowserArgument('3.4028234663852886e38', 'f32'), Math.fround(3.4028234663852886e38));
+	assert.equal(parseBrowserArgument('1.7976931348623157e308', 'f64'), Number.MAX_VALUE);
+	assert.equal(parseBrowserArgument('9007199254740993', 'i64'), 9007199254740993n);
+
+	for (const type of ['f32', 'f64']) {
+		for (const value of ['', ' ', '.', '1e', '1.2.3', '1_000', '0x1p0', 'Infinity!', '--1', '1e9999']) {
+			assert.throws(() => parseBrowserArgument(value, type));
+		}
 	}
 });

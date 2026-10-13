@@ -242,6 +242,47 @@ export function parseBrowserInteger(text, type) {
 }
 
 /**
+ * Identify scalar parameter kinds with text inputs in the browser interface.
+ * @param {ValueTypeName} type
+ * @returns {boolean}
+ */
+function supportsBrowserArgument(type) {
+	return type === 'i32' || type === 'i64' || type === 'f32' || type === 'f64';
+}
+
+/**
+ * Parse scalar input with exact integer widths and explicit floating-point special values.
+ * @param {string} text
+ * @param {ValueTypeName} type
+ * @returns {number | bigint}
+ */
+export function parseBrowserArgument(text, type) {
+	// Retain exact integer parsing instead of passing i64 values through Number.
+	if (type === 'i32' || type === 'i64') return parseBrowserInteger(text, type);
+
+	// Vectors and references need different controls and cannot be represented by scalar text.
+	if (type !== 'f32' && type !== 'f64') throw new Error(`Unsupported parameter type: ${type}`);
+
+	const literal = text.trim();
+
+	// Special values must be intentional; malformed or overflowing decimals must not become NaN/infinity.
+	if (/^[+-]?nan$/i.test(literal)) return NaN;
+	if (/^[+-]?(?:inf|infinity)$/i.test(literal)) return literal.startsWith('-') ? -Infinity : Infinity;
+	if (!/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:e[+-]?[0-9]+)?$/i.test(literal)) {
+		throw new Error(`Enter an ${type} decimal number, inf, -inf or NaN.`);
+	}
+
+	const value = Number(literal);
+	const rounded = type === 'f32' ? Math.fround(value) : value;
+
+	// Finite decimal overflow is rejected, while rounding and underflow retain IEEE signed zero.
+	if (!Number.isFinite(rounded))
+		throw new Error(`${type} number is out of range. Use inf or -inf for infinity.`);
+
+	return rounded;
+}
+
+/**
  * Validate and initialize WAT, discovering exports without invoking them.
  * @param {string} source
  * @param {BrowserBootstrapSource} [binary]
@@ -265,7 +306,7 @@ export async function compileWat(source, binary = new URL('./build/wiw-opt.wasm'
 		functions,
 
 		/**
-		 * Execute one integer-parameter export on the initialized guest, renewing its fuel budget.
+		 * Execute one scalar-parameter export on the initialized guest, renewing its fuel budget.
 		 * @param {string} name
 		 * @param {string[]} [args]
 		 * @returns {string}
@@ -289,14 +330,14 @@ export async function compileWat(source, binary = new URL('./build/wiw-opt.wasm'
 
 			const values = signature.params.map(
 				/**
-				 * Convert each input using its declared integer width before starting guest execution.
+				 * Convert each input using its declared scalar type before starting guest execution.
 				 * @param {ValueTypeName} type
 				 * @param {number} index
 				 * @returns {number | bigint}
 				 */
 				(type, index) => {
 					try {
-						return parseBrowserInteger(args[index] ?? '', type);
+						return parseBrowserArgument(args[index] ?? '', type);
 					} catch (error) {
 						throw new Error(
 							`Argument ${index + 1}: ${error instanceof Error ? error.message : String(error)}`
@@ -468,7 +509,7 @@ function attachInterface() {
 	}
 
 	/**
-	 * Enable execution only for a compiled export with supported parameter types.
+	 * Enable execution only for a compiled export with supported scalar parameter types.
 	 * @returns {void}
 	 */
 	function updateControls() {
@@ -482,7 +523,7 @@ function attachInterface() {
 	}
 
 	/**
-	 * Build labeled integer fields for the selected function without changing guest state.
+	 * Build labeled scalar fields for the selected function without changing guest state.
 	 * @returns {void}
 	 */
 	function selectFunction() {
@@ -498,17 +539,7 @@ function attachInterface() {
 		);
 
 		// Unsupported exports stay listed but cannot create executable argument controls.
-		if (
-			entry &&
-			entry.params.every(
-				/**
-				 * Limit this interface to integer inputs until other value kinds have editors.
-				 * @param {ValueTypeName} type
-				 * @returns {boolean}
-				 */
-				(type) => type === 'i32' || type === 'i64'
-			)
-		) {
+		if (entry && entry.params.every(supportsBrowserArgument)) {
 			for (const [index, type] of entry.params.entries()) {
 				const field = document.createElement('div');
 				const label = document.createElement('label');
@@ -518,7 +549,10 @@ function attachInterface() {
 				input.type = 'text';
 				input.required = true;
 				input.spellcheck = false;
-				input.placeholder = 'Decimal or 0x hexadecimal';
+				input.placeholder =
+					type === 'i32' || type === 'i64'
+						? 'Decimal or 0x hexadecimal'
+						: 'Decimal, inf, -inf or NaN';
 				input.setAttribute('aria-describedby', 'function-hint');
 				label.htmlFor = input.id;
 				label.textContent = `Argument ${index + 1} (${type})`;
@@ -605,15 +639,8 @@ function attachInterface() {
 					entry.name
 				);
 
-				// Non-integer parameter kinds remain visible while unsupported inputs stay disabled.
-				option.disabled = entry.params.some(
-					/**
-					 * Reject parameter kinds without an input parser in this interface.
-					 * @param {ValueTypeName} type
-					 * @returns {boolean}
-					 */
-					(type) => type !== 'i32' && type !== 'i64'
-				);
+				// Vectors and references stay listed while their unsupported inputs remain disabled.
+				option.disabled = !entry.params.every(supportsBrowserArgument);
 				functions.add(option);
 			}
 
@@ -745,7 +772,7 @@ function attachInterface() {
 		// Validate all inputs before sending anything that can change the guest instance.
 		for (const [index, input] of inputs.entries()) {
 			try {
-				parseBrowserInteger(input.value, entry.params[index] ?? 'i32');
+				parseBrowserArgument(input.value, entry.params[index] ?? 'i32');
 				input.setCustomValidity('');
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
@@ -762,7 +789,7 @@ function attachInterface() {
 			name: functions.value,
 			args: inputs.map(
 				/**
-				 * Transfer original text so the worker independently checks exact integer values.
+				 * Transfer original text so the worker independently checks scalar values.
 				 * @param {HTMLInputElement} input
 				 * @returns {string}
 				 */
@@ -803,7 +830,7 @@ if (typeof document !== 'undefined') {
 						ok: true,
 						functions: session.functions,
 						text: session.functions.length
-							? 'Module initialized. Select a function and press Execute. Integer parameters can be entered below.'
+							? 'Module initialized. Select a function and press Execute. Scalar parameters can be entered below.'
 							: 'Module initialized (no function exports).'
 					});
 				} else {

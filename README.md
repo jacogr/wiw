@@ -152,11 +152,16 @@ matching. CDN assets have integrity hashes; no bundler or editor build step is
 required. A plain textarea remains usable when the CDN is unavailable.
 The page uses the compiled interpreter; guest WAT is interpreted, never compiled.
 Compile validates and initializes the module, then lists exported functions with
-parameter and result types. Select a function, fill in its `i32`/`i64` argument inputs and click **Execute**.
-Inputs accept decimal or `0x` hexadecimal integers, including signed values and
+parameter and result types. Select a function, fill in its scalar argument inputs and click **Execute**.
+Integer inputs accept decimal or `0x` hexadecimal integers, including signed values and
 unsigned bit patterns. `i64` values retain all digits without floating-point
-rounding. Empty, fractional and out-of-range inputs are rejected before execution.
-Functions with other parameter types are listed but unavailable. Results and source diagnostics appear in the output area.
+rounding. Empty, fractional and out-of-range integer inputs are rejected before
+execution.
+`f32`/`f64` inputs accept decimal numbers (including exponent notation), `-0`,
+`inf`/`Infinity`, `-inf`/`-Infinity` and `NaN`. Float inputs use JavaScript Number
+conversion, with `f32` rounded to single precision. Finite overflow is rejected;
+underflow may round to signed zero. NaN payloads are not editable. Functions with
+vector or reference parameters are listed but unavailable. Results and source diagnostics appear in the output area.
 Executions reuse the initialized instance, preserving globals and memory;
 initialization runs only when compiling. Editing WAT discards the instance and
 requires recompilation. Each compile creates a fresh worker and interpreter.
