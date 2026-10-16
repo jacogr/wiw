@@ -6,17 +6,12 @@
 /**
  * Platform execution context; Node preserves it across awaits, browsers use synchronous scopes.
  * @template T
- * @typedef {object} RuntimeContext
- * @property {() => T | undefined} getStore
- * @property {<R>(store: T, callback: () => R) => R} run
+ * @typedef {{getStore:() => T | undefined, run:<R>(store:T, callback:() => R) => R}} RuntimeContext
  */
 
 /**
  * Execution ownership and event-loop scheduling supplied by the frontend.
- * @typedef {object} RuntimeServices
- * @property {RuntimeContext<number>} invocationContext
- * @property {RuntimeContext<CallbackScope>} callbackContext
- * @property {() => Promise<void>} yieldTask
+ * @typedef {{invocationContext:RuntimeContext<number>, callbackContext:RuntimeContext<CallbackScope>, yieldTask:() => Promise<void>}} RuntimeServices
  */
 
 /**
@@ -56,140 +51,17 @@
 
 /**
  * Core interpreter export signatures used by the JavaScript adapter.
- * @typedef {object} InterpreterExports
- * @property {WebAssembly.Memory} memory
- * @property {(p: number, n: number) => number} load
- * @property {() => number} initialize
- * @property {(p: number, n: number, args: number, count: number) => number} invoke
- * @property {() => number} error_code
- * @property {() => number} error_offset
- * @property {() => number} host_base
- * @property {() => number} result_count
- * @property {(fuel: number) => void} set_fuel
- * @property {(fuel: bigint) => void} set_fuel64
- * @property {() => number} guest_memory_base
- * @property {() => number} guest_memory_pages
- * @property {() => number} guest_memory_present
- * @property {(p: number, n: number) => number} get_global
- * @property {(p: number, n: number, value: number) => number} set_global
- * @property {() => number} import_count
- * @property {(index: number) => number} import_info
- * @property {(index: number) => number} function_params
- * @property {(index: number) => number} function_results
- * @property {(p: number, n: number) => number} export_function
- * @property {() => number} pending_import
- * @property {() => number} pending_args
- * @property {(value: number, failed: number) => number} resume
- * @property {(delta: number) => number} grow_guest_memory
- * @property {(p: number, n: number, args: number, count: number) => bigint} invoke64
- * @property {(value: bigint, failed: number) => bigint} resume64
- * @property {(slot: number) => number} result_type
- * @property {(index: number, slot: number) => number} function_param_type
- * @property {(index: number, slot: number) => number} function_result_type
- * @property {(p: number, n: number) => number} global_type
- * @property {() => number} argument_high_base
- * @property {() => number} pending_high_args
- * @property {() => number} result_high_base
- * @property {() => number} result_base
- * @property {(p: number, n: number) => bigint} global_high
- * @property {(p: number, n: number, value: bigint) => number} set_global_high
- * @property {(p: number, n: number) => bigint} get_global64
- * @property {(p: number, n: number, value: bigint) => number} set_global64
- * @property {() => number} load_initializing
- * @property {(index: number, include_results: number) => number} function_signature
- * @property {(type: number) => number} type_heap
- * @property {(type: number) => number} type_nonnull
- * @property {(type: number) => number} value_kind
- * @property {(index: number) => number} heap_params
- * @property {(index: number, slot: number) => number} heap_param_type
- * @property {(index: number) => number} heap_results
- * @property {(index: number, slot: number) => number} heap_result_type
- * @property {(index: number) => number} function_heap_type
- * @property {(type: number) => number} reference_category
- * @property {(index: number) => number} heap_info
- * @property {(index: number) => number} field_info
- * @property {(value: bigint) => number} object_type
- * @property {(value: bigint, live: number) => void} gc_pin
- * @property {() => void} collect_garbage
- * @property {() => number} gc_live_bytes
- * @property {(index: number) => number} tag_info
- * @property {(index: number) => number} tag_type
- * @property {() => number} tag_count
- * @property {(index: number, identity: number) => void} bind_tag
- * @property {() => bigint} exception_reference
- * @property {(value: bigint) => number} exception_info
- * @property {(identity: number, count: number, args: number, refs_low: bigint, refs_high: bigint) => bigint} import_exception
- * @property {(identity: number, count: number, args: number, refs: number) => bigint} import_exception_bits
- * @property {(value: bigint) => bigint} resume_exception
- * @property {() => number} result_info
- * @property {() => number} pending_result_capacity
- * @property {() => number} exports_count
- * @property {(index: number) => number} export_info
- * @property {(index: number) => number} global_info
- * @property {() => number} memory_min
- * @property {() => number} memory_max
- * @property {() => number} table_count
- * @property {(index: number, value: bigint) => number} table_accepts
- * @property {(index: number, slot: number, value: bigint) => number} tag_accepts
- * @property {(index: number, delta: number, value: bigint) => number} grow_host_table
- * @property {(index: number) => number} table_size
- * @property {(index: number) => number} table_max
- * @property {(index: number) => number} table_type
- * @property {(index: number) => number} table_base
- * @property {(index: number, size: number, maximum: number) => number} bind_guest_table
- * @property {(index: number, canonical: number) => void} alias_guest_table
- * @property {(index: number, delta: number) => number} grow_guest_table
- * @property {(pages: number, maximum: number, entries: number, table_maximum: number) => number} prepare_resource_imports
- * @property {(count: number, result: number, types: number, slot: number) => number} foreign_function
- * @property {(index: number, args: number, count: number) => bigint} invoke_index64
- * @property {() => number} segments_ready
- * @property {(index: number) => number} function_info
- * @property {(index: number, types: number, count: number) => number} foreign_results
- * @property {() => number} memory_address_type
- * @property {(index: number) => number} table_address_type
- * @property {(index: number) => number} memory_width
- * @property {(index: number) => number} memory_minimum
- * @property {(index: number) => number} memory_maximum
- * @property {(index: number) => number} memory_base
- * @property {(index: number) => number} memory_pages
- * @property {(index: number, pages: number, maximum: number) => number} bind_guest_memory
- * @property {(index: number, canonical: number) => void} alias_guest_memory
- * @property {(index: number, delta: number) => number} grow_memory
- * @property {(index: number) => number} table_info
- * @property {(p: number, n: number) => number} load_binary
- * @property {(index: number, canonical: number) => void} alias_guest_global
- * @property {() => void} enable_interpreter_backing
- * @property {(kind: number, value: number) => number} configure_capacity
- * @property {(functions: number, exports: number, globals: number, calls: number, pages: number) => number} configure_limits
- * @property {(enabled: number) => void} validation_only
- * @property {(quantum: number) => void} set_execution_quantum
- * @property {() => number} execution_paused
- * @property {() => bigint} resume_execution
- * @property {() => void} cancel_execution
- * @property {(index: number) => number} begin_reentry
- * @property {() => number} end_reentry
+ * @typedef {{memory:WebAssembly.Memory, load:(p:number, n:number) => number, initialize:() => number, invoke:(p:number, n:number, args:number, count:number) => number, error_code:() => number, error_offset:() => number, host_base:() => number, result_count:() => number, set_fuel:(fuel:number) => void, set_fuel64:(fuel:bigint) => void, guest_memory_base:() => number, guest_memory_pages:() => number, guest_memory_present:() => number, get_global:(p:number, n:number) => number, set_global:(p:number, n:number, value:number) => number, import_count:() => number, import_info:(index:number) => number, function_params:(index:number) => number, function_results:(index:number) => number, export_function:(p:number, n:number) => number, pending_import:() => number, pending_args:() => number, resume:(value:number, failed:number) => number, grow_guest_memory:(delta:number) => number, invoke64:(p:number, n:number, args:number, count:number) => bigint, resume64:(value:bigint, failed:number) => bigint, result_type:(slot:number) => number, function_param_type:(index:number, slot:number) => number, function_result_type:(index:number, slot:number) => number, global_type:(p:number, n:number) => number, argument_high_base:() => number, pending_high_args:() => number, result_high_base:() => number, result_base:() => number, global_high:(p:number, n:number) => bigint, set_global_high:(p:number, n:number, value:bigint) => number, get_global64:(p:number, n:number) => bigint, set_global64:(p:number, n:number, value:bigint) => number, load_initializing:() => number, function_signature:(index:number, include_results:number) => number, type_heap:(type:number) => number, type_nonnull:(type:number) => number, value_kind:(type:number) => number, heap_params:(index:number) => number, heap_param_type:(index:number, slot:number) => number, heap_results:(index:number) => number, heap_result_type:(index:number, slot:number) => number, function_heap_type:(index:number) => number, reference_category:(type:number) => number, heap_info:(index:number) => number, field_info:(index:number) => number, object_type:(value:bigint) => number, gc_pin:(value:bigint, live:number) => void, collect_garbage:() => void, gc_live_bytes:() => number, tag_info:(index:number) => number, tag_type:(index:number) => number, tag_count:() => number, bind_tag:(index:number, identity:number) => void, exception_reference:() => bigint, exception_info:(value:bigint) => number, import_exception:(identity:number, count:number, args:number, refs_low:bigint, refs_high:bigint) => bigint, import_exception_bits:(identity:number, count:number, args:number, refs:number) => bigint, resume_exception:(value:bigint) => bigint, result_info:() => number, pending_result_capacity:() => number, exports_count:() => number, export_info:(index:number) => number, global_info:(index:number) => number, memory_min:() => number, memory_max:() => number, table_count:() => number, table_accepts:(index:number, value:bigint) => number, tag_accepts:(index:number, slot:number, value:bigint) => number, grow_host_table:(index:number, delta:number, value:bigint) => number, table_size:(index:number) => number, table_max:(index:number) => number, table_type:(index:number) => number, table_base:(index:number) => number, bind_guest_table:(index:number, size:number, maximum:number) => number, alias_guest_table:(index:number, canonical:number) => void, grow_guest_table:(index:number, delta:number) => number, prepare_resource_imports:(pages:number, maximum:number, entries:number, table_maximum:number) => number, foreign_function:(count:number, result:number, types:number, slot:number) => number, invoke_index64:(index:number, args:number, count:number) => bigint, segments_ready:() => number, function_info:(index:number) => number, foreign_results:(index:number, types:number, count:number) => number, memory_address_type:() => number, table_address_type:(index:number) => number, memory_width:(index:number) => number, memory_minimum:(index:number) => number, memory_maximum:(index:number) => number, memory_base:(index:number) => number, memory_pages:(index:number) => number, bind_guest_memory:(index:number, pages:number, maximum:number) => number, alias_guest_memory:(index:number, canonical:number) => void, grow_memory:(index:number, delta:number) => number, table_info:(index:number) => number, load_binary:(p:number, n:number) => number, alias_guest_global:(index:number, canonical:number) => void, enable_interpreter_backing:() => void, configure_capacity:(kind:number, value:number) => number, configure_limits:(functions:number, exports:number, globals:number, calls:number, pages:number) => number, validation_only:(enabled:number) => void, set_execution_quantum:(quantum:number) => void, execution_paused:() => number, resume_execution:() => bigint, cancel_execution:() => void, begin_reentry:(index:number) => number, end_reentry:() => number}} InterpreterExports
  */
 
 /**
  * Typed forwarding signature and provider liveness metadata.
- * @typedef {object} FunctionMetadata
- * @property {number[]} params
- * @property {number | number[] | undefined} [results]
- * @property {() => boolean | number} valid
- * @property {TypeDescription | undefined} [descriptor]
- * @property {((args: RawValue[]) => RawResult) | undefined} [raw]
- * @property {((args: RawValue[]) => Promise<RawResult>) | undefined} [rawAsync]
- * @property {(() => FunctionReference) | undefined} [reference]
+ * @typedef {{params:number[], results?:number | number[] | undefined, valid:() => boolean | number, descriptor?:TypeDescription | undefined, raw?:((args:RawValue[]) => RawResult) | undefined, rawAsync?:((args:RawValue[]) => Promise<RawResult>) | undefined, reference?:(() => FunctionReference) | undefined}} FunctionMetadata
  */
 
 /**
  * Resolved host function import and its guest argument/result signature.
- * @typedef {object} ImportBinding
- * @property {string} module
- * @property {string} name
- * @property {number[]} params
- * @property {number | number[] | undefined} [results]
- * @property {Function} callback
+ * @typedef {{module:string, name:string, params:number[], results?:number | number[] | undefined, callback:Function}} ImportBinding
  */
 
 /**
@@ -279,40 +151,27 @@
 
 /**
  * Raw scalar/vector bits or an opaque reference slot; void results have a null type.
- * @typedef {object} RawValue
- * @property {ValueTypeName | null} type
- * @property {bigint | undefined} [bits]
- * @property {unknown | undefined} [value]
- * @property {string | null | undefined} [heap]
+ * @typedef {{type:ValueTypeName | null, bits?:bigint | undefined, value?:unknown | undefined, heap?:string | null | undefined}} RawValue
  */
 
 /**
  * Opaque shared memory/global/table/tag binding.
- * @typedef {object} ResourceHandle
- * @property {'memory' | 'global' | 'table' | 'tag'} kind
+ * @typedef {{kind:'memory' | 'global' | 'table' | 'tag'}} ResourceHandle
  */
 
 /**
  * Host memory/table size and logical address options.
- * @typedef {object} StorageOptions
- * @property {number | undefined} [initial]
- * @property {number | undefined} [maximum]
- * @property {AddressType | undefined} [address]
+ * @typedef {{initial?:number | undefined, maximum?:number | undefined, address?:AddressType | undefined}} StorageOptions
  */
 
 /**
  * Checked physical sizes and internal logical address code.
- * @typedef {object} StorageLimits
- * @property {number} initial
- * @property {number} maximum
- * @property {number} addressType
+ * @typedef {{initial:number, maximum:number, addressType:number}} StorageLimits
  */
 
 /**
  * Host global type and mutability descriptor.
- * @typedef {object} GlobalOptions
- * @property {HostValueTypeName} value
- * @property {boolean | undefined} [mutable]
+ * @typedef {{value:HostValueTypeName, mutable?:boolean | undefined}} GlobalOptions
  */
 
 /**
@@ -322,53 +181,27 @@
 
 /**
  * Internal scalar/reference kind and its structural type descriptor.
- * @typedef {object} HostResourceType
- * @property {number} kind
- * @property {TypeDescription} descriptor
+ * @typedef {{kind:number, descriptor:TypeDescription}} HostResourceType
  */
 
 /**
  * Host-owned byte storage with checked access and zero-filled growth.
- * @typedef {object} HostMemory
- * @property {'memory'} kind
- * @property {number} pages
- * @property {AddressType} address
- * @property {number | undefined} maximum
- * @property {(offset: number | bigint, length: number) => Uint8Array} read
- * @property {(offset: number | bigint, bytes: Uint8Array) => void} write
- * @property {(delta: number | bigint) => number} grow
+ * @typedef {{kind:'memory', pages:number, address:AddressType, maximum:number | undefined, read:(offset:number | bigint, length:number) => Uint8Array, write:(offset:number | bigint, bytes:Uint8Array) => void, grow:(delta:number | bigint) => number}} HostMemory
  */
 
 /**
  * Host-owned typed global with decoded and raw value access.
- * @typedef {object} HostGlobal
- * @property {'global'} kind
- * @property {HostValueTypeName} type
- * @property {boolean} mutable
- * @property {unknown} value
- * @property {() => RawValue} getRaw
- * @property {(slot: RawValue) => void} setRaw
+ * @typedef {{kind:'global', type:HostValueTypeName, mutable:boolean, value:unknown, getRaw:() => RawValue, setRaw:(slot:RawValue) => void}} HostGlobal
  */
 
 /**
  * Host-owned reference entries with checked element access and growth.
- * @typedef {object} HostTable
- * @property {'table'} kind
- * @property {number} length
- * @property {AddressType} address
- * @property {TableElement} element
- * @property {number | undefined} maximum
- * @property {(index: number | bigint) => unknown} get
- * @property {(index: number | bigint, value: unknown) => void} set
- * @property {(delta: number | bigint, value?: unknown) => number} grow
+ * @typedef {{kind:'table', length:number, address:AddressType, element:TableElement, maximum:number | undefined, get:(index:number | bigint) => unknown, set:(index:number | bigint, value:unknown) => void, grow:(delta:number | bigint, value?:unknown) => number}} HostTable
  */
 
 /**
  * Resolved internal function signature, optionally including its function index.
- * @typedef {object} NumericSignature
- * @property {number[]} params
- * @property {NumericResults | undefined} [results]
- * @property {number | undefined} [index]
+ * @typedef {{params:number[], results?:NumericResults | undefined, index?:number | undefined}} NumericSignature
  */
 
 /**
@@ -378,44 +211,27 @@
 
 /**
  * Decoded export signature; null denotes a void result.
- * @typedef {object} PublicSignature
- * @property {ValueTypeName[]} params
- * @property {ValueTypeName | ValueTypeName[] | null} result
+ * @typedef {{params:ValueTypeName[], result:ValueTypeName | ValueTypeName[] | null}} PublicSignature
  */
 
 /**
  * Decoded tag payload signature.
- * @typedef {object} TagSignature
- * @property {ValueTypeName[]} params
+ * @typedef {{params:ValueTypeName[]}} TagSignature
  */
 
 /**
  * Numeric or nullable/nonnull reference kind with an optional heap graph.
- * @typedef {object} TypeDescription
- * @property {number} kind
- * @property {boolean | undefined} [nonnull]
- * @property {number | HeapType | undefined} [heap]
+ * @typedef {{kind:number, nonnull?:boolean | undefined, heap?:number | HeapType | undefined}} TypeDescription
  */
 
 /**
  * Structural recursive heap definition retaining group identity and ancestors.
- * @typedef {object} HeapType
- * @property {number} kind
- * @property {number} final
- * @property {number} position
- * @property {number | undefined} [index]
- * @property {HeapType | number | null} parent
- * @property {ReadonlyArray<HeapType>} group
- * @property {ReadonlyArray<TypeDescription>} params
- * @property {ReadonlyArray<TypeDescription>} results
- * @property {ReadonlyArray<HeapField>} fields
+ * @typedef {{kind:number, final:number, position:number, index?:number | undefined, parent:HeapType | number | null, group:ReadonlyArray<HeapType>, params:ReadonlyArray<TypeDescription>, results:ReadonlyArray<TypeDescription>, fields:ReadonlyArray<HeapField>}} HeapType
  */
 
 /**
  * Aggregate field type and mutability code.
- * @typedef {object} HeapField
- * @property {TypeDescription} type
- * @property {number} mutable
+ * @typedef {{type:TypeDescription, mutable:number}} HeapField
  */
 
 /**
@@ -425,11 +241,7 @@
 
 /**
  * Provider-owned function identity and typed forwarding callback.
- * @typedef {object} FunctionReference
- * @property {object} owner
- * @property {number} index
- * @property {HostCallback} callback
- * @property {NumericSignature} signature
+ * @typedef {{owner:object, index:number, callback:HostCallback, signature:NumericSignature}} FunctionReference
  */
 
 /**
@@ -439,9 +251,7 @@
 
 /**
  * Provider liveness and optional published handle shared by all resource kinds.
- * @typedef {object} ResourceBase
- * @property {() => boolean | number} valid
- * @property {ResourceHandle | undefined} [handle]
+ * @typedef {{valid:() => boolean | number, handle?:ResourceHandle | undefined}} ResourceBase
  */
 
 /**
@@ -466,54 +276,32 @@
 
 /**
  * Guest resource slot and its current shared publication authority.
- * @typedef {object} ResourceBinding
- * @property {number} index
- * @property {ResourceState} state
- * @property {boolean} publishable
+ * @typedef {{index:number, state:ResourceState, publishable:boolean}} ResourceBinding
  */
 
 /**
  * Private retained tag identity, typed raw payload and decoded values.
- * @typedef {object} ExceptionPayload
- * @property {number} identity
- * @property {ReadonlyArray<number>} params
- * @property {ReadonlyArray<RawValue>} args
- * @property {ReadonlyArray<unknown>} values
+ * @typedef {{identity:number, params:ReadonlyArray<number>, args:ReadonlyArray<RawValue>, values:ReadonlyArray<unknown>}} ExceptionPayload
  */
 
 /**
  * Validated exception payload and tag identity comparison.
- * @typedef {object} ExceptionInspection
- * @property {ExceptionPayload} data
- * @property {boolean} matches
+ * @typedef {{data:ExceptionPayload, matches:boolean}} ExceptionInspection
  */
 
 /**
  * Module/field name of a guest host import.
- * @typedef {object} ImportIdentity
- * @property {string} module
- * @property {string} name
+ * @typedef {{module:string, name:string}} ImportIdentity
  */
 
 /**
  * Recorded source coordinate, with line/column available only for original WAT.
- * @typedef {object} DiagnosticLocation
- * @property {'wat' | 'wasm' | 'generated-wat'} format
- * @property {number} byteOffset
- * @property {number | undefined} [line]
- * @property {number | undefined} [column]
+ * @typedef {{format:'wat' | 'wasm' | 'generated-wat', byteOffset:number, line?:number | undefined, column?:number | undefined}} DiagnosticLocation
  */
 
 /**
  * Stable structured interpreter error metadata.
- * @typedef {object} DiagnosticDetails
- * @property {string | undefined} [code]
- * @property {number | undefined} [status]
- * @property {DiagnosticPhase | undefined} [phase]
- * @property {'wat' | 'wasm' | undefined} [sourceFormat]
- * @property {number | undefined} [byteOffset]
- * @property {DiagnosticLocation | undefined} [location]
- * @property {ImportIdentity | undefined} [import]
+ * @typedef {{code?:string | undefined, status?:number | undefined, phase?:DiagnosticPhase | undefined, sourceFormat?:'wat' | 'wasm' | undefined, byteOffset?:number | undefined, location?:DiagnosticLocation | undefined, import?:ImportIdentity | undefined}} DiagnosticDetails
  */
 
 /**
@@ -523,9 +311,7 @@
 
 /**
  * Opt-in async dispatch quantum and optional cancellation signal.
- * @typedef {object} CooperativeOptions
- * @property {number | undefined} [quantum]
- * @property {AbortSignal | undefined} [signal]
+ * @typedef {{quantum?:number | undefined, signal?:AbortSignal | undefined}} CooperativeOptions
  */
 
 /**
@@ -540,92 +326,37 @@
 
 /**
  * Factory capacities and optional self-hosted source/parent overrides.
- * @typedef {object} InterpreterOptions
- * @property {Partial<ResourceLimits> | undefined} [limits]
- * @property {Partial<ResourceLimits> | undefined} [parentLimits]
- * @property {number | bigint | undefined} [parentFuel]
- * @property {GuestSource | undefined} [source]
+ * @typedef {{limits?:Partial<ResourceLimits> | undefined, parentLimits?:Partial<ResourceLimits> | undefined, parentFuel?:number | bigint | undefined, source?:GuestSource | undefined}} InterpreterOptions
  */
 
 /**
  * Private backing origin, growth delegate and validated capacities.
- * @typedef {object} BackendOptions
- * @property {number | undefined} [memoryOffset]
- * @property {((required: number) => void) | undefined} [ensureMemory]
- * @property {ResourceLimits | undefined} [limits]
- * @property {RuntimeServices} runtime
+ * @typedef {{memoryOffset?:number | undefined, ensureMemory?:((required:number) => void) | undefined, limits?:ResourceLimits | undefined, runtime:RuntimeServices}} BackendOptions
  */
 
 /**
  * Private interpreter ABI, backing origin and forwarding-depth policy.
- * @typedef {object} RuntimeBackend
- * @property {InterpreterExports} exports
- * @property {number} memoryOffset
- * @property {boolean} countsForwardingDepth
+ * @typedef {{exports:InterpreterExports, memoryOffset:number, countsForwardingDepth:boolean}} RuntimeBackend
  */
 
 /**
  * Current operation and its snapshotted cooperative configuration.
- * @typedef {object} InvocationState
- * @property {DiagnosticPhase} phase
- * @property {CooperativeOptions | undefined} [cooperative]
+ * @typedef {{phase:DiagnosticPhase, cooperative?:CooperativeOptions | undefined}} InvocationState
  */
 
 /**
  * Boxed async completion keeping Promise externrefs opaque until public return.
- * @typedef {object} InvocationResult
- * @property {unknown} value
+ * @typedef {{value:unknown}} InvocationResult
  */
 
 /**
  * Active callback ownership and completion obligations for nested guest calls.
- * @typedef {object} CallbackScope
- * @property {RuntimeBackend} backend
- * @property {InvocationState} invocation
- * @property {boolean} asynchronous
- * @property {boolean} active
- * @property {Set<Promise<InvocationResult>>} children
- * @property {CallbackScope | undefined} [parent]
+ * @typedef {{backend:RuntimeBackend, invocation:InvocationState, asynchronous:boolean, active:boolean, children:Set<Promise<InvocationResult>>, parent?:CallbackScope | undefined}} CallbackScope
  */
 
 /**
  * Public interpreter loading, execution, resource and lifetime operations.
- * @typedef {object} InterpreterApi
- * @property {number} generation
- * @property {(source: GuestSource, binarySource?: boolean) => InterpreterApi} validate
- * @property {(source: GuestSource, imports?: HostImports, binarySource?: boolean, asynchronous?: boolean) => void | Promise<void>} load
- * @property {(source: GuestSource, imports?: HostImports) => Promise<void>} loadAsync
- * @property {(bytes: Uint8Array, imports?: HostImports) => Promise<void>} loadBinaryAsync
- * @property {(bytes: Uint8Array, imports?: HostImports) => void} loadBinary
- * @property {(name: string, ...args: unknown[]) => unknown} invoke
- * @property {(name: string, ...args: unknown[]) => Promise<unknown>} invokeAsync
- * @property {(name: string, ...args: RawValue[]) => Promise<RawResult>} invokeRawAsync
- * @property {(name: string, ...args: RawValue[]) => RawResult} invokeRaw
- * @property {() => number} collectGarbage
- * @property {(name: string) => PublicSignature} signature
- * @property {(name: string) => HostCallback} exportFunction
- * @property {(name: string) => AsyncHostCallback} exportFunctionAsync
- * @property {() => HostNamespace} exportNamespaceAsync
- * @property {(asynchronous?: boolean) => HostNamespace} exportNamespace
- * @property {(name: string) => ValueTypeName} globalType
- * @property {(name: string) => unknown} getGlobal
- * @property {(name: string, value: unknown) => void} setGlobal
- * @property {(offset: number | bigint, length: number, memory?: ResourceSelector) => Uint8Array} readMemory
- * @property {(offset: number | bigint, bytes: Uint8Array, memory?: ResourceSelector) => void} writeMemory
- * @property {(memory?: ResourceSelector) => AddressType} memoryType
- * @property {(memory?: ResourceSelector) => number} memoryPages
- * @property {(pages: number | bigint, memory?: ResourceSelector) => number} growMemory
- * @property {(tag?: ResourceSelector) => TagHandle} getTag
- * @property {(tag?: ResourceSelector) => TagSignature} tagSignature
- * @property {(tag: ResourceSelector, ...args: unknown[]) => WiwException} createException
- * @property {(tag: ResourceSelector, ...args: RawValue[]) => WiwException} createExceptionRaw
- * @property {(table?: ResourceSelector) => number} tableSize
- * @property {(index: number | bigint, table?: ResourceSelector) => unknown} getTable
- * @property {(index: number | bigint, value: unknown, table?: ResourceSelector) => void} setTable
- * @property {(entries: number | bigint, value?: unknown, table?: ResourceSelector) => number} growTable
- * @property {(options?: CooperativeOptions | null) => InterpreterApi} setCooperativeExecution
- * @property {(limit: number) => void} setFuel
- * @property {(limit: bigint) => void} setFuel64
+ * @typedef {{generation:number, validate:(source:GuestSource, binarySource?:boolean) => InterpreterApi, load:(source:GuestSource, imports?:HostImports, binarySource?:boolean, asynchronous?:boolean) => void | Promise<void>, loadAsync:(source:GuestSource, imports?:HostImports) => Promise<void>, loadBinaryAsync:(bytes:Uint8Array, imports?:HostImports) => Promise<void>, loadBinary:(bytes:Uint8Array, imports?:HostImports) => void, invoke:(name:string, ...args:unknown[]) => unknown, invokeAsync:(name:string, ...args:unknown[]) => Promise<unknown>, invokeRawAsync:(name:string, ...args:RawValue[]) => Promise<RawResult>, invokeRaw:(name:string, ...args:RawValue[]) => RawResult, collectGarbage:() => number, signature:(name:string) => PublicSignature, exportFunction:(name:string) => HostCallback, exportFunctionAsync:(name:string) => AsyncHostCallback, exportNamespaceAsync:() => HostNamespace, exportNamespace:(asynchronous?:boolean) => HostNamespace, globalType:(name:string) => ValueTypeName, getGlobal:(name:string) => unknown, setGlobal:(name:string, value:unknown) => void, readMemory:(offset:number | bigint, length:number, memory?:ResourceSelector) => Uint8Array, writeMemory:(offset:number | bigint, bytes:Uint8Array, memory?:ResourceSelector) => void, memoryType:(memory?:ResourceSelector) => AddressType, memoryPages:(memory?:ResourceSelector) => number, growMemory:(pages:number | bigint, memory?:ResourceSelector) => number, getTag:(tag?:ResourceSelector) => TagHandle, tagSignature:(tag?:ResourceSelector) => TagSignature, createException:(tag:ResourceSelector, ...args:unknown[]) => WiwException, createExceptionRaw:(tag:ResourceSelector, ...args:RawValue[]) => WiwException, tableSize:(table?:ResourceSelector) => number, getTable:(index:number | bigint, table?:ResourceSelector) => unknown, setTable:(index:number | bigint, value:unknown, table?:ResourceSelector) => void, growTable:(entries:number | bigint, value?:unknown, table?:ResourceSelector) => number, setCooperativeExecution:(options?:CooperativeOptions | null) => InterpreterApi, setFuel:(limit:number) => void, setFuel64:(limit:bigint) => void}} InterpreterApi
  */
 
 const messages = [

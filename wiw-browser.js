@@ -17,10 +17,7 @@ export * from './wiw-lib.js';
 
 /**
  * Worker output with optional original WAT coordinates (one-based Unicode columns).
- * @typedef {object} BrowserRunResult
- * @property {string} text
- * @property {number} [line]
- * @property {number} [column]
+ * @typedef {{text:string, line?:number, column?:number}} BrowserRunResult
  */
 
 /**
@@ -30,10 +27,7 @@ export * from './wiw-lib.js';
 
 /**
  * Initialized guest retained between explicit function executions.
- * @typedef {object} BrowserSession
- * @property {BrowserFunction[]} functions
- * @property {(name: string, args?: string[]) => string} execute
- * @property {(view?: BrowserMemoryView) => BrowserState} inspect
+ * @typedef {{functions:BrowserFunction[], execute:(name:string, args?:string[]) => string, inspect:(view?:BrowserMemoryView) => BrowserState}} BrowserSession
  */
 
 /** @typedef {{memory: string, offset: string, length: number}} BrowserMemoryView */
@@ -49,27 +43,12 @@ export * from './wiw-lib.js';
 
 /**
  * CodeMirror methods used by the page, without coupling the interpreter to editor packages.
- * @typedef {object} WatEditor
- * @property {() => string} getValue
- * @property {() => HTMLTextAreaElement} getInputField
- * @property {(line: number, where: string, className: string) => WatEditorLine} addLineClass
- * @property {(line: WatEditorLine, where: string, className: string) => unknown} removeLineClass
- * @property {(position: {line: number, ch: number}) => void} scrollIntoView
- * @property {(event: 'change', callback: () => void) => void} on
+ * @typedef {{getValue:() => string, getInputField:() => HTMLTextAreaElement, addLineClass:(line:number, where:string, className:string) => WatEditorLine, removeLineClass:(line:WatEditorLine, where:string, className:string) => unknown, scrollIntoView:(position:{line:number, ch:number}) => void, on:(event:'change', callback:() => void) => void}} WatEditor
  */
 
 /**
  * Direct-script editor configuration for the WAST mode and accessible input field.
- * @typedef {object} WatEditorOptions
- * @property {string} mode
- * @property {string} theme
- * @property {boolean} lineNumbers
- * @property {boolean} matchBrackets
- * @property {boolean} lineWrapping
- * @property {number} indentUnit
- * @property {number} tabSize
- * @property {string} inputStyle
- * @property {string} screenReaderLabel
+ * @typedef {{mode:string, theme:string, lineNumbers:boolean, matchBrackets:boolean, lineWrapping:boolean, indentUnit:number, tabSize:number, inputStyle:string, screenReaderLabel:string}} WatEditorOptions
  */
 
 /**

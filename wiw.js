@@ -33,14 +33,7 @@ export * from './wiw-lib.js';
 
 /**
  * Preview 1 guest memory selector, process values and descriptor ownership options.
- * @typedef {object} WasiOptions
- * @property {ResourceSelector | undefined} [memory]
- * @property {string[] | undefined} [args]
- * @property {Record<string, string> | undefined} [env]
- * @property {Record<string, string> | undefined} [preopens]
- * @property {number | undefined} [stdin]
- * @property {number | undefined} [stdout]
- * @property {number | undefined} [stderr]
+ * @typedef {{memory?:ResourceSelector | undefined, args?:string[] | undefined, env?:Record<string, string> | undefined, preopens?:Record<string, string> | undefined, stdin?:number | undefined, stdout?:number | undefined, stderr?:number | undefined}} WasiOptions
  */
 
 /**
@@ -50,22 +43,12 @@ export * from './wiw-lib.js';
 
 /**
  * Preview 1 import namespace, guest invocation and command/reactor lifecycle.
- * @typedef {object} WasiHost
- * @property {HostImports} imports
- * @property {(name: string, ...args: unknown[]) => unknown} invoke
- * @property {(name: string, ...args: unknown[]) => Promise<unknown>} invokeAsync
- * @property {() => number} start
- * @property {() => Promise<number>} startAsync
- * @property {() => void} initialize
- * @property {() => Promise<void>} initializeAsync
- * @property {() => void} close
+ * @typedef {{imports:HostImports, invoke:(name:string, ...args:unknown[]) => unknown, invokeAsync:(name:string, ...args:unknown[]) => Promise<unknown>, start:() => number, startAsync:() => Promise<number>, initialize:() => void, initializeAsync:() => Promise<void>, close:() => void}} WasiHost
  */
 
 /**
  * Loaded guest interpreter and its caller-owned Preview 1 host.
- * @typedef {object} WasiGuest
- * @property {InterpreterApi} engine
- * @property {WasiHost} host
+ * @typedef {{engine:InterpreterApi, host:WasiHost}} WasiGuest
  */
 
 /**
